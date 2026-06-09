@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 프로젝트 메타 문서 및 AI 설정 파일 제외
+.cursor/rules
+.omo
+AGENTS.md
+architecture_and_react_migration.md
+localStorage_flow.md
+project_summary.md

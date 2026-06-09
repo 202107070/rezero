@@ -1,0 +1,16 @@
+:root {
+  --px-bg: #212529;
+  --px-surface: #2c3e50;
+  --px-surface-light: #34495e;
+  --px-border: #000000;
+  --px-text: #f7f7f7;
+  --px-text-muted: #b2bec3;
+  --px-primary: #209cee;
+  --px-success: #92cc41;
+  --px-warning: #f7d51d;
+  --px-danger: #e76e55;
+  --px-shadow-hard: 4px 4px 0px #000;
+  --px-inset-light: inset -3px -3px 0px rgba(0, 0, 0, 0.4);
+  --px-inset-pressed: inset 3px 3px 0px rgba(0, 0, 0, 0.4);
+  --font-pixel: 'NeoDunggeunmo', 'Galmuri9', 'Press Start 2P', monospace;
+}
