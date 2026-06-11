@@ -19,7 +19,7 @@
 
 **실시간 코드 대결 및 자동 채점 플랫폼**
 
-[프로젝트 진행 흐름](#-프로젝트-진행-흐름) • [주요 기능](#-주요-기능) • [기술 스택](#-기술-스택) 
+[프로젝트 진행 흐름](#-프로젝트-진행-흐름) • [로컬 개발 환경](#-로컬-개발-환경) • [주요 기능](#-주요-기능) • [기술 스택](#-기술-스택)
 
 </div>
 
@@ -39,6 +39,73 @@
 | 2026-04-30 | 16:00 | 프론트&백 과제 점검       |
 | 2026-05-04 | 10:00 | 프론트&백 공동 작업(예정)       |
 | 2026-05-06 | 13:00 | 교수님께 과제 점검(예정)       |
+
+---
+
+## 💻 로컬 개발 환경
+
+### 프로젝트 구조
+
+```
+rezero/
+├── frontend/   # React + Vite + Electron (데스크톱 앱)
+├── backend/    # Express API (개발 중)
+└── README.md
+```
+
+### 사전 요구사항
+
+- **Node.js** 20 이상 (LTS 권장)
+- **npm** 10 이상
+- **Git**
+
+Electron 개발은 **Windows 또는 macOS**에서 진행합니다.  
+리눅스 서버(헤드리스)에서는 Electron 창 실행이 어렵습니다.
+
+### 최초 설정 (모든 팀원 공통)
+
+```bash
+git clone https://github.com/202107070/rezero.git
+cd rezero
+```
+
+**프론트엔드 (Electron)**
+
+```bash
+cd frontend
+npm install
+npm run electron:dev
+```
+
+**백엔드**
+
+```bash
+cd backend
+npm install
+# 백엔드 실행 스크립트 추가 후 사용
+```
+
+### 역할 분담 (권장)
+
+| 환경 | 용도 |
+|------|------|
+| **Windows / macOS (각자 PC)** | 프론트 개발, Electron 실행, UI 확인 |
+| **Linux 서버** | Git pull, 백엔드 API, 배포·테스트 서버 |
+
+### ⚠️ 협업 시 주의사항
+
+1. **`node_modules`는 Git에 올리지 않습니다.** 각자 PC에서 `npm install`로 생성하세요.
+2. **리눅스 서버의 `node_modules`를 Windows에서 그대로 쓰지 마세요.** Electron은 OS별 바이너리가 달라 실행이 실패할 수 있습니다.
+3. **코드는 Git으로 공유**하고, 의존성은 각 OS에서 따로 설치하세요.
+4. `package-lock.json`은 커밋에 포함합니다. (버전 고정용)
+
+### 자주 쓰는 명령어
+
+| 명령어 | 설명 |
+|--------|------|
+| `npm run dev` | Vite 개발 서버만 실행 (브라우저) |
+| `npm run electron:dev` | Vite + Electron 동시 실행 |
+| `npm run build` | 프로덕션 빌드 |
 
 ---
 
