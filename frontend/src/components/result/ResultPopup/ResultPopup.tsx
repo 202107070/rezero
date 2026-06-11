@@ -21,15 +21,10 @@ export function ResultPopup({
   const { shaking, triggerShake } = useModalShake();
   if (!show) return null;
 
-  const isLastPlace = mainMsg.includes('꼴등');
-
   return (
     <div className="result-popup-overlay" onClick={triggerShake}>
       <div className={`result-popup-box${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ borderColor: rankBorderColor }}>
         <div className="result-popup-msg" style={mainMsg.includes('꼴등') ? { color: 'var(--px-danger)' } : {}}>
-    <div className="result-popup-overlay">
-      <div className="result-popup-box" style={{ borderColor: rankBorderColor }}>
-        <div className="result-popup-msg" style={isLastPlace ? { color: 'var(--px-danger)' } : {}}>
           {mainMsg}
         </div>
         {detailLines.length > 0 && (

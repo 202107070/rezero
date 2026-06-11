@@ -77,10 +77,8 @@ declare global {
 
 class GameAudioEngine {
   private context: AudioContext | null = null;
-  private master: GainNode | null = null;
   private musicBus: GainNode | null = null;
   private sfxBus: GainNode | null = null;
-  private filter: BiquadFilterNode | null = null;
 
   private activeMusic: MusicKind = 'none';
   private battleMode: BattleMode = 'normal';
@@ -88,26 +86,30 @@ class GameAudioEngine {
   private loopGeneration = 0;
   private musicNodes: OscillatorNode[] = [];
 
-  private ensureContext() {
+  private ensureContext(): AudioContext {
     if (!this.context) {
       const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
-      this.context = new Ctx();
-      this.master = this.context.createGain();
-      this.musicBus = this.context.createGain();
-      this.sfxBus = this.context.createGain();
-      this.filter = this.context.createBiquadFilter();
+      const context = new Ctx() as AudioContext;
+      const master = context.createGain();
+      const musicBus = context.createGain();
+      const sfxBus = context.createGain();
+      const filter = context.createBiquadFilter();
 
-      this.master.gain.value = 0.9;
-      this.musicBus.gain.value = 0.38;
-      this.sfxBus.gain.value = 0.55;
-      this.filter.type = 'lowpass';
-      this.filter.frequency.value = 4800;
-      this.filter.Q.value = 0.7;
+      master.gain.value = 0.9;
+      musicBus.gain.value = 0.38;
+      sfxBus.gain.value = 0.55;
+      filter.type = 'lowpass';
+      filter.frequency.value = 4800;
+      filter.Q.value = 0.7;
 
-      this.musicBus.connect(this.filter);
-      this.sfxBus.connect(this.filter);
-      this.filter.connect(this.master);
-      this.master.connect(this.context.destination);
+      musicBus.connect(filter);
+      sfxBus.connect(filter);
+      filter.connect(master);
+      master.connect(context.destination);
+
+      this.context = context;
+      this.musicBus = musicBus;
+      this.sfxBus = sfxBus;
     }
     if (this.context.state === 'suspended') {
       void this.context.resume();

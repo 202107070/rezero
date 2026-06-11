@@ -50,7 +50,6 @@ function mapProblem(p: ProblemRecord) {
     correctIndex: p.correctIndex,
     explanation: p.explanation,
     visual: p.visual ?? null,
-  };
   });
 }
 

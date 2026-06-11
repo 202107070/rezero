@@ -195,6 +195,8 @@ for (int i = s._____() - 1; i >= 0; i_____) {
 }`,
     answer:{ JAVA:["length", "--"], PYTHON:["len", " -= 1"], CPP:["length", "--"] },
     visual:{ kind:`ascii`, content:`hello  →  olleh`, caption:`"hello"를 뒤집으면 어떤 결과가 나올까요? 코드를 완성하세요.` },
+    options:null, correctIndex:null,
+    explanation:`문자열 끝에서부터 한 글자씩 가져와 새 문자열을 만듭니다.` },
   { id:`M05`, type:`fill_blank`, difficulty:`medium`, title:`문자열 뒤집기`,
     question:`문자열 "hello"를 뒤집으려면, 마지막 인덱스(길이-1)부터 0까지 _____ 씩 감소하며 한 글자씩 가져옵니다.
 빈칸에 들어갈 연산자는? (예: i_____)`,
@@ -813,7 +815,6 @@ explanation:`가장자리만 *를 출력하고 내부는 공백으로 채웁니�
     visual:{ kind:`ascii`, content:`  *\n ***\n*****\n  |`, caption:`나무 줄기를 출력할 문자는?` },
     options:null, correctIndex:null,
     explanation:`잎은 별 패턴, 줄기는 | 한 글자로 출력합니다.` },
-    explanation:`Floyd-Warshall은 모든 정점 쌍 간 최단 경로를 동적계획법으로 구합니다.` },
 ];
 
 export default problems;

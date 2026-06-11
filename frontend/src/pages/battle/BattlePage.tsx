@@ -24,11 +24,8 @@ saveRoomUsers,
 syncBattleDemoState,
 } from '../../services/battleSessionService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
-import { getBotSolveDelay } from '../../utils/battle/demoBots';
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
 import { applyAudioSettings, BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
-import { comparePlayersByRank } from '../../utils/resultUtils';
-import { BGM, SFX } from '../../utils/battle/audio';
 import {
   comparePlayersByRank,
   computeBotRankScore,
@@ -850,6 +847,8 @@ export default function BattlePage() {
       if (!saved[i]) return false;
     }
     return true;
+  };
+
   const recordProblemSolve = (problemIndex: number, elapsedForProblem: number, earnedScore: number) => {
     const battleElapsed = Math.max(0, totalBattleSeconds - remaining);
     setProblemResults((prev) => ({ ...prev, [problemIndex]: true }));
@@ -866,10 +865,6 @@ export default function BattlePage() {
 
   const handleSubmit = () => {
     if (demoSpectating || spectatorLocked || problemSolved) return;
-    if (isBlankBasedType(currentProblem.type)) {
-      if (!allBlanksCorrect()) return;
-      const newCombo = comboCount + 1;
-      const earnedScore = 1000 + 100 * (newCombo - 1);
 
     if (isCurrentAnswerCorrect()) {
       const elapsed = (Date.now() - problemStartTime) / 1000;
@@ -1380,7 +1375,6 @@ export default function BattlePage() {
                   onClick={handleSubmit}
                   style={{ padding: '4px 10px', fontSize: '14px' }}
                   disabled={demoSpectating || spectatorLocked || (isBlankBasedType(currentProblem.type) && !allBlanksCorrect())}
-                  disabled={demoSpectating || spectatorLocked}
                 >
                   {demoSpectating || spectatorLocked ? 'LOCKED' : '제출'}
                 </button>
