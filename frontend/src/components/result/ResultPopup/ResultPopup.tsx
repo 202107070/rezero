@@ -19,10 +19,12 @@ export function ResultPopup({
 }: ResultPopupProps) {
   if (!show) return null;
 
+  const isLastPlace = mainMsg.includes('꼴등');
+
   return (
-    <div className="result-popup-overlay" onClick={onClose}>
-      <div className="result-popup-box" onClick={(e) => e.stopPropagation()} style={{ borderColor: rankBorderColor }}>
-        <div className="result-popup-msg" style={mainMsg.includes('꼴등') ? { color: 'var(--px-danger)' } : {}}>
+    <div className="result-popup-overlay">
+      <div className="result-popup-box" style={{ borderColor: rankBorderColor }}>
+        <div className="result-popup-msg" style={isLastPlace ? { color: 'var(--px-danger)' } : {}}>
           {mainMsg}
         </div>
         {detailLines.length > 0 && (

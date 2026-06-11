@@ -24,7 +24,6 @@ export function PlayerSlot({ player, index, myCharacter, myLanguage, canInvite, 
       <div className="slot-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
         {player ? (index === 0 ? myCharIcon : player.character) : <span className="status-empty">X</span>}
       </div>
-      <div className={`slot-host-badge ${player?.isHost ? '' : 'hidden'}`}>HOST</div>
       <div className="slot-name" style={{ color: player ? '#ddd' : '#555' }}>
         {player ? (
           <>
@@ -37,8 +36,19 @@ export function PlayerSlot({ player, index, myCharacter, myLanguage, canInvite, 
           'Empty'
         )}
       </div>
-      <div className={`slot-status ${player ? (player.isReady ? 'status-ready' : 'status-waiting') : ''}`} style={!player ? { visibility: 'hidden' } : undefined}>
-        {player ? (player.isReady ? 'READY' : 'WAITING') : ''}
+      <div
+        className={`slot-status ${
+          player
+            ? player.isHost
+              ? 'status-host'
+              : player.isReady
+                ? 'status-ready'
+                : 'status-waiting'
+            : ''
+        }`}
+        style={!player ? { visibility: 'hidden' } : undefined}
+      >
+        {player ? (player.isHost ? 'HOST' : player.isReady ? 'READY' : 'WAITING') : ''}
       </div>
       <div className="slot-button-area">
         <div style={{ width: '1px' }} />

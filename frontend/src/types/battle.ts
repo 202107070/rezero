@@ -33,5 +33,7 @@ export interface RoomUser {
   ingameScore: number;
   totalSolveTime: number;
   completionTime?: number;
+  finishedAtElapsed?: number;
   status?: string;
+  problemResults?: boolean[];
 }

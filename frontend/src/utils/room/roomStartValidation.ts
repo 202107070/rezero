@@ -11,7 +11,7 @@ export function getStartBlockReason(players: (RoomPlayer | null)[], roomMode: st
     return '1/N 모드는 최소 3명이 참가해야 시작할 수 있습니다.';
   }
 
-  const notReady = occupied.filter((p) => !p.isReady);
+  const notReady = occupied.filter((p) => !p.isHost && !p.isReady);
   if (notReady.length > 0) {
     const names = notReady.map((p) => p.name).join(', ');
     return `모든 플레이어가 준비 상태여야 합니다.\n준비 안 됨: ${names}`;

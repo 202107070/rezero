@@ -4,7 +4,6 @@ import { BattleSettingsPanel } from '../../components/room/BattleSettingsPanel/B
 import { CharacterSelect } from '../../components/room/CharacterSelect/CharacterSelect';
 import { KickModal } from '../../components/room/KickModal/KickModal';
 import { RoomAlertModal } from '../../components/room/RoomAlertModal/RoomAlertModal';
-import { OnlineUserList } from '../../components/room/OnlineUserList/OnlineUserList';
 import { PlayerGrid } from '../../components/room/PlayerGrid/PlayerGrid';
 import { RoomActionBar } from '../../components/room/RoomActionBar/RoomActionBar';
 import { RoomChatPanel } from '../../components/room/RoomChatPanel/RoomChatPanel';
@@ -133,7 +132,7 @@ export default function RoomPage() {
   );
 
   const host = players[0];
-  const myIsReady = host?.isHost ? host.isReady : isReady;
+  const myIsReady = isReady;
   const occupiedCount = players.filter((p) => p !== null).length;
   const displayMaxPlayers = roomMode === '1/1' ? 2 : parsedMaxPlayers;
   const maxOccupancy = displayMaxPlayers;
@@ -146,18 +145,8 @@ export default function RoomPage() {
   };
 
   const handleMyReadyToggle = () => {
-    if (host?.isHost) {
-      setPlayers((prev) => {
-        const next = [...prev];
-        const me = next[0];
-        if (!me) return prev;
-        const updated = { ...me, isReady: !me.isReady, status: !me.isReady ? 'READY' : 'WAITING' };
-        next[0] = updated;
-        return next;
-      });
-    } else {
-      setIsReady((r) => !r);
-    }
+    if (host?.isHost) return;
+    setIsReady((r) => !r);
   };
 
   const showStartAlert = (message: string) => {
@@ -311,26 +300,16 @@ export default function RoomPage() {
           </div>
 
           <div className="room-side-col">
-            <div className="pixel-card room-side-card">
+            <div className={`pixel-card room-side-card ${isItemMode ? 'item-mode' : 'normal-mode'}`}>
               <CharacterSelect myCharacter={myCharacter} onSelect={setMyCharacter} />
               <BattleSettingsPanel myLanguage={myLanguage} settings={settings} />
-              <div
-                className={`room-side-scroll room-side-scroll-users ${isItemMode ? 'item-mode' : 'normal-mode'}`}
-              >
-                <OnlineUserList
-                  players={players}
-                  myCharacter={myCharacter}
-                  onPlayerClick={openProfile}
-                  expanded={!isItemMode}
+              {isItemMode && (
+                <RoomItemLoadout
+                  inventory={itemInventory}
+                  selectedItems={selectedItems}
+                  onToggle={handleToggleItem}
                 />
-                {isItemMode && (
-                  <RoomItemLoadout
-                    inventory={itemInventory}
-                    selectedItems={selectedItems}
-                    onToggle={handleToggleItem}
-                  />
-                )}
-              </div>
+              )}
               <div className="room-side-bottom">
                 <RoomActionBar
                   isHost={Boolean(host?.isHost)}

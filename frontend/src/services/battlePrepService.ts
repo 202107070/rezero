@@ -4,6 +4,7 @@ import { STORAGE_KEYS } from '../constants/storageKeys';
 import { DIFF_TO_KOREAN } from '../constants/roomConstants';
 import type { GameMode } from '../types/lobby';
 import type { RoomPlayer } from '../types/room';
+import { normalizeBattleProblem } from '../utils/battle/problemResultUtils';
 
 type ProblemRecord = {
   id: string;
@@ -34,7 +35,7 @@ const SESSION_KEYS_TO_CLEAR = (sessionKey: string) => [
 ];
 
 function mapProblem(p: ProblemRecord) {
-  return {
+  return normalizeBattleProblem({
     id: p.id,
     type: p.type,
     difficulty: p.difficulty,
@@ -44,7 +45,7 @@ function mapProblem(p: ProblemRecord) {
     options: p.options,
     correctIndex: p.correctIndex,
     explanation: p.explanation,
-  };
+  });
 }
 
 export function prepareBattleStart(params: {
