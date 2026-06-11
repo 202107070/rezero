@@ -78,7 +78,6 @@ export default function OpponentPanels({
         key={bot.id}
         className={`opponent-code-panel-mini ${revealed ? 'revealed' : 'hidden'}`}
         onClick={() => setExpandedOpponentId(bot.id)}
-        style={{ cursor: 'pointer' }}
       >
         <div className="mini-header">
           <span>

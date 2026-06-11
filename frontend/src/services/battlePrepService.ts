@@ -4,6 +4,9 @@ import { STORAGE_KEYS } from '../constants/storageKeys';
 import { DIFF_TO_KOREAN } from '../constants/roomConstants';
 import type { GameMode } from '../types/lobby';
 import type { RoomPlayer } from '../types/room';
+import type { ProblemVisual } from '../types/battle';
+import { getLangKey } from '../utils/battle/codeUtils';
+import { problemSupportsLang } from '../utils/problemTypeUtils';
 
 type ProblemRecord = {
   id: string;
@@ -15,6 +18,7 @@ type ProblemRecord = {
   options: string[] | null;
   correctIndex: number | null;
   explanation: string;
+  visual?: ProblemVisual | null;
 };
 
 const SESSION_KEYS_TO_CLEAR = (sessionKey: string) => [
@@ -44,6 +48,7 @@ function mapProblem(p: ProblemRecord) {
     options: p.options,
     correctIndex: p.correctIndex,
     explanation: p.explanation,
+    visual: p.visual ?? null,
   };
 }
 
@@ -59,9 +64,13 @@ export function prepareBattleStart(params: {
   roomRoster?: RoomPlayer[];
 }): void {
   const diffKor = DIFF_TO_KOREAN[String(params.settingsDiff || '').toUpperCase()] || '보통';
+  const langKey = getLangKey(params.myLanguage);
+  const isRandomLang = String(params.myLanguage || '').toLowerCase() === 'random';
   const pool = (problems as ProblemRecord[]).filter((p) => {
     const diffMap: Record<string, string> = { 쉬움: 'easy', 보통: 'medium', 어려움: 'hard' };
-    return p.difficulty === diffMap[diffKor];
+    const diffOk = p.difficulty === diffMap[diffKor];
+    const langOk = isRandomLang || problemSupportsLang(p.answer, langKey);
+    return diffOk && langOk;
   });
 
   const count = Math.max(1, Math.min(10, parseInt(params.settingsCount, 10) || 5));

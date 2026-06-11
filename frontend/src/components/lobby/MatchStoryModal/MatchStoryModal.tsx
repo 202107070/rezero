@@ -1,3 +1,4 @@
+import { useModalShake } from '../../../hooks/useModalShake';
 import type { CodeHistoryEntry } from '../../../types/lobby';
 import { getSolution } from '../../../utils/codeHistoryUtils';
 
@@ -28,6 +29,7 @@ export function MatchStoryModal({
   onSelectAll,
   onDeleteSelected,
 }: MatchStoryModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   const selectedHistory = codeHistory[selectedIndex] || null;
@@ -35,8 +37,8 @@ export function MatchStoryModal({
   const selectedProblem = selectedProblems[selectedProblemIndex] || selectedProblems[0] || null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content match-story-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content match-story-modal${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '6px', fontSize: '22px' }}>
           MY CODE HISTORY
         </h3>
@@ -79,7 +81,6 @@ export function MatchStoryModal({
                         background: 'transparent',
                         padding: 0,
                         margin: 0,
-                        cursor: 'pointer',
                         fontSize: '14px',
                         color: selectedIds.includes(entry.historyId) ? 'var(--px-danger)' : '#ddd',
                       }}

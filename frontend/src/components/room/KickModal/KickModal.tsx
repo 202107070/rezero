@@ -1,3 +1,5 @@
+import { useModalShake } from '../../../hooks/useModalShake';
+
 interface KickModalProps {
   open: boolean;
   targetName: string;
@@ -6,11 +8,12 @@ interface KickModalProps {
 }
 
 export function KickModal({ open, targetName, onConfirm, onCancel }: KickModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   return (
-    <div className="problem-modal-overlay" onClick={onCancel}>
-      <div className="modal-content" style={{ width: '360px' }} onClick={(e) => e.stopPropagation()}>
+    <div className="problem-modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} style={{ width: '360px' }} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-danger" style={{ marginBottom: '16px', fontSize: '22px' }}>
           ⚠ 강제 퇴출
         </h3>

@@ -8,6 +8,13 @@ declare const problems: Array<{
   options: string[] | null;
   correctIndex: number | null;
   explanation: string;
+  visual?: {
+    kind: 'ascii' | 'html' | 'css' | 'svg' | 'canvas';
+    content?: string;
+    previewHtml?: string;
+    previewCss?: string;
+    caption?: string;
+  } | null;
 }>;
 
 export default problems;

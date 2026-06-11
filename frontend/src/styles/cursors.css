@@ -1,0 +1,81 @@
+:root {
+  --game-cursor-default: url('/cursors/default.svg') 3 2, default;
+  --game-cursor-pointer: url('/cursors/pointer.svg') 3 2, pointer;
+  --game-cursor-not-allowed: url('/cursors/not-allowed.svg') 3 2, not-allowed;
+  --game-cursor-text: url('/cursors/text.svg') 9 13, text;
+  --game-cursor-crosshair: url('/cursors/crosshair.svg') 3 2, crosshair;
+}
+
+html,
+body,
+#root {
+  cursor: var(--game-cursor-default);
+}
+
+#root button:not(:disabled),
+#root a,
+#root label[for],
+#root summary,
+#root [role='button']:not([aria-disabled='true']),
+#root .pixel-btn:not(:disabled),
+#root .profile-btn:not(:disabled),
+#root .tab-btn,
+#root .room-slot:not(.full):not(.started):not(.empty),
+#root .room-filter-option,
+#root .settings-mode-btn,
+#root .settings-audio-toggle,
+#root .item-btn:not(:disabled),
+#root .item-option:not(:disabled),
+#root .sub-item-btn,
+#root .symbol-btn,
+#root .panel-toggle-btn,
+#root .battle-choice-btn:not(.is-locked),
+#root .practice-page .user-item,
+#root .user-item.clickable,
+#root .opponent-code-panel-mini:not(.expanded),
+#root .page-arrow:not(.disabled),
+#root .room-filter-btn,
+#root .inventory-roulette-btn,
+#root .mode-select-btn,
+#root .match-story-problem-tab,
+#root .ai-floating-btn,
+#root .player-slot.occupied,
+#root .player-slot.invite,
+#root .duel-side.occupied,
+#root .duel-side.invite,
+#root select:not(:disabled),
+#root input[type='button']:not(:disabled),
+#root input[type='submit']:not(:disabled),
+#root input[type='reset']:not(:disabled),
+#root input[type='checkbox'],
+#root input[type='radio'],
+#root .cursor-pointer {
+  cursor: var(--game-cursor-pointer);
+}
+
+#root :disabled,
+#root [disabled],
+#root [aria-disabled='true'],
+#root .disabled,
+#root .pixel-btn:disabled,
+#root .profile-btn:disabled,
+#root .item-btn:disabled,
+#root .item-option:disabled,
+#root .page-arrow.disabled,
+#root .room-slot.full,
+#root .room-slot.started,
+#root .room-slot.empty,
+#root .practice-page .pixel-btn:disabled {
+  cursor: var(--game-cursor-not-allowed);
+}
+
+#root input:not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not(:disabled),
+#root textarea:not(:disabled),
+#root [contenteditable='true'] {
+  cursor: var(--game-cursor-text);
+}
+
+#root canvas.cursor-crosshair,
+#root .cursor-crosshair {
+  cursor: var(--game-cursor-crosshair);
+}

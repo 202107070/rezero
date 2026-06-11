@@ -1,3 +1,5 @@
+import { useModalShake } from '../../../hooks/useModalShake';
+
 interface PracticeModalProps {
   open: boolean;
   practiceLang: string;
@@ -21,11 +23,12 @@ export function PracticeModal({
   onDiffChange,
   onCountChange,
 }: PracticeModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '16px', fontSize: '22px' }}>
           PRACTICE MODE
         </h3>

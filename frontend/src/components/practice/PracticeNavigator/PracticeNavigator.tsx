@@ -8,18 +8,7 @@ interface PracticeNavigatorProps {
 
 export function PracticeNavigator({ currentIndex, totalCount, onPrev, onNext, onExit }: PracticeNavigatorProps) {
   return (
-    <div
-      className="pixel-card"
-      style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '8px 12px',
-        boxShadow: 'none',
-        borderWidth: '3px',
-      }}
-    >
+    <div className="pixel-card practice-nav-bar">
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
         <button
           type="button"

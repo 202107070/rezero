@@ -1,3 +1,4 @@
+import { useModalShake } from '../../../hooks/useModalShake';
 import type { ResultPlayer } from '../../../utils/resultUtils';
 
 interface ModalProblem {
@@ -28,13 +29,14 @@ export function ResultCodeModal({
   onClose,
   onProblemIndexChange,
 }: ResultCodeModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!isOpen) return null;
 
   const currentProblem = problems[problemIndex];
 
   return (
-    <div className="code-modal-overlay" onClick={onClose}>
-      <div className="code-modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="code-modal-overlay" onClick={triggerShake}>
+      <div className={`code-modal-content${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="code-modal-header">
           <h4 className="code-modal-title">
             {player ? `${player.name.split(' ')[0]} - CODE REVIEW` : 'CODE REVIEW'}

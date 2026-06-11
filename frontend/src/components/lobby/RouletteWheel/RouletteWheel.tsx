@@ -1,4 +1,5 @@
 import { ROULETTE_COST, ROULETTE_ITEMS, ROULETTE_SEG_COLORS } from '../../../constants/itemTypes';
+import { useModalShake } from '../../../hooks/useModalShake';
 
 interface RouletteWheelProps {
   open: boolean;
@@ -13,6 +14,7 @@ interface RouletteWheelProps {
 const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
 
 export function RouletteWheel({ open, gold, spinning, result, wheelDeg, onClose, onSpin }: RouletteWheelProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   const handleClose = () => {
@@ -20,8 +22,8 @@ export function RouletteWheel({ open, gold, spinning, result, wheelDeg, onClose,
   };
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', padding: '24px' }}>
+    <div className="modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', padding: '24px' }}>
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '8px', fontSize: '22px' }}>
           🎰 아이템 룰렛
         </h3>
@@ -78,8 +80,14 @@ export function RouletteWheel({ open, gold, spinning, result, wheelDeg, onClose,
             type="button"
             className="pixel-btn"
             style={{ background: '#E67E22', color: '#000', textShadow: 'none', borderColor: '#D35400' }}
-            onClick={onSpin}
-            disabled={gold < ROULETTE_COST || spinning}
+            onClick={() => {
+              if (gold < ROULETTE_COST || spinning) {
+                triggerShake();
+                return;
+              }
+              onSpin();
+            }}
+            disabled={spinning}
           >
             {spinning ? '돌리는 중...' : `🎰 돌리기 (${ROULETTE_COST}G)`}
           </button>

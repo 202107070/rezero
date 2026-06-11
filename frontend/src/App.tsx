@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ROUTES } from './constants/routes';
 import LobbyPage from './pages/lobby/LobbyPage';
@@ -5,8 +6,22 @@ import RoomPage from './pages/room/RoomPage';
 import BattlePage from './pages/battle/BattlePage';
 import ResultPage from './pages/result/ResultPage';
 import PracticePage from './pages/practice/PracticePage';
+import { applyDisplayMode, applyDisplayModeToDom, loadDisplayMode, updateUiScale } from './utils/windowBridge';
 
 function App() {
+  useEffect(() => {
+    applyDisplayModeToDom(loadDisplayMode());
+    const timer = window.setTimeout(() => {
+      void applyDisplayMode(loadDisplayMode());
+    }, 200);
+    const handleResize = () => updateUiScale();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

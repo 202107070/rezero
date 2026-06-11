@@ -19,7 +19,6 @@ export function PlayerSlot({ player, index, myCharacter, myLanguage, canInvite, 
     <div
       className={`player-slot ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''} ${!player && canInvite ? 'invite' : ''}`}
       onClick={player ? onClick : canInvite ? onInvite : undefined}
-      style={player || canInvite ? { cursor: 'pointer' } : undefined}
     >
       <div className="slot-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
         {player ? (index === 0 ? myCharIcon : player.character) : <span className="status-empty">X</span>}

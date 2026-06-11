@@ -30,7 +30,7 @@ export function PracticeProgressPanel({
   onSelectIndex,
 }: PracticeProgressPanelProps) {
   return (
-    <div className="pixel-card" style={{ width: '300px', minHeight: 0, flexShrink: 0 }}>
+    <div className="pixel-card practice-sidebar">
       <div className="pixel-card-header" style={{ justifyContent: 'center' }}>
         <span>PROBLEM SET</span>
       </div>

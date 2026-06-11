@@ -1,3 +1,4 @@
+import { useModalShake } from '../../../hooks/useModalShake';
 import type { TitleDef } from '../../../constants/titleTypes';
 
 interface ResultPopupProps {
@@ -17,11 +18,12 @@ export function ResultPopup({
   rankBorderColor,
   onClose,
 }: ResultPopupProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!show) return null;
 
   return (
-    <div className="result-popup-overlay" onClick={onClose}>
-      <div className="result-popup-box" onClick={(e) => e.stopPropagation()} style={{ borderColor: rankBorderColor }}>
+    <div className="result-popup-overlay" onClick={triggerShake}>
+      <div className={`result-popup-box${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ borderColor: rankBorderColor }}>
         <div className="result-popup-msg" style={mainMsg.includes('꼴등') ? { color: 'var(--px-danger)' } : {}}>
           {mainMsg}
         </div>

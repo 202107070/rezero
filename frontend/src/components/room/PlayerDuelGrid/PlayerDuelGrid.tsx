@@ -20,7 +20,6 @@ function DuelSide({ player, isHostSide, myCharacter, myLanguage, canInvite, onPl
     <div
       className={`duel-side ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''} ${!player && canInvite ? 'invite' : ''}`}
       onClick={clickable}
-      style={clickable ? { cursor: 'pointer' } : undefined}
     >
       <div className="duel-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
         {player ? (isHostSide ? myCharIcon : player.character) : <span className="duel-empty-mark">?</span>}

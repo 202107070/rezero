@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useModalShake } from '../../../hooks/useModalShake';
 import type { RoomFilterState } from '../../../types/roomFilter';
 import { EMPTY_ROOM_FILTER } from '../../../types/roomFilter';
 import { cloneRoomFilter, toggleFilterValue } from '../../../utils/roomFilterUtils';
@@ -48,6 +49,8 @@ const FILTER_CATEGORIES: FilterCategory[] = [
       { id: 'JAVA', label: 'JAVA' },
       { id: 'PYTHON', label: 'PYTHON' },
       { id: 'C++', label: 'C++' },
+      { id: 'HTML', label: 'HTML' },
+      { id: 'CSS', label: 'CSS' },
       { id: 'RANDOM', label: '🎲 랜덤' },
     ],
   },
@@ -78,6 +81,7 @@ const FILTER_CATEGORIES: FilterCategory[] = [
 ];
 
 export function RoomFilterModal({ open, filter, onClose, onApply }: RoomFilterModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   const [draft, setDraft] = useState<RoomFilterState>(EMPTY_ROOM_FILTER);
 
   useEffect(() => {
@@ -103,8 +107,8 @@ export function RoomFilterModal({ open, filter, onClose, onApply }: RoomFilterMo
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content room-filter-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content room-filter-modal${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-primary room-filter-title">FILTER</h3>
         <div className="room-filter-body">
           {FILTER_CATEGORIES.map((category) => (

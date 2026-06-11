@@ -1,4 +1,5 @@
 import { TITLE_DEFS, getEquippedTitle, saveTitles, type TitleData } from '../../../constants/titleTypes';
+import { useModalShake } from '../../../hooks/useModalShake';
 
 interface TitleModalProps {
   open: boolean;
@@ -8,13 +9,14 @@ interface TitleModalProps {
 }
 
 export function TitleModal({ open, titleData, onClose, onTitleDataChange }: TitleModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   const equipped = getEquippedTitle(titleData);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+    <div className="modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
         <h3 className="text-center pixel-text-warning" style={{ marginBottom: '10px', fontSize: '22px' }}>
           🏆 칭호 관리
         </h3>

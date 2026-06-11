@@ -1,3 +1,5 @@
+import { useModalShake } from '../../../hooks/useModalShake';
+
 interface PracticeSetupModalProps {
   lang: string;
   diff: string;
@@ -21,9 +23,11 @@ export function PracticeSetupModal({
   onCountChange,
   onStart,
 }: PracticeSetupModalProps) {
+  const { shaking, triggerShake } = useModalShake();
+
   return (
-    <div className="setup-overlay">
-      <div className="setup-box">
+    <div className="setup-overlay" onClick={triggerShake}>
+      <div className={`setup-box${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="setup-title">PRACTICE SETUP</div>
         <div className="setup-row">
           <div className="setup-label">언어</div>
@@ -31,6 +35,8 @@ export function PracticeSetupModal({
             <option value="JAVA">JAVA</option>
             <option value="PYTHON">PYTHON</option>
             <option value="CPP">C++</option>
+            <option value="HTML">HTML</option>
+            <option value="CSS">CSS</option>
           </select>
         </div>
         <div className="setup-row">
@@ -48,6 +54,7 @@ export function PracticeSetupModal({
             <option value="mixed">모든 유형</option>
             <option value="multiple_choice">객관식</option>
             <option value="fill_blank">빈칸채우기</option>
+            <option value="visual_fill_blank">그림 맞추기</option>
             <option value="short_answer">주관식</option>
           </select>
         </div>

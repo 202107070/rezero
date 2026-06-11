@@ -1,4 +1,5 @@
 import { ATTACK_ITEM_KEYS, BATTLE_ITEM_DEFS, type ItemKey } from '../../constants/itemTypes';
+import { useModalShake } from '../../hooks/useModalShake';
 import type { ItemInventory } from '../../types/battle';
 
 const ATTACK_ITEMS = BATTLE_ITEM_DEFS.filter((item) => ATTACK_ITEM_KEYS.includes(item.key)).map((item) => ({
@@ -24,23 +25,27 @@ interface ItemSelectModalProps {
 }
 
 export default function ItemSelectModal({ inventory, onSelect, onClose, allowedTypes }: ItemSelectModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   const allowedSet = allowedTypes ? new Set(allowedTypes) : null;
   const visibleItems = ATTACK_ITEMS.filter((item) => !allowedSet || allowedSet.has(item.type));
 
   return (
-    <div className="item-modal-overlay" onClick={onClose}>
-      <div className="item-modal-box" onClick={(e) => e.stopPropagation()}>
+    <div className="item-modal-overlay" onClick={triggerShake}>
+      <div className={`item-modal-box${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="item-modal-title">⚡ 아이템 선택</div>
         {visibleItems.map((item) => (
           <div
             key={item.type}
             className="item-option"
             onClick={() => {
-              if (inventory[item.type] > 0) onSelect(item.type);
+              if (inventory[item.type] > 0) {
+                onSelect(item.type);
+                return;
+              }
+              triggerShake();
             }}
             style={{
               opacity: inventory[item.type] <= 0 ? 0.4 : 1,
-              cursor: inventory[item.type] <= 0 ? 'not-allowed' : 'pointer',
               filter: inventory[item.type] <= 0 ? 'grayscale(1)' : undefined,
               background: item.rare ? 'linear-gradient(135deg, rgba(247,213,29,0.12), rgba(231,110,85,0.08))' : '',
               borderColor: item.rare ? 'var(--px-warning)' : '',

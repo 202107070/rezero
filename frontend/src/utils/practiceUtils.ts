@@ -1,4 +1,6 @@
 import problems from '../data/problems.js';
+import type { ProblemVisual } from '../types/battle';
+import { isBlankBasedType, problemSupportsLang } from './problemTypeUtils';
 
 export interface PracticeExercise {
   id: string;
@@ -10,6 +12,7 @@ export interface PracticeExercise {
   options: string[] | null;
   correctIndex: number | null;
   explanation: string;
+  visual?: ProblemVisual | null;
 }
 
 const DIFF_MAP: Record<string, string> = {
@@ -25,7 +28,7 @@ export function shuffleArray<T>(items: T[]): T[] {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
-export function createExercisePool(count: number, diff: string, type: string): PracticeExercise[] {
+export function createExercisePool(count: number, diff: string, type: string, langKey?: string): PracticeExercise[] {
   const bank = (problems as PracticeExercise[]) || [];
   let filtered = bank;
   const mappedDiff = DIFF_MAP[diff] || diff;
@@ -34,6 +37,9 @@ export function createExercisePool(count: number, diff: string, type: string): P
   }
   if (type && type !== 'mixed') {
     filtered = filtered.filter((p) => p.type === type);
+  }
+  if (langKey) {
+    filtered = filtered.filter((p) => problemSupportsLang(p.answer, langKey));
   }
   const shuffled = shuffleArray(filtered);
   return shuffled.slice(0, Math.max(3, Math.min(90, count)));
@@ -49,7 +55,7 @@ export function isExerciseCorrect(
   blankAnswers: string[][],
 ): boolean {
   if (ex.type === 'multiple_choice') return userAnswers[idx] === ex.correctIndex;
-  if (ex.type === 'fill_blank') {
+  if (isBlankBasedType(ex.type)) {
     const blanks = blankAnswers[idx] || [];
     const correct = ex.answer?.[lang] || [];
     return (

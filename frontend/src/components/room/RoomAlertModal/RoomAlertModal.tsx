@@ -1,3 +1,5 @@
+import { useModalShake } from '../../../hooks/useModalShake';
+
 interface RoomAlertModalProps {
   open: boolean;
   message: string;
@@ -5,11 +7,12 @@ interface RoomAlertModalProps {
 }
 
 export function RoomAlertModal({ open, message, onClose }: RoomAlertModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   return (
-    <div className="problem-modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ width: '380px' }} onClick={(e) => e.stopPropagation()}>
+    <div className="problem-modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} style={{ width: '380px' }} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-warning" style={{ marginBottom: '16px', fontSize: '22px' }}>
           ⚠ 알림
         </h3>

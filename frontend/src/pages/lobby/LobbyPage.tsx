@@ -10,6 +10,8 @@ import { RankingBoard } from '../../components/lobby/RankingBoard/RankingBoard';
 import { RoomCreateModal } from '../../components/lobby/RoomCreateModal/RoomCreateModal';
 import { RoomList } from '../../components/lobby/RoomList/RoomList';
 import { RouletteWheel } from '../../components/lobby/RouletteWheel/RouletteWheel';
+import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
+import { SettingsModal } from '../../components/lobby/SettingsModal/SettingsModal';
 import { TitleModal } from '../../components/lobby/TitleModal/TitleModal';
 import { DEFAULT_ITEM_INVENTORY, ROULETTE_COST, ROULETTE_ITEMS, type ItemInventory } from '../../constants/itemTypes';
 import { ROUTES } from '../../constants/routes';
@@ -22,6 +24,11 @@ import { EMPTY_ROOM_FILTER } from '../../types/roomFilter';
 import type { RoomFilterState } from '../../types/roomFilter';
 import { getRoomFilterSummary, matchesRoomFilter } from '../../utils/roomFilterUtils';
 import { DEFAULT_ROOMS, loadDynamicRooms, normalizeRoomList } from '../../utils/roomUtils';
+import type { AudioSettings } from '../../types/audioSettings';
+import type { DisplayMode } from '../../types/electron';
+import { loadAudioSettings, saveAudioSettings } from '../../utils/audio/audioSettings';
+import { applyAudioSettings, BattleBGM, LobbyBGM } from '../../utils/audio/gameAudio';
+import { applyDisplayMode, loadDisplayMode, quitApp } from '../../utils/windowBridge';
 import './lobby.css';
 
 const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
@@ -107,6 +114,10 @@ export default function LobbyPage() {
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
   const [users] = useState<LobbyUser[]>(loadInitialUsers);
   const [showRoulette, setShowRoulette] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(loadDisplayMode);
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>(loadAudioSettings);
   const [rouletteSpinning, setRouletteSpinning] = useState(false);
   const [rouletteResult, setRouletteResult] = useState<string | null>(null);
   const [wheelDeg, setWheelDeg] = useState(0);
@@ -116,6 +127,17 @@ export default function LobbyPage() {
     setRooms([...DEFAULT_ROOMS, ...loadDynamicRooms()]);
     setCurrentPage(0);
   }, []);
+
+  useEffect(() => {
+    BattleBGM.stop();
+    applyAudioSettings(audioSettings);
+    if (audioSettings.lobbyMusic) {
+      LobbyBGM.start();
+    } else {
+      LobbyBGM.stop();
+    }
+    return () => LobbyBGM.stop();
+  }, [audioSettings.lobbyMusic]);
 
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
@@ -264,6 +286,16 @@ export default function LobbyPage() {
     setSelectedHistoryIds(codeHistory.map((entry) => entry.historyId));
   };
 
+  const handleSettingsConfirm = (mode: DisplayMode, nextAudio: AudioSettings) => {
+    setDisplayMode(mode);
+    setAudioSettings(nextAudio);
+    saveAudioSettings(nextAudio);
+    applyAudioSettings(nextAudio);
+    if (nextAudio.lobbyMusic) LobbyBGM.start();
+    else LobbyBGM.stop();
+    void applyDisplayMode(mode);
+  };
+
   const startPractice = () => {
     const params = new URLSearchParams({
       lang: practiceLang,
@@ -319,6 +351,15 @@ export default function LobbyPage() {
             <InventoryPanel gold={gold} items={itemInventory} onOpenRoulette={() => setShowRoulette(true)} />
             <RankingBoard users={users} activeTab={activeTab} titleData={titleData} onTabChange={setActiveTab} />
           </aside>
+        </div>
+
+        <div className="lobby-action-bar">
+          <button type="button" className="pixel-btn lobby-action-btn" onClick={() => setShowSettingsModal(true)}>
+            ⚙️ 설정
+          </button>
+          <button type="button" className="pixel-btn pixel-btn-danger lobby-action-btn" onClick={() => setShowExitModal(true)}>
+            🚪 나가기
+          </button>
         </div>
       </div>
 
@@ -388,6 +429,20 @@ export default function LobbyPage() {
           setRouletteResult(null);
         }}
         onSpin={spinRoulette}
+      />
+
+      <SettingsModal
+        open={showSettingsModal}
+        displayMode={displayMode}
+        audioSettings={audioSettings}
+        onClose={() => setShowSettingsModal(false)}
+        onConfirm={handleSettingsConfirm}
+      />
+
+      <ExitConfirmModal
+        open={showExitModal}
+        onConfirm={() => void quitApp()}
+        onCancel={() => setShowExitModal(false)}
       />
 
       <MatchStoryModal

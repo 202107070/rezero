@@ -1,35 +1,135 @@
-.practice-page .problem-title { color: var(--px-warning); font-size:22px; text-shadow:2px 2px 0 #000; margin-bottom:10px; }
-.practice-page .problem-question { font-size:18px; line-height:1.7; color:#ddd; white-space:pre-wrap; }
-.practice-page .options-grid { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
-.practice-page .option-btn { background: #1a1e21; border:3px solid var(--px-border); color: var(--px-text); font-family: var(--font-pixel); font-size:16px; padding:10px 14px; cursor:pointer; text-align:left; box-shadow: var(--px-inset-light); transition: background 0.1s, border-color 0.1s; }
+/* ── Practice full-viewport layout (Electron / desktop) ── */
+.practice-page.page-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 16px 20px 20px;
+  gap: 12px;
+  position: relative;
+  z-index: 10;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.practice-page .practice-body {
+  display: flex;
+  gap: 14px;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+}
+
+.practice-page .practice-main-card {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.practice-page .practice-main-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.practice-page .practice-sidebar {
+  width: min(320px, 28vw);
+  min-width: 240px;
+  min-height: 0;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.practice-page .practice-header-bar {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: none;
+  border-width: 3px;
+}
+
+.practice-page .practice-header-title {
+  color: var(--px-warning);
+  font-size: 22px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.practice-page .practice-header-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 16px;
+}
+
+.practice-page .practice-nav-bar {
+  flex-shrink: 0;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  box-shadow: none;
+  border-width: 3px;
+}
+
+.practice-page .problem-title { color: var(--px-warning); font-size: 26px; text-shadow: 2px 2px 0 #000; margin-bottom: 10px; }
+.practice-page .problem-question { font-size: 22px; line-height: 1.75; color: #eee; white-space: pre-wrap; word-break: break-word; }
+.practice-page .options-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.practice-page .option-btn {
+  background: #1a1e21;
+  border: 3px solid var(--px-border);
+  color: var(--px-text);
+  font-family: var(--font-pixel);
+  font-size: 20px;
+  line-height: 1.5;
+  padding: 14px 16px;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: var(--px-inset-light);
+  transition: background 0.1s, border-color 0.1s;
+}
 .practice-page .option-btn:hover { background: #252f3f; }
 .practice-page .option-btn.selected { border-color: var(--px-primary); background: rgba(32,156,238,0.15); }
 .practice-page .option-btn.correct { border-color: var(--px-success); background: rgba(146,204,65,0.15); }
 .practice-page .option-btn.wrong { border-color: var(--px-danger); background: rgba(231,110,85,0.15); }
-.practice-page .result-correct { color: var(--px-success); text-shadow: 2px 2px 0 #000; }
-.practice-page .result-wrong { color: var(--px-danger); text-shadow: 2px 2px 0 #000; }
-.practice-page .explain-box { background: rgba(146, 204, 65, 0.1); border: 3px solid var(--px-success); padding: 10px; margin-top: 10px; }
-.practice-page .answer-box { background: #1a1e21; border: 3px solid var(--px-border); padding: 10px; margin-top: 10px; box-shadow: var(--px-inset-light); }
-.practice-page .user-list { padding:0 4px; display:flex; flex-direction:column; gap:4px; overflow-y:auto; flex-grow:1; }
-.practice-page .user-item { background: #252f3f; border:2px solid var(--px-border); border-left:none; border-right:none; margin:0 -4px; padding:5px 8px; display:flex; align-items:center; gap:6px; box-shadow: var(--px-shadow-hard); cursor:pointer; }
+.practice-page .result-correct { color: var(--px-success); font-size: 22px; text-shadow: 2px 2px 0 #000; }
+.practice-page .result-wrong { color: var(--px-danger); font-size: 22px; text-shadow: 2px 2px 0 #000; }
+.practice-page .explain-box { background: rgba(146, 204, 65, 0.1); border: 3px solid var(--px-success); padding: 14px; margin-top: 12px; font-size: 18px; line-height: 1.6; }
+.practice-page .answer-box { background: #1a1e21; border: 3px solid var(--px-border); padding: 14px; margin-top: 12px; box-shadow: var(--px-inset-light); font-size: 18px; }
+.practice-page .user-list { padding: 0 4px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1 1 0; min-height: 0; }
+.practice-page .user-item { background: #252f3f; border: 2px solid var(--px-border); border-left: none; border-right: none; margin: 0 -4px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; box-shadow: var(--px-shadow-hard); cursor: pointer; }
 .practice-page .user-item.me { border-color: var(--px-primary); }
 .practice-page .user-item.solved { border-color: var(--px-success); }
 .practice-page .user-item.wrong { border-color: var(--px-danger); }
-.practice-page .user-avatar { font-size:1.6rem; }
-.practice-page .user-info { flex-grow:1; display:flex; flex-direction:column; gap:2px; font-size:16px; }
-.practice-page .user-score { text-align:right; font-size:14px; }
+.practice-page .user-avatar { font-size: 1.4rem; }
+.practice-page .user-info { flex-grow: 1; display: flex; flex-direction: column; gap: 3px; font-size: 17px; }
+.practice-page .user-score { text-align: right; font-size: 15px; }
 
 .practice-page .blank-input {
-    background: #1a1e21;
-    border: 3px solid var(--px-border);
-    color: var(--px-text);
-    font-family: var(--font-pixel);
-    font-size: 16px;
-    padding: 2px 8px;
-    outline: none;
-    box-shadow: var(--px-inset-light);
-    text-align: center;
-    min-width: 60px;
+  background: #1a1e21;
+  border: 3px solid var(--px-border);
+  color: var(--px-text);
+  font-family: var(--font-pixel);
+  font-size: 20px;
+  padding: 4px 10px;
+  outline: none;
+  box-shadow: var(--px-inset-light);
+  text-align: center;
+  min-width: 72px;
+  vertical-align: middle;
 }
 .practice-page .blank-input:focus { border-color: var(--px-primary); }
 .practice-page .blank-input.correct { border-color: var(--px-success); background: rgba(146,204,65,0.15); color: var(--px-success); }
@@ -38,30 +138,41 @@
 .practice-page .blank-input.hidden { opacity: 0; width: 0; padding: 0; border: none; min-width: 0; }
 
 .practice-page .short-answer-input {
-    background: #1a1e21;
-    border: 3px solid var(--px-border);
-    color: var(--px-text);
-    font-family: var(--font-pixel);
-    font-size: 18px;
-    padding: 8px 12px;
-    outline: none;
-    box-shadow: var(--px-inset-light);
-    width: 100%;
+  background: #1a1e21;
+  border: 3px solid var(--px-border);
+  color: var(--px-text);
+  font-family: var(--font-pixel);
+  font-size: 22px;
+  padding: 12px 14px;
+  outline: none;
+  box-shadow: var(--px-inset-light);
+  width: 100%;
 }
 .practice-page .short-answer-input:focus { border-color: var(--px-primary); }
 .practice-page .short-answer-input.correct { border-color: var(--px-success); background: rgba(146,204,65,0.15); color: var(--px-success); }
 .practice-page .short-answer-input.wrong { border-color: var(--px-danger); background: rgba(231,110,85,0.15); color: var(--px-danger); }
 
-.practice-page .setup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:5000; display:flex; align-items:center; justify-content:center; }
-.practice-page .setup-box { background: var(--px-surface); border:4px solid var(--px-border); box-shadow: var(--px-shadow-hard); padding:24px; max-width:480px; width:92%; display:flex; flex-direction:column; gap:14px; }
-.practice-page .setup-title { font-size:24px; color:var(--px-warning); text-shadow:2px 2px 0 #000; text-align:center; margin-bottom:6px; }
-.practice-page .setup-row { display:flex; flex-direction:column; gap:6px; }
-.practice-page .setup-label { font-size:14px; color:#aaa; }
-.practice-page .setup-select { background:#1a1e21; border:3px solid var(--px-border); color:#fff; font-family:var(--font-pixel); font-size:16px; padding:8px; cursor:pointer; box-shadow: var(--px-inset-light); }
-.practice-page .setup-select option { background: var(--px-surface); color:#fff; }
-.practice-page .setup-count-row { display:flex; align-items:center; gap:10px; }
-.practice-page .setup-count-input { background:#1a1e21; border:3px solid var(--px-border); color:#fff; font-family:var(--font-pixel); font-size:16px; padding:6px 10px; width:80px; text-align:center; box-shadow: var(--px-inset-light); }
-.practice-page .setup-count-label { font-size:16px; color:#ddd; }
+.practice-page .setup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 5000; display: flex; align-items: center; justify-content: center; }
+.practice-page .setup-box { background: var(--px-surface); border: 4px solid var(--px-border); box-shadow: var(--px-shadow-hard); padding: 28px; max-width: 520px; width: 92%; display: flex; flex-direction: column; gap: 16px; }
+.practice-page .setup-title { font-size: 28px; color: var(--px-warning); text-shadow: 2px 2px 0 #000; text-align: center; margin-bottom: 6px; }
+.practice-page .setup-row { display: flex; flex-direction: column; gap: 8px; }
+.practice-page .setup-label { font-size: 16px; color: #aaa; }
+.practice-page .setup-select { background: #1a1e21; border: 3px solid var(--px-border); color: #fff; font-family: var(--font-pixel); font-size: 18px; padding: 10px; cursor: pointer; box-shadow: var(--px-inset-light); }
+.practice-page .setup-select option { background: var(--px-surface); color: #fff; }
+.practice-page .setup-count-row { display: flex; align-items: center; gap: 10px; }
+.practice-page .setup-count-input { background: #1a1e21; border: 3px solid var(--px-border); color: #fff; font-family: var(--font-pixel); font-size: 18px; padding: 8px 12px; width: 88px; text-align: center; box-shadow: var(--px-inset-light); }
+.practice-page .setup-count-label { font-size: 18px; color: #ddd; }
 
 .practice-page .pixel-btn:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #000; }
-.practice-page .pixel-btn:disabled { opacity:0.45; cursor:not-allowed; transform:none; box-shadow: var(--px-shadow-hard); }
+.practice-page .pixel-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: var(--px-shadow-hard); }
+
+@media (max-width: 900px) {
+  .practice-page .practice-body {
+    flex-direction: column;
+  }
+  .practice-page .practice-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 220px;
+  }
+}

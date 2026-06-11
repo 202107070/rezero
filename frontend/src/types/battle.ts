@@ -1,6 +1,14 @@
+export interface ProblemVisual {
+  kind: 'ascii' | 'html' | 'css' | 'svg' | 'canvas';
+  content?: string;
+  previewHtml?: string;
+  previewCss?: string;
+  caption?: string;
+}
+
 export interface BattleProblem {
   id?: string;
-  type: 'fill_blank' | 'multiple_choice' | 'short_answer' | string;
+  type: 'fill_blank' | 'visual_fill_blank' | 'multiple_choice' | 'short_answer' | string;
   difficulty?: string;
   title?: string;
   question?: string;
@@ -11,6 +19,7 @@ export interface BattleProblem {
   description?: string;
   input?: string;
   output?: string;
+  visual?: ProblemVisual | null;
 }
 
 export interface ItemInventory {

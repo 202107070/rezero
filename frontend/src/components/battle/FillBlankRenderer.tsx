@@ -47,7 +47,7 @@ export default function FillBlankRenderer({
                 readOnly={isBotView || isLocked}
                 disabled={isBotView || isLocked}
                 style={{
-                  width: '80px',
+                  width: `${Math.max(88, ((safeAnswers[i] || '').length + 2) * 16)}px`,
                   display: 'inline-block',
                   ...(isBotView ? { pointerEvents: 'none' } : {}),
                 }}

@@ -8,6 +8,7 @@ import { PracticeProgressPanel } from '../../components/practice/PracticeProgres
 import { PracticeSetupModal } from '../../components/practice/PracticeSetupModal/PracticeSetupModal';
 import { ROUTES } from '../../constants/routes';
 import { getLangKey } from '../../utils/battle/codeUtils';
+import { isBlankBasedType } from '../../utils/problemTypeUtils';
 import {
   createExercisePool,
   isExerciseCorrect,
@@ -45,10 +46,11 @@ export default function PracticePage() {
   const [blankAnswers, setBlankAnswers] = useState<string[][]>([]);
 
   const langKey = getLangKey(lang);
-  const displayLang = langKey === 'CPP' ? 'C++' : langKey;
+  const displayLang =
+    langKey === 'CPP' ? 'C++' : langKey === 'HTML' ? 'HTML' : langKey === 'CSS' ? 'CSS' : langKey;
 
   const startPractice = useCallback(() => {
-    const pool = createExercisePool(count, diff, type);
+    const pool = createExercisePool(count, diff, type, langKey);
     setExercises(pool);
     setCurrentIndex(0);
     setChecked(new Set());
@@ -56,7 +58,7 @@ export default function PracticePage() {
     setBlankAnswers(Array(pool.length).fill(null).map(() => []));
     setShowSetup(false);
     localStorage.removeItem(PRACTICE_STATE_KEY);
-  }, [count, diff, type]);
+  }, [count, diff, type, langKey]);
 
   useEffect(() => {
     if (hasUrlParams) startPractice();
@@ -71,7 +73,7 @@ export default function PracticePage() {
     isChecked && currentEx.type === 'multiple_choice' && selectedOption === currentEx.correctIndex;
 
   const isFillBlankCorrect = () => {
-    if (currentEx.type !== 'fill_blank') return false;
+    if (!isBlankBasedType(currentEx.type)) return false;
     const blanks = blankAnswers[currentIndex] || [];
     if (blanks.length !== correctAnswers.length) return false;
     for (let i = 0; i < blanks.length; i++) {
@@ -121,7 +123,7 @@ export default function PracticePage() {
     if (isChecked) return;
     if (currentEx.type === 'multiple_choice') {
       if (selectedOption === -1 || selectedOption === undefined) return;
-    } else if (currentEx.type === 'fill_blank') {
+    } else if (isBlankBasedType(currentEx.type)) {
       const blanks = blankAnswers[currentIndex] || [];
       const required = (currentEx.question?.match(/_____/g) || []).length;
       if (blanks.length < required || blanks.some((v) => !v || v.trim() === '')) return;
@@ -156,7 +158,7 @@ export default function PracticePage() {
   const canCheck = () => {
     if (isChecked) return false;
     if (currentEx.type === 'multiple_choice') return selectedOption !== -1 && selectedOption !== undefined;
-    if (currentEx.type === 'fill_blank') {
+    if (isBlankBasedType(currentEx.type)) {
       const required = (currentEx.question?.match(/_____/g) || []).length;
       const blanks = blankAnswers[currentIndex] || [];
       return blanks.length >= required && blanks.every((v) => v && v.trim() !== '');
@@ -190,29 +192,31 @@ export default function PracticePage() {
         onOpenSetup={() => setShowSetup(true)}
       />
 
-      <div style={{ display: 'flex', gap: '12px', flexGrow: 1, minHeight: 0 }}>
-        <div className="pixel-card" style={{ flex: '2', minHeight: 0, overflow: 'auto' }}>
-          <PracticeProblemViewer
-            exercise={currentEx}
-            currentIndex={currentIndex}
-            totalCount={exercises.length}
-            isChecked={isChecked}
-            blankAnswers={blankAnswers[currentIndex] || []}
-            correctAnswers={correctAnswers}
-            onBlankChange={handleBlankChange}
-          />
-          <PracticeAnswerSection
-            exercise={currentEx}
-            isChecked={isChecked}
-            isCorrect={isCorrect}
-            selectedOption={selectedOption}
-            shortAnswer={blankAnswers[currentIndex]?.[0] || ''}
-            correctAnswers={correctAnswers}
-            canCheck={canCheck()}
-            onSelect={handleSelect}
-            onShortAnswerChange={handleShortAnswerChange}
-            onCheck={handleCheck}
-          />
+      <div className="practice-body">
+        <div className="pixel-card practice-main-card">
+          <div className="practice-main-scroll">
+            <PracticeProblemViewer
+              exercise={currentEx}
+              currentIndex={currentIndex}
+              totalCount={exercises.length}
+              isChecked={isChecked}
+              blankAnswers={blankAnswers[currentIndex] || []}
+              correctAnswers={correctAnswers}
+              onBlankChange={handleBlankChange}
+            />
+            <PracticeAnswerSection
+              exercise={currentEx}
+              isChecked={isChecked}
+              isCorrect={isCorrect}
+              selectedOption={selectedOption}
+              shortAnswer={blankAnswers[currentIndex]?.[0] || ''}
+              correctAnswers={correctAnswers}
+              canCheck={canCheck()}
+              onSelect={handleSelect}
+              onShortAnswerChange={handleShortAnswerChange}
+              onCheck={handleCheck}
+            />
+          </div>
         </div>
 
         <PracticeProgressPanel

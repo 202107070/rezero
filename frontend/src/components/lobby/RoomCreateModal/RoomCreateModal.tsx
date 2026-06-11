@@ -1,3 +1,5 @@
+import { useModalShake } from '../../../hooks/useModalShake';
+
 interface RoomCreateModalProps {
   open: boolean;
   playerMode: string;
@@ -43,6 +45,7 @@ export function RoomCreateModal({
   onRoomPwdChange,
   onProblemCountChange,
 }: RoomCreateModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   const handleVisibilityChange = (value: 'public' | 'private') => {
@@ -51,9 +54,9 @@ export function RoomCreateModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={triggerShake}>
       <div
-        className={`modal-content ${shakeError ? 'modal-shake-error' : ''}`}
+        className={`modal-content ${shakeError || shaking ? 'modal-shake-error' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '16px', fontSize: '22px' }}>
@@ -96,6 +99,8 @@ export function RoomCreateModal({
             <option value="JAVA">JAVA</option>
             <option value="PYTHON">PYTHON</option>
             <option value="C++">C++</option>
+            <option value="HTML">HTML</option>
+            <option value="CSS">CSS</option>
             <option value="RANDOM">🎲 랜덤</option>
           </select>
         </div>

@@ -1,0 +1,81 @@
+.problem-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 2px solid var(--px-primary, #3498db);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.problem-visual.compact {
+  padding: 8px 10px;
+}
+
+.problem-visual-caption {
+  font-size: 19px;
+  color: var(--px-warning, #f1c40f);
+  line-height: 1.45;
+}
+
+.problem-visual-ascii {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--font-pixel, 'Courier New', monospace);
+  font-size: 22px;
+  line-height: 1.4;
+  color: #92cc41;
+  background: #1a1a2e;
+  border-radius: 4px;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.problem-visual-svg-frame {
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #1a1a2e;
+}
+
+.problem-visual-svg-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  min-height: 100px;
+}
+
+.problem-visual-svg-stage svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.problem-visual-html-frame,
+.problem-visual-css-frame {
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.problem-visual-html-label {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  background: rgba(52, 152, 219, 0.25);
+  color: #bdc3c7;
+}
+
+.problem-visual-html-content {
+  padding: 12px 14px;
+  background: #fff;
+  color: #2c3e50;
+  min-height: 48px;
+}
+
+.problem-visual-css-stage {
+  padding: 12px;
+  background: linear-gradient(180deg, #87ceeb 0%, #7ec850 100%);
+  min-height: 90px;
+}

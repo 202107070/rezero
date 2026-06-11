@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BattleChatPanel, { type ChatMessage } from '../../components/battle/BattleChatPanel';
 import FillBlankRenderer from '../../components/battle/FillBlankRenderer';
+import ProblemVisualPreview from '../../components/battle/ProblemVisualPreview';
 import ItemSelectModal from '../../components/battle/ItemSelectModal';
 import OpponentPanels, { type BotView } from '../../components/battle/OpponentPanels';
 import {
@@ -23,7 +24,8 @@ import {
 } from '../../services/battleSessionService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
 import { getBotSolveDelay } from '../../utils/battle/demoBots';
-import { BGM, SFX } from '../../utils/battle/audio';
+import { loadAudioSettings } from '../../utils/audio/audioSettings';
+import { applyAudioSettings, BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
 import { comparePlayersByRank } from '../../utils/resultUtils';
 import {
   clearPaintCanvas,
@@ -32,6 +34,7 @@ import {
   startScribbleCanvas,
 } from '../../utils/battle/canvasEffects';
 import { assembleCode, DEFAULT_TEMPLATE, getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
+import { isBlankBasedType } from '../../utils/problemTypeUtils';
 import {
   areAllBotsSolvedOnPlayerProblem,
   createDemoBattleRoster,
@@ -481,16 +484,22 @@ export default function BattlePage() {
   }, []);
 
   useEffect(() => {
-    BGM.start('normal');
-    return () => BGM.stop();
+    LobbyBGM.stop();
+    const settings = loadAudioSettings();
+    applyAudioSettings(settings);
+    if (settings.battleMusic) {
+      BattleBGM.start('normal');
+    }
+    return () => BattleBGM.stop();
   }, []);
 
   useEffect(() => {
-    BGM.setMode(remaining <= 30 && remaining > 0 ? 'urgent' : 'normal');
+    if (!loadAudioSettings().battleMusic) return;
+    BattleBGM.setMode(remaining <= 30 && remaining > 0 ? 'urgent' : 'normal');
   }, [remaining]);
 
   useEffect(() => {
-    if (battleFinished) BGM.stop();
+    if (battleFinished) BattleBGM.stop();
   }, [battleFinished]);
 
   useEffect(() => {
@@ -724,7 +733,7 @@ export default function BattlePage() {
   const handleBlankEnter = (blankIndex: number, e: React.KeyboardEvent) => {
     if (demoSpectating || spectatorLocked || problemSolved) return;
     e.preventDefault();
-    if (currentProblem.type !== 'fill_blank') return;
+    if (!isBlankBasedType(currentProblem.type)) return;
     const blanks = blankAnswers[currentIndex] || [];
     const correct = currentProblem.answer?.[langKey] || [];
     const u = String(blanks[blankIndex] || '').trim().toLowerCase();
@@ -738,7 +747,7 @@ export default function BattlePage() {
   };
 
   const allBlanksCorrect = () => {
-    if (currentProblem.type !== 'fill_blank') return false;
+    if (!isBlankBasedType(currentProblem.type)) return false;
     const correct = currentProblem.answer?.[langKey] || [];
     const saved = correctBlanks[currentIndex] || {};
     for (let i = 0; i < correct.length; i++) {
@@ -749,7 +758,7 @@ export default function BattlePage() {
 
   const handleSubmit = () => {
     if (demoSpectating || spectatorLocked || problemSolved) return;
-    if (currentProblem.type === 'fill_blank') {
+    if (isBlankBasedType(currentProblem.type)) {
       if (!allBlanksCorrect()) return;
       const newCombo = comboCount + 1;
       const earnedScore = 1000 + 100 * (newCombo - 1);
@@ -1076,8 +1085,7 @@ export default function BattlePage() {
                             border: '2px solid var(--px-border)',
                             color: disabled ? '#555' : 'var(--px-success)',
                             fontFamily: 'var(--font-pixel)',
-                            fontSize: '14px',
-                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            fontSize: '17px',
                             padding: '1px 6px',
                             filter: itemInventory[type] <= 0 ? 'grayscale(1)' : undefined,
                           }}
@@ -1093,7 +1101,7 @@ export default function BattlePage() {
                 <div
                   style={{
                     padding: '4px 12px',
-                    fontSize: '18px',
+                    fontSize: '21px',
                     background: 'rgba(247,213,29,0.15)',
                     borderBottom: '2px solid var(--px-warning)',
                     color: 'var(--px-warning)',
@@ -1103,7 +1111,7 @@ export default function BattlePage() {
                   💡 힌트: {revealHint}
                 </div>
               )}
-              <div key="problem-summary" className="code-problem-summary" style={{ height: problemCollapsed ? 90 : 160 }}>
+              <div key="problem-summary" className="code-problem-summary" style={{ height: problemCollapsed ? 105 : 180 }}>
                 <div className="code-problem-head">
                   <div className="code-problem-copy">
                     <div className="code-problem-kicker">PROBLEM</div>
@@ -1122,8 +1130,11 @@ export default function BattlePage() {
                   <div>{currentProblem.explanation || ''}</div>
                 </div>
               </div>
-              {currentProblem.type === 'fill_blank' && (
+              {isBlankBasedType(currentProblem.type) && (
                 <div className="fill-blank-area">
+                  {currentProblem.visual && (
+                    <ProblemVisualPreview visual={currentProblem.visual} />
+                  )}
                   <div className="fill-blank-code">
                     <FillBlankRenderer
                       code={currentProblem.question || ''}
@@ -1139,8 +1150,9 @@ export default function BattlePage() {
                 </div>
               )}
               {currentProblem.type === 'multiple_choice' && (
-                <div className="fill-blank-area" style={{ gap: '6px' }}>
-                  <div style={{ color: 'var(--px-text)', fontSize: '17px', padding: '4px 0' }}>{currentProblem.question}</div>
+                <div className="fill-blank-area">
+                  {currentProblem.visual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
+                  <div className="fill-blank-question">{currentProblem.question}</div>
                   {(currentProblem.options || []).map((opt, i) => {
                     const isCorrect = problemSolved && i === currentProblem.correctIndex;
                     const isWrong = !problemSolved && wrongChoice === i;
@@ -1149,14 +1161,11 @@ export default function BattlePage() {
                       <button
                         key={i}
                         type="button"
-                        className="pixel-btn"
+                        className={`pixel-btn battle-choice-btn${problemSolved ? ' is-locked' : ''}`}
                         onClick={() => {
                           if (!problemSolved) onSubmitChoice(i);
                         }}
                         style={{
-                          textAlign: 'center',
-                          fontSize: '19px',
-                          padding: '8px 12px',
                           background: isCorrect
                             ? 'rgba(146,204,65,0.35)'
                             : isWrong
@@ -1173,7 +1182,6 @@ export default function BattlePage() {
                                 : 'var(--px-primary)',
                           color: isCorrect || isWrong ? '#fff' : '#e0e0e0',
                           opacity: problemSolved && i !== currentProblem.correctIndex ? 0.5 : 1,
-                          cursor: problemSolved ? 'default' : 'pointer',
                         }}
                       >
                         {String.fromCharCode(65 + i)}. {opt}
@@ -1183,11 +1191,11 @@ export default function BattlePage() {
                 </div>
               )}
               {currentProblem.type === 'short_answer' && (
-                <div className="fill-blank-area" style={{ gap: '8px' }}>
-                  <div style={{ color: 'var(--px-text)', fontSize: '17px' }}>{currentProblem.question}</div>
+                <div className="fill-blank-area">
+                  {currentProblem.visual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
+                  <div className="fill-blank-question">{currentProblem.question}</div>
                   <input
-                    className="blank-input"
-                    style={{ width: '100%', fontSize: '20px', padding: '6px 10px' }}
+                    className="blank-input battle-short-input"
                     value={blankAnswers[currentIndex]?.[0] || ''}
                     onChange={(e) => updateBlankAnswer(currentIndex, 0, e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -1195,14 +1203,13 @@ export default function BattlePage() {
                   />
                   {problemSolved && (
                     <div
+                      className="battle-feedback-text"
                       style={{
                         color:
                           blankAnswers[currentIndex]?.[0]?.trim()?.toLowerCase() ===
                           (currentProblem.answer?.[langKey]?.[0] || '').trim().toLowerCase()
                             ? 'var(--px-success)'
                             : 'var(--px-danger)',
-                        fontSize: '16px',
-                        padding: '4px 0',
                       }}
                     >
                       {blankAnswers[currentIndex]?.[0]?.trim()?.toLowerCase() ===
@@ -1266,7 +1273,7 @@ export default function BattlePage() {
                   className="pixel-btn pixel-btn-success"
                   onClick={handleSubmit}
                   style={{ padding: '4px 10px', fontSize: '14px' }}
-                  disabled={demoSpectating || spectatorLocked || (currentProblem.type === 'fill_blank' && !allBlanksCorrect())}
+                  disabled={demoSpectating || spectatorLocked || (isBlankBasedType(currentProblem.type) && !allBlanksCorrect())}
                 >
                   {demoSpectating || spectatorLocked ? 'LOCKED' : '제출'}
                 </button>

@@ -287,7 +287,8 @@ export function startScribbleCanvas(
   const canvas = document.createElement('canvas');
   canvas.width = containerEl.clientWidth;
   canvas.height = containerEl.clientHeight;
-  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;z-index:15';
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:15';
+  canvas.classList.add('cursor-crosshair');
   containerEl.appendChild(canvas);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;

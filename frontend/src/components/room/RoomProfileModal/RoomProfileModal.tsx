@@ -1,4 +1,5 @@
 import { CHARACTERS } from '../../../constants/roomConstants';
+import { useModalShake } from '../../../hooks/useModalShake';
 import type { RoomPlayer } from '../../../types/room';
 
 interface RoomProfileModalProps {
@@ -22,13 +23,14 @@ export function RoomProfileModal({
   onClose,
   onKick,
 }: RoomProfileModalProps) {
+  const { shaking, triggerShake } = useModalShake();
   if (!open || !player) return null;
 
   const charIcon = player.isHost ? CHARACTERS.find((c) => c.id === myCharacter)?.icon : player.character;
 
   return (
-    <div className="problem-modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ width: '320px' }} onClick={(e) => e.stopPropagation()}>
+    <div className="problem-modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} style={{ width: '320px' }} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '16px', fontSize: '22px' }}>
           USER PROFILE
         </h3>

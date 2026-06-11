@@ -6,7 +6,7 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "electron:build": "tsc -p tsconfig.electron.json",
+    "electron:build": "tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/preload.cjs','dist-electron/preload.cjs')\"",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && npm run electron:build && cross-env NODE_ENV=development electron .\"",
     "build": "tsc -b && vite build && npm run electron:build",
     "start": "electron .",

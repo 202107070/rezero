@@ -1,4 +1,5 @@
 import type { PracticeExercise } from '../../../utils/practiceUtils';
+import { isBlankBasedType } from '../../../utils/problemTypeUtils';
 
 interface PracticeAnswerSectionProps {
   exercise: PracticeExercise;
@@ -87,7 +88,7 @@ export function PracticeAnswerSection({
               <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>{correctAnswers[0] || ''}</div>
             </div>
           )}
-          {!isCorrect && exercise.type === 'fill_blank' && (
+          {!isCorrect && isBlankBasedType(exercise.type) && (
             <div className="answer-box">
               <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>정답:</div>
               <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>{correctAnswers.join(', ')}</div>

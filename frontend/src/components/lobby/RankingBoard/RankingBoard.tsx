@@ -38,11 +38,24 @@ function UserTitleBadge({ titleId }: { titleId: string | null }) {
   );
 }
 
+const MY_USER_NAME = 'rocky_user';
+
+function sortUsersForTab(users: LobbyUser[], activeTab: string) {
+  if (activeTab === '랭킹') {
+    return [...users].sort((a, b) => (TIER_ORDER[b.rank] || 0) - (TIER_ORDER[a.rank] || 0));
+  }
+
+  const list = [...users];
+  const myIndex = list.findIndex((user) => user.name === MY_USER_NAME);
+  if (myIndex > 0) {
+    const [me] = list.splice(myIndex, 1);
+    list.unshift(me);
+  }
+  return list;
+}
+
 export function RankingBoard({ users, activeTab, titleData, onTabChange }: RankingBoardProps) {
-  const sortedUsers =
-    activeTab === '랭킹'
-      ? [...users].sort((a, b) => (TIER_ORDER[b.rank] || 0) - (TIER_ORDER[a.rank] || 0))
-      : users;
+  const sortedUsers = sortUsersForTab(users, activeTab);
 
   const myEquipped = getEquippedTitle(titleData);
 
@@ -94,7 +107,7 @@ export function RankingBoard({ users, activeTab, titleData, onTabChange }: Ranki
                   {u.rank}
                 </td>
                 <td>
-                  {u.name === 'rocky_user' ? (
+                  {u.name === MY_USER_NAME ? (
                     <>
                       <strong style={{ color: 'var(--px-warning)' }}>{u.name}</strong>
                       {myEquipped && (

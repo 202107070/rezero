@@ -1,4 +1,6 @@
+import ProblemVisualPreview from '../../../components/battle/ProblemVisualPreview';
 import type { PracticeExercise } from '../../../utils/practiceUtils';
+import { isBlankBasedType } from '../../../utils/problemTypeUtils';
 
 interface PracticeProblemViewerProps {
   exercise: PracticeExercise;
@@ -21,11 +23,12 @@ export function PracticeProblemViewer({
 }: PracticeProblemViewerProps) {
   const renderQuestion = () => {
     if (!exercise.question) return null;
-    if (exercise.type === 'fill_blank') {
+    if (isBlankBasedType(exercise.type)) {
       const parts = exercise.question.split('_____');
       const blanks = blankAnswers;
       return (
         <div className="problem-question">
+          {exercise.visual && <ProblemVisualPreview visual={exercise.visual} compact />}
           {parts.map((part, i) => (
             <span key={i}>
               <span style={{ whiteSpace: 'pre-wrap' }}>{part}</span>
@@ -61,7 +64,12 @@ export function PracticeProblemViewer({
         </span>
         <span style={{ fontSize: '16px', color: '#aaa' }}>{exercise.title || 'Loading...'}</span>
       </div>
-      <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: '14px' }}>{renderQuestion()}</div>
+      <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {exercise.visual && !isBlankBasedType(exercise.type) && (
+          <ProblemVisualPreview visual={exercise.visual} compact />
+        )}
+        {renderQuestion()}
+      </div>
     </>
   );
 }

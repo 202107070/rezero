@@ -1,4 +1,5 @@
 @import './variables.css';
+@import './cursors.css';
 
 * {
   box-sizing: border-box;
@@ -49,6 +50,40 @@ body::after {
 #root {
   height: 100vh;
   overflow: hidden;
+}
+
+html.display-window #root {
+  width: 100%;
+  height: 100vh;
+  transform: none;
+}
+
+html.display-fullscreen body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+html.display-fullscreen #root {
+  width: 1280px;
+  height: 960px;
+  max-width: 1280px;
+  max-height: 960px;
+  flex-shrink: 0;
+  transform: scale(var(--ui-scale-x, 1), var(--ui-scale-y, 1));
+  transform-origin: center center;
+}
+
+html.display-fullscreen #root .page-container,
+html.display-fullscreen #root .room-page-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  margin: 0 !important;
 }
 
 .pixel-card-header {
@@ -156,6 +191,37 @@ body::after {
   padding: 20px;
   width: 800px;
   text-align: left;
+}
+
+@keyframes modal-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-10px);
+  }
+  30% {
+    transform: translateX(10px);
+  }
+  45% {
+    transform: translateX(-8px);
+  }
+  60% {
+    transform: translateX(8px);
+  }
+  75% {
+    transform: translateX(-4px);
+  }
+}
+
+.modal-shake-error {
+  animation: modal-shake 0.45s ease-in-out;
+  border-color: var(--px-danger) !important;
+  background: #2d1212 !important;
+  box-shadow:
+    var(--px-shadow-hard),
+    0 0 18px rgba(231, 76, 60, 0.35);
 }
 
 .profile-btn {
