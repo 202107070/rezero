@@ -1,22 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AiReviewerPanel, type AiMessage } from '../../components/result/AiReviewerPanel/AiReviewerPanel';
-import { UserStatusPanel } from '../../components/result/PlayerCodesPanel/PlayerCodesPanel';
 import { ResultActionBar } from '../../components/result/ResultActionBar/ResultActionBar';
 import { ResultChatPanel } from '../../components/result/ResultChatPanel/ResultChatPanel';
 import { ResultPopup } from '../../components/result/ResultPopup/ResultPopup';
 import { ResultRankingPanel } from '../../components/result/ResultRankingPanel/ResultRankingPanel';
+import { ResultReviewFooter } from '../../components/result/ResultReviewFooter/ResultReviewFooter';
 import { ResultTeamPanel } from '../../components/result/ResultTeamPanel/ResultTeamPanel';
-import {
-  checkNewTitles,
-  getEquippedTitle,
-  loadTitles,
-  saveTitles,
-  type TitleDef,
-} from '../../constants/titleTypes';
+import { ReviewInviteModal } from '../../components/result/ReviewInviteModal/ReviewInviteModal';
+import { ReviewProblemView } from '../../components/result/ReviewProblemView/ReviewProblemView';
+import { checkNewTitles, loadTitles, saveTitles, type TitleDef } from '../../constants/titleTypes';
 import { ROUTES } from '../../constants/routes';
+import { ENABLE_RESULT_BOT_DEPARTURE, MY_RESULT_USER_ID, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
 import { STORAGE_KEYS } from '../../constants/storageKeys';
-import { clearBattleAndLeave, getSessionId } from '../../services/battleSessionService';
+import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot } from '../../services/battleSessionService';
+import {
+  clearReviewInvite,
+  createReviewInviteId,
+  persistReviewInvite,
+  scheduleReviewInviteResponse,
+  shouldAutoAcceptReviewInvite,
+} from '../../services/reviewSessionService';
 import type { DemoBot } from '../../utils/battle/demoBots';
 import { normalizeCodeHistoryEntry, persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtils';
 import { buildResultPlayers } from '../../utils/resultUtils';
@@ -41,6 +45,7 @@ interface BattleSubmission {
   roomId?: string;
   historyId?: string;
   code?: string;
+  problemResults?: boolean[];
 }
 
 interface DemoState {
@@ -50,6 +55,8 @@ interface DemoState {
   remaining?: number;
   ingameScore?: number;
   solveTimes?: Record<number, number>;
+  localSolvedProblems?: number[];
+  finishedAtElapsedSec?: number;
   battleBots?: DemoBot[];
 }
 
@@ -59,7 +66,9 @@ interface OnlineUser {
   avatar?: string;
 }
 
-const MY_USER_ID = 'rocky_user';
+const MY_USER_ID = MY_RESULT_USER_ID;
+
+type ReviewPhase = 'idle' | 'selecting' | 'reviewing';
 
 function removeMyPresence(): void {
   try {
@@ -104,6 +113,8 @@ export default function ResultPage() {
     }
   }, [sessionId]);
 
+  const rankingSnapshot = useMemo(() => readFinalRankingSnapshot(sessionId), [sessionId]);
+
   const roomUsers = useMemo(() => {
     try {
       const raw = JSON.parse(localStorage.getItem('roomUsers') || 'null');
@@ -123,8 +134,8 @@ export default function ResultPage() {
   const lang = submission.lang || demoState?.lang || 'JAVA';
 
   const allPlayers = useMemo(
-    () => buildResultPlayers({ roomUsers, demoBots, submission, demoState }),
-    [roomUsers, demoBots, submission, demoState],
+    () => buildResultPlayers({ rankingSnapshot, roomUsers, demoBots, submission, demoState }),
+    [rankingSnapshot, roomUsers, demoBots, submission, demoState],
   );
 
   const myScore = allPlayers.find((p) => p.id === MY_USER_ID)?.ingameScore || 0;
@@ -139,9 +150,13 @@ export default function ResultPage() {
         ? '0 0 0 4px #000, 0 0 30px rgba(231,110,85,0.3)'
         : '0 0 0 4px #000, 0 0 30px rgba(146,204,65,0.3)';
   const isWin = myRank <= Math.ceil(allPlayers.length / 2);
-  const totalSolved = Array.isArray(submission.codes)
-    ? submission.codes.filter((c) => c && c.trim()).length
-    : 0;
+  const totalProblemCount =
+    submission.problemResults?.length ||
+    submission.problems?.length ||
+    allPlayers.find((p) => p.id === MY_USER_ID)?.problemResults?.length ||
+    0;
+  const myCorrectCount =
+    allPlayers.find((p) => p.id === MY_USER_ID)?.problemResults?.filter(Boolean).length ?? 0;
 
   const [totalGold, setTotalGold] = useState(() => {
     try {
@@ -175,11 +190,17 @@ export default function ResultPage() {
     },
   ]);
   const [aiInput, setAiInput] = useState('');
-  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>(readOnlineUsers);
   const [departedUserIds, setDepartedUserIds] = useState<Set<string>>(() => new Set());
 
-  const titlesData = loadTitles();
-  const equippedTitle = getEquippedTitle(titlesData);
+  const [reviewPhase, setReviewPhase] = useState<ReviewPhase>('idle');
+  const [selectedReviewProblems, setSelectedReviewProblems] = useState<Set<number>>(() => new Set());
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteTargetId, setInviteTargetId] = useState<string | null>(null);
+  const [inviteWaiting, setInviteWaiting] = useState(false);
+  const [reviewPartnerId, setReviewPartnerId] = useState<string | null>(null);
+  const botAcceptTimerRef = useRef<(() => void) | null>(null);
+
+  const reviewSelectMode = reviewPhase === 'selecting';
 
   const mySubmissionCodes = Array.isArray(submission.codes)
     ? submission.codes
@@ -212,7 +233,7 @@ export default function ResultPage() {
     } else {
       newStats.consecutiveWins = 0;
     }
-    if (totalSolved >= (submission.problems?.length || 1)) newStats.perfectGame = true;
+    if (totalProblemCount > 0 && myCorrectCount >= totalProblemCount) newStats.perfectGame = true;
 
     const updated = { ...prev, stats: newStats };
     const newTitles = checkNewTitles(updated, newStats);
@@ -221,25 +242,29 @@ export default function ResultPage() {
 
     const totalPlayers = allPlayers.length;
     let mainMsg = '';
-    const detailLines: string[] = [];
 
     if (myRank === totalPlayers) {
-      mainMsg = `당신은 ${totalPlayers}명 중 꼴등입니다.`;
-      detailLines.push('분발하셔야 겠어요.');
+      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
     } else if (myRank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
     } else {
       mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등입니다.`;
     }
 
-    if (isWin && newStats.consecutiveWins >= 3) {
+    const detailLines: string[] = [];
+
+    if (totalProblemCount > 0) {
+      detailLines.push(`${totalProblemCount}문제 중 ${myCorrectCount}문제를 맞췄습니다.`);
+    }
+
+    if (myRank === 1 && newStats.consecutiveWins >= 3) {
       detailLines.push(`🔥 ${newStats.consecutiveWins}연속 우승!`);
     }
-    if (totalSolved >= (submission.problems?.length || 1) && myRank !== totalPlayers) {
-      detailLines.push('모든 문제를 완벽히 풀었습니다! 👏');
+    if (totalProblemCount > 0 && myCorrectCount >= totalProblemCount && myRank !== totalPlayers) {
+      detailLines.push('모든 문제를 맞췄습니다! 👏');
     }
-    if (totalSolved === 0 && myRank === totalPlayers) {
-      detailLines.push('한 문제도 풀지 못했습니다. 기본기를 다시 다져보세요.');
+    if (myCorrectCount === 0 && myRank === totalPlayers) {
+      detailLines.push('한 문제도 맞추지 못했습니다. 기본기를 다시 다져보세요.');
     }
 
     setResultPopup({ show: true, mainMsg, detailLines, newTitles });
@@ -268,17 +293,13 @@ export default function ResultPage() {
   }, [roomId, submission, mySubmissionCodes]);
 
   useEffect(() => {
-    const handleStorage = () => setOnlineUsers(readOnlineUsers());
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
-
-  useEffect(() => {
     window.addEventListener('beforeunload', removeMyPresence);
     return () => window.removeEventListener('beforeunload', removeMyPresence);
   }, []);
 
   useEffect(() => {
+    if (!ENABLE_RESULT_BOT_DEPARTURE) return;
+
     const users = readOnlineUsers();
     const bots = users.filter((u) => u.id !== 'me' && !u.name?.includes(MY_USER_ID));
     const timers = bots.map((bot, index) =>
@@ -289,6 +310,116 @@ export default function ResultPage() {
     );
     return () => timers.forEach((timer) => clearTimeout(timer));
   }, []);
+
+  useEffect(() => {
+    return () => {
+      botAcceptTimerRef.current?.();
+    };
+  }, []);
+
+  const toggleReviewProblem = (index: number) => {
+    setSelectedReviewProblems((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  const handleStartReview = () => {
+    setReviewPhase('selecting');
+    setSelectedReviewProblems(new Set());
+  };
+
+  const handleCancelReview = () => {
+    setReviewPhase('idle');
+    setSelectedReviewProblems(new Set());
+  };
+
+  const handleRequestReview = () => {
+    if (selectedReviewProblems.size === 0) return;
+    setInviteTargetId(null);
+    setShowInviteModal(true);
+  };
+
+  const handleCloseInviteModal = () => {
+    if (inviteWaiting) return;
+    setShowInviteModal(false);
+    setInviteTargetId(null);
+  };
+
+  const handleInvite = () => {
+    if (!inviteTargetId || selectedReviewProblems.size === 0) return;
+
+    const target = allPlayers.find((p) => p.id === inviteTargetId);
+    const invite = {
+      id: createReviewInviteId(),
+      sessionId,
+      fromUserId: MY_USER_ID,
+      fromUserName: MY_USER_ID,
+      toUserId: inviteTargetId,
+      toUserName: target?.name || '',
+      problemIndices: [...selectedReviewProblems].sort((a, b) => a - b),
+      status: 'pending' as const,
+      createdAt: Date.now(),
+    };
+    persistReviewInvite(invite);
+    setInviteWaiting(true);
+
+    if (shouldAutoAcceptReviewInvite(inviteTargetId)) {
+      botAcceptTimerRef.current?.();
+      botAcceptTimerRef.current = scheduleReviewInviteResponse(
+        sessionId,
+        () => {
+          setInviteWaiting(false);
+          setShowInviteModal(false);
+          setReviewPartnerId(inviteTargetId);
+          setReviewPhase('reviewing');
+        },
+        () => {
+          setInviteWaiting(false);
+          setShowInviteModal(false);
+        },
+        REVIEW_BOT_ACCEPT_DELAY_MS,
+        true,
+      );
+    }
+  };
+
+  const handleExitReview = () => {
+    botAcceptTimerRef.current?.();
+    botAcceptTimerRef.current = null;
+    setReviewPhase('idle');
+    setSelectedReviewProblems(new Set());
+    setReviewPartnerId(null);
+    setInviteTargetId(null);
+    setInviteWaiting(false);
+    setShowInviteModal(false);
+    clearReviewInvite(sessionId);
+  };
+
+  const reviewProblems = useMemo(() => {
+    if (reviewPhase !== 'reviewing') return [];
+    const problems = submission.problems || [];
+    const myResults = allPlayers.find((p) => p.id === MY_USER_ID)?.problemResults || [];
+
+    return [...selectedReviewProblems].sort((a, b) => a - b).map((index) => {
+      const problem = problems[index];
+      const correctAnswer = problem?.answer?.[lang]?.[0] || problem?.answer?.JAVA?.[0] || '';
+      return {
+        index,
+        title: problem?.title || `문제 ${index + 1}`,
+        question: problem?.question || '',
+        myAnswer: mySubmissionCodes[index] || '',
+        correctAnswer,
+        explanation: problem?.explanation || '',
+        isCorrect: myResults[index] === true,
+      };
+    });
+  }, [reviewPhase, selectedReviewProblems, submission.problems, mySubmissionCodes, allPlayers, lang]);
+
+  const reviewPartnerName = allPlayers.find((p) => p.id === reviewPartnerId)?.name || '';
+  const inviteTargetName = allPlayers.find((p) => p.id === inviteTargetId)?.name || '';
 
   const handleSendChat = () => {
     if (!chatInput.trim()) return;
@@ -325,23 +456,66 @@ export default function ResultPage() {
         💰 GOLD +{earnedGold.toLocaleString()} (총 보유: {totalGold.toLocaleString()} G)
       </div>
 
-      <div className={`result-body ${isVersusMany ? 'versus-many' : 'versus-duel'}`}>
-        {isVersusMany ? (
+      <div className={`result-body ${isVersusMany ? 'versus-many' : 'versus-duel'}${reviewPhase === 'reviewing' ? ' review-active' : ''}`}>
+        {reviewPhase === 'reviewing' ? (
+          <div className={isVersusMany ? 'result-ranking-slot' : 'result-review-slot'}>
+            <ReviewProblemView
+              problems={reviewProblems}
+              partnerName={reviewPartnerName}
+              rankBorderColor={rankBorderColor}
+              rankGlow={rankGlow}
+              onExitReview={handleExitReview}
+            />
+          </div>
+        ) : isVersusMany ? (
           <div className="result-ranking-slot">
             <ResultRankingPanel
               players={allPlayers}
               rankBorderColor={rankBorderColor}
               rankGlow={rankGlow}
               departedUserIds={departedUserIds}
+              myUserId={MY_USER_ID}
+              reviewSelectMode={reviewSelectMode}
+              selectedReviewProblems={selectedReviewProblems}
+              onToggleReviewProblem={toggleReviewProblem}
+              onStartReview={handleStartReview}
+              onCancelReview={handleCancelReview}
+              onRequestReview={handleRequestReview}
             />
           </div>
         ) : (
           <>
             <div className="result-win-slot">
-              <ResultTeamPanel variant="win" players={winners} departedUserIds={departedUserIds} />
+              <ResultTeamPanel
+                variant="win"
+                players={winners}
+                departedUserIds={departedUserIds}
+                myUserId={MY_USER_ID}
+                reviewSelectMode={reviewSelectMode}
+                selectedReviewProblems={selectedReviewProblems}
+                onToggleReviewProblem={toggleReviewProblem}
+              />
             </div>
             <div className="result-lose-slot">
-              <ResultTeamPanel variant="lose" players={losers} departedUserIds={departedUserIds} />
+              <ResultTeamPanel
+                variant="lose"
+                players={losers}
+                departedUserIds={departedUserIds}
+                myUserId={MY_USER_ID}
+                reviewSelectMode={reviewSelectMode}
+                selectedReviewProblems={selectedReviewProblems}
+                onToggleReviewProblem={toggleReviewProblem}
+              />
+            </div>
+            <div className="result-duel-review-bar">
+              <ResultReviewFooter
+                playerCount={allPlayers.length}
+                reviewSelectMode={reviewSelectMode}
+                selectedCount={selectedReviewProblems.size}
+                onStartReview={handleStartReview}
+                onCancelReview={handleCancelReview}
+                onRequestReview={handleRequestReview}
+              />
             </div>
           </>
         )}
@@ -358,18 +532,8 @@ export default function ResultPage() {
           />
         </div>
 
-        <div className="result-sidebar-slot">
-          <div className="result-status-slot">
-            <UserStatusPanel
-              onlineUsers={onlineUsers}
-              equippedTitle={equippedTitle}
-              myUserId={MY_USER_ID}
-              departedUserIds={departedUserIds}
-            />
-          </div>
-          <div className="result-action-slot">
-            <ResultActionBar onReplay={replayToRoom} onExit={clearSessionAndNavigateLobby} />
-          </div>
+        <div className="result-action-slot">
+          <ResultActionBar onReplay={replayToRoom} onExit={clearSessionAndNavigateLobby} />
         </div>
       </div>
 
@@ -381,6 +545,21 @@ export default function ResultPage() {
         onClose={() => setIsAiOpen(false)}
         onAiInputChange={setAiInput}
         onSend={handleSendAiChat}
+      />
+
+      <ReviewInviteModal
+        show={showInviteModal}
+        players={allPlayers}
+        myUserId={MY_USER_ID}
+        rankBorderColor={rankBorderColor}
+        rankGlow={rankGlow}
+        departedUserIds={departedUserIds}
+        selectedTargetId={inviteTargetId}
+        waiting={inviteWaiting}
+        inviteTargetName={inviteTargetName}
+        onSelectTarget={setInviteTargetId}
+        onInvite={handleInvite}
+        onClose={handleCloseInviteModal}
       />
 
       <ResultPopup

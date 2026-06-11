@@ -1,5 +1,22 @@
-import { getBotSolveDelay, type DemoBot } from './battle/demoBots';
+import type { DemoBot } from './battle/demoBots';
+import {
+  comparePlayersByRank,
+  computeBotRankScore,
+  getBotRankMetrics,
+  getUserRankMetrics,
+  isBattleMe,
+  normalizeBattlePlayerId,
+  rankingSnapshotToResultPlayers,
+  type FinalRankingSnapshot,
+} from './battle/rankUtils';
+import {
+  buildBotProblemResults,
+  finalizeProblemResults,
+} from './battle/problemResultUtils';
 import { getTotalBattleSeconds } from './battle/codeUtils';
+
+export type { RankablePlayer, FinalRankingSnapshot } from './battle/rankUtils';
+export { comparePlayersByRank, rankingSnapshotToResultPlayers } from './battle/rankUtils';
 
 export interface ResultPlayer {
   id: string;
@@ -9,20 +26,39 @@ export interface ResultPlayer {
   ratingScore: number;
   totalSolveTime: number;
   completionTime: number;
+  problemResults: boolean[];
   delta: number;
   rank: number;
 }
 
-export interface RankablePlayer {
-  ingameScore: number;
-  completionTime: number;
-  totalSolveTime: number;
+interface RoomUserLike {
+  id?: string;
+  name?: string;
+  avatar?: string;
+  solvedProblems?: number[];
+  ingameScore?: number;
+  totalSolveTime?: number;
+  completionTime?: number;
+  finishedAtElapsed?: number;
+  problemResults?: boolean[];
+  score?: string | number;
 }
 
-export function comparePlayersByRank(a: RankablePlayer, b: RankablePlayer): number {
-  if (b.ingameScore !== a.ingameScore) return b.ingameScore - a.ingameScore;
-  if (a.completionTime !== b.completionTime) return a.completionTime - b.completionTime;
-  return a.totalSolveTime - b.totalSolveTime;
+interface BattleSubmissionLike {
+  ingameScore?: number;
+  myRatingScore?: number;
+  solveTimes?: Record<number, number>;
+  problemResults?: boolean[];
+  problems?: unknown[];
+}
+
+interface DemoStateLike {
+  roundSeconds?: number;
+  solveTimes?: Record<number, number>;
+  battleBots?: DemoBot[];
+  localSolvedProblems?: number[];
+  finishedAtElapsedSec?: number;
+  problemResults?: boolean[];
 }
 
 function readBattleRoundSeconds(problemCount: number, demoState: DemoStateLike | null): number {
@@ -36,105 +72,26 @@ function readBattleRoundSeconds(problemCount: number, demoState: DemoStateLike |
   }
 }
 
-function resolveSolvedProblems(
-  isMe: boolean,
-  solvedProblems: number[],
-  solveTimes: Record<number, number>,
-): number[] {
-  if (solvedProblems.length > 0) return solvedProblems;
-  if (!isMe) return [];
-  return Object.keys(solveTimes)
-    .map((key) => parseInt(key, 10))
-    .filter((idx) => Number.isFinite(idx) && (solveTimes[idx] || 0) > 0)
-    .sort((a, b) => a - b);
-}
-
-function getUserSolveMetrics(solvedProblems: number[], solveTimes: Record<number, number>) {
-  const ordered = resolveSolvedProblems(true, solvedProblems, solveTimes);
-  const durations = ordered.map((idx) => solveTimes[idx] || 0).filter((t) => t > 0);
-  const totalSolveTime = durations.reduce((sum, t) => sum + t, 0);
-  const completionTime = totalSolveTime > 0 ? totalSolveTime : Number.POSITIVE_INFINITY;
-  return { ordered, totalSolveTime, completionTime };
-}
-
-function getBotSolveMetrics(bot: DemoBot, roundSeconds: number) {
-  const solved = Array.isArray(bot.solvedProblems) ? [...bot.solvedProblems].sort((a, b) => a - b) : [];
-  const totalSolveTime = solved.reduce(
-    (sum, idx) => sum + getBotSolveDelay(bot, idx, roundSeconds),
-    0,
-  );
-  const completionTime =
-    solved.length > 0
-      ? getBotSolveDelay(bot, solved[solved.length - 1], roundSeconds)
-      : Number.POSITIVE_INFINITY;
-  return { solved, totalSolveTime, completionTime };
-}
-
-function resolveIngameScore(
-  isMe: boolean,
-  solvedProblems: number[],
-  solveTimes: Record<number, number>,
-  submission: BattleSubmissionLike,
-  demoState: DemoStateLike | null,
-  roomUserScore?: number,
-): number {
-  const solvedList = resolveSolvedProblems(isMe, solvedProblems, solveTimes);
-  const scoreFromSolved = computeIngameScore(solvedList);
-  const candidates = [
-    scoreFromSolved,
-    isMe ? submission?.ingameScore : undefined,
-    isMe ? demoState?.ingameScore : undefined,
-    roomUserScore,
-  ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  return candidates.length > 0 ? Math.max(...candidates) : 0;
-}
-
-interface RoomUserLike {
-  id?: string;
-  name?: string;
-  avatar?: string;
-  solvedProblems?: number[];
-  ingameScore?: number;
-  score?: string | number;
-}
-
-interface BattleSubmissionLike {
-  ingameScore?: number;
-  myRatingScore?: number;
-  solveTimes?: Record<number, number>;
-  mode?: string;
-  lang?: string;
-  codes?: string[];
-  answers?: string[];
-  problems?: Array<{ title?: string; question?: string; explanation?: string; answer?: Record<string, string[]> }>;
-  submittedAt?: string;
-  roomId?: string;
-  historyId?: string;
-  code?: string;
-}
-
-interface DemoStateLike {
-  mode?: string;
-  lang?: string;
-  roundSeconds?: number;
-  remaining?: number;
-  ingameScore?: number;
-  solveTimes?: Record<number, number>;
-  battleBots?: DemoBot[];
-}
-
 function parseScore(scoreStr: string | number | undefined): number {
   const num = parseInt(String(scoreStr).replace(/[^0-9]/g, ''), 10);
   return Number.isFinite(num) ? num : 0;
 }
 
-function computeIngameScore(solvedProblems: number[]): number {
-  const count = solvedProblems.length;
-  if (count === 0) return 0;
-  return count * 1000 + (100 * (count * (count - 1))) / 2;
+/** 스냅샷 우선, 없으면 localStorage 데이터로 재구성 (폴백) */
+export function buildResultPlayers(params: {
+  rankingSnapshot?: FinalRankingSnapshot | null;
+  roomUsers: RoomUserLike[];
+  demoBots: DemoBot[];
+  submission: BattleSubmissionLike;
+  demoState: DemoStateLike | null;
+}): ResultPlayer[] {
+  if (params.rankingSnapshot?.players?.length) {
+    return rankingSnapshotToResultPlayers(params.rankingSnapshot);
+  }
+  return rebuildResultPlayers(params);
 }
 
-export function buildResultPlayers(params: {
+function rebuildResultPlayers(params: {
   roomUsers: RoomUserLike[];
   demoBots: DemoBot[];
   submission: BattleSubmissionLike;
@@ -148,44 +105,78 @@ export function buildResultPlayers(params: {
     params.demoState,
   );
 
+  const totalProblems =
+    params.submission?.problems?.length ||
+    params.demoState?.problemResults?.length ||
+    Object.keys(solveTimes).length ||
+    5;
+
   params.roomUsers.forEach((u) => {
     const id = u.id || '';
     if (seen.has(id)) return;
     seen.add(id);
-    const isMe = id === 'me' || Boolean(u.name?.includes('rocky_user'));
-    const solvedProblems = Array.isArray(u.solvedProblems) ? u.solvedProblems : [];
+    const isMe = isBattleMe(id, u.name);
+    const solvedProblems = isMe
+      ? (Array.isArray(u.solvedProblems) && u.solvedProblems.length > 0
+          ? u.solvedProblems
+          : params.demoState?.localSolvedProblems || [])
+      : Array.isArray(u.solvedProblems)
+        ? u.solvedProblems
+        : [];
 
     const ratingScore = isMe
       ? params.submission?.myRatingScore ?? 1000
       : u.score
         ? parseScore(u.score)
         : 1000;
-    const ingameScore = resolveIngameScore(
-      isMe,
-      solvedProblems,
-      solveTimes,
-      params.submission,
-      params.demoState,
-      u.ingameScore,
-    );
+
+    const ingameScore = isMe
+      ? (params.submission?.ingameScore ?? u.ingameScore ?? 0)
+      : (u.ingameScore ?? computeBotRankScore(solvedProblems.length));
+
+    const finishedAt =
+      u.finishedAtElapsed ??
+      (isMe ? params.demoState?.finishedAtElapsedSec : undefined);
 
     const metrics = isMe
-      ? getUserSolveMetrics(solvedProblems, solveTimes)
+      ? getUserRankMetrics(solvedProblems, solveTimes, finishedAt)
       : (() => {
           const bot = params.demoBots.find((b) => b.id === id);
-          return bot
-            ? getBotSolveMetrics(bot, roundSeconds)
-            : { totalSolveTime: Number.POSITIVE_INFINITY, completionTime: Number.POSITIVE_INFINITY };
+          if (!bot) {
+            return {
+              totalSolveTime: u.totalSolveTime ?? Number.POSITIVE_INFINITY,
+              completionTime: u.completionTime ?? Number.POSITIVE_INFINITY,
+            };
+          }
+          const botMetrics = getBotRankMetrics(bot, roundSeconds, solvedProblems);
+          return {
+            totalSolveTime: u.totalSolveTime ?? botMetrics.totalSolveTime,
+            completionTime: u.completionTime ?? botMetrics.completionTime,
+          };
         })();
 
+    const problemResults = isMe
+      ? (Array.isArray(u.problemResults) && u.problemResults.length > 0
+          ? u.problemResults
+          : params.submission?.problemResults ||
+            params.demoState?.problemResults ||
+            finalizeProblemResults(
+              Object.fromEntries(solvedProblems.map((idx) => [idx, true])),
+              totalProblems,
+            ))
+      : Array.isArray(u.problemResults) && u.problemResults.length > 0
+        ? u.problemResults
+        : buildBotProblemResults(solvedProblems, totalProblems);
+
     list.push({
-      id: isMe ? 'rocky_user' : id,
+      id: normalizeBattlePlayerId(id, u.name),
       name: u.name || (isMe ? 'rocky_user' : id),
       avatar: u.avatar || '👤',
       ingameScore,
       ratingScore,
       totalSolveTime: metrics.totalSolveTime,
       completionTime: metrics.completionTime,
+      problemResults,
       delta: Math.floor(ingameScore / 10),
       rank: 0,
     });
@@ -194,52 +185,44 @@ export function buildResultPlayers(params: {
   params.demoBots.forEach((bot) => {
     if (seen.has(bot.id)) return;
     seen.add(bot.id);
-    const metrics = getBotSolveMetrics(bot, roundSeconds);
-    const botScore = computeIngameScore(metrics.solved);
+    const solved = Array.isArray(bot.solvedProblems) ? bot.solvedProblems : [];
+    const botMetrics = getBotRankMetrics(bot, roundSeconds, solved);
+    const botScore = computeBotRankScore(solved.length);
     list.push({
       id: bot.id,
       name: bot.name,
       avatar: bot.avatar || '🤖',
       ingameScore: botScore,
       ratingScore: 1000,
-      totalSolveTime: metrics.totalSolveTime,
-      completionTime: metrics.completionTime,
+      totalSolveTime: botMetrics.totalSolveTime,
+      completionTime: botMetrics.completionTime,
+      problemResults: buildBotProblemResults(solved, totalProblems),
       delta: Math.floor(botScore / 10),
       rank: 0,
     });
   });
 
   if (list.length === 0) {
-    list.push({
-      id: 'rocky_user',
-      name: 'rocky_user',
-      ingameScore: 0,
-      ratingScore: 1000,
-      totalSolveTime: 0,
-      completionTime: Number.POSITIVE_INFINITY,
-      delta: 0,
-      avatar: '😎',
-      rank: 1,
-    });
-    list.push({
-      id: 'elder',
-      name: '알고리즘깎는노인',
-      ingameScore: 2500,
-      ratingScore: 1420,
-      totalSolveTime: 0,
-      completionTime: Number.POSITIVE_INFINITY,
-      delta: 250,
-      avatar: '👴',
-      rank: 2,
-    });
+    return [
+      {
+        id: 'rocky_user',
+        name: 'rocky_user',
+        ingameScore: 0,
+        ratingScore: 1000,
+        totalSolveTime: 0,
+        completionTime: Number.POSITIVE_INFINITY,
+        problemResults: [],
+        delta: 0,
+        avatar: '😎',
+        rank: 1,
+      },
+    ];
   }
 
   list.sort(comparePlayersByRank);
-
   list.forEach((p, i) => {
     p.rank = i + 1;
   });
-
   return list;
 }
 
@@ -258,3 +241,6 @@ export function getPlayerCodeByProblem(
   }
   return localStorage.getItem('opponentBattleCode') || '// 코드를 찾을 수 없습니다.';
 }
+
+// Re-export for tests / battle page
+export { computeBotRankScore, getBotRankMetrics, getUserRankMetrics } from './battle/rankUtils';

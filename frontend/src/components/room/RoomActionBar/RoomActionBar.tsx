@@ -19,18 +19,26 @@ export function RoomActionBar({
 }: RoomActionBarProps) {
   return (
     <div className="room-action-bar">
-      <div className="room-bottom-bar">
-        <button type="button" className={`btn-ready btn-compact ${myIsReady ? 'is-ready' : ''}`} onClick={onReadyToggle}>
-          {myIsReady ? 'READY ✓' : 'READY'}
-        </button>
-        {isHost && (
-          <button type="button" className="btn-ready btn-compact start" onClick={onStart}>
-            START
-          </button>
+      <div className={`room-bottom-bar${isHost ? ' host-bar' : ''}`}>
+        {isHost ? (
+          <>
+            <button type="button" className="btn-ready btn-compact start" onClick={onStart}>
+              START
+            </button>
+            <button type="button" className="btn-ready btn-compact room-lobby-btn" onClick={onLeave}>
+              로비
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className={`btn-ready btn-compact ${myIsReady ? 'is-ready' : ''}`} onClick={onReadyToggle}>
+              {myIsReady ? 'READY ✓' : 'READY'}
+            </button>
+            <button type="button" className="btn-ready btn-compact room-lobby-btn" onClick={onLeave}>
+              로비
+            </button>
+          </>
         )}
-        <button type="button" className="btn-ready btn-compact room-lobby-btn" onClick={onLeave}>
-          로비
-        </button>
       </div>
       {!isHost && (
         <label className="auto-ready-toggle room-auto-ready">

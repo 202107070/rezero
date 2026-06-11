@@ -299,6 +299,12 @@
   background: rgba(146, 204, 65, 0.15);
 }
 
+.status-host {
+  color: var(--px-warning);
+  border-color: var(--px-warning);
+  background: rgba(247, 213, 29, 0.15);
+}
+
 .status-waiting {
   color: #888;
   border-color: #555;
@@ -770,68 +776,75 @@
   overflow: hidden;
 }
 
-.room-side-scroll {
-  flex: 1;
+/* 일반 모드 — USER STATUS 제거 후 여백만 자연스럽게 */
+.room-side-card.normal-mode .panel-section {
+  flex-shrink: 0;
+}
+
+.room-side-card.normal-mode .panel-section:first-child {
+  padding-bottom: 10px;
+}
+
+.room-side-card.normal-mode .avatar-select-grid {
+  gap: 8px;
+}
+
+.room-side-card.normal-mode .setting-row:last-child {
+  margin-bottom: 0;
+}
+
+/* 아이템 모드 — 아이템 선택 영역 확장 */
+.room-side-card.item-mode .panel-section:not(.room-item-loadout) {
+  flex-shrink: 0;
+}
+
+.room-side-card.item-mode .room-item-loadout {
+  flex: 1 1 0;
   min-height: 0;
-  min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.room-side-scroll-users {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.room-side-scroll-users.normal-mode {
-  overflow: hidden;
-}
-
-.room-side-scroll-users .online-user-panel {
-  flex: 1;
-  min-height: 0;
+  max-height: none;
   display: flex;
   flex-direction: column;
   border-bottom: none;
+  padding-top: 10px;
 }
 
-.room-side-scroll-users .online-user-card {
-  flex: 1;
-  height: auto;
-  max-height: none;
-  min-height: 120px;
+.room-side-card.item-mode .room-item-loadout-title {
+  font-size: 20px;
+  margin-bottom: 6px;
 }
 
-.room-side-scroll-users.item-mode .online-user-panel {
+.room-side-card.item-mode .room-item-loadout-hint {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.room-side-card.item-mode .room-item-grid {
   flex: 1;
   min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
 }
 
-.room-side-scroll-users .panel-section {
-  min-width: 0;
-  overflow: hidden;
+.room-side-card.item-mode .room-item-slot {
+  min-height: 92px;
+  padding: 12px 6px 10px;
 }
 
-.online-user-panel {
-  padding-left: 4px;
-  padding-right: 4px;
+.room-side-card.item-mode .room-item-icon {
+  font-size: 2.1rem;
 }
 
-.online-user-card.expanded {
-  overflow-y: auto;
+.room-side-card.item-mode .room-item-label {
+  font-size: 12px;
 }
 
 .room-item-loadout {
-  flex: 0 0 auto;
-  max-height: 42%;
-  min-height: 0;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   padding-left: 4px;
   padding-right: 4px;
-  border-bottom: none;
 }
 
 .room-item-loadout-title {
@@ -941,6 +954,18 @@
   display: flex;
   gap: 6px;
   align-items: stretch;
+}
+
+.room-bottom-bar.host-bar {
+  gap: 8px;
+}
+
+.room-bottom-bar.host-bar .btn-compact.start {
+  flex: 1.35;
+}
+
+.room-bottom-bar.host-bar .room-lobby-btn {
+  flex: 1;
 }
 
 .btn-compact {

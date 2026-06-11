@@ -7,6 +7,7 @@ import type { RoomPlayer } from '../types/room';
 import type { ProblemVisual } from '../types/battle';
 import { getLangKey } from '../utils/battle/codeUtils';
 import { problemSupportsLang } from '../utils/problemTypeUtils';
+import { normalizeBattleProblem } from '../utils/battle/problemResultUtils';
 
 type ProblemRecord = {
   id: string;
@@ -38,7 +39,7 @@ const SESSION_KEYS_TO_CLEAR = (sessionKey: string) => [
 ];
 
 function mapProblem(p: ProblemRecord) {
-  return {
+  return normalizeBattleProblem({
     id: p.id,
     type: p.type,
     difficulty: p.difficulty,
@@ -50,6 +51,7 @@ function mapProblem(p: ProblemRecord) {
     explanation: p.explanation,
     visual: p.visual ?? null,
   };
+  });
 }
 
 export function prepareBattleStart(params: {

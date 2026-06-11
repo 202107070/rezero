@@ -24,7 +24,6 @@ function DuelSide({ player, isHostSide, myCharacter, myLanguage, canInvite, onPl
       <div className="duel-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
         {player ? (isHostSide ? myCharIcon : player.character) : <span className="duel-empty-mark">?</span>}
       </div>
-      <div className={`duel-host-badge ${player?.isHost ? '' : 'hidden'}`}>HOST</div>
       <div className="duel-name">
         {player ? (
           <>
@@ -38,9 +37,17 @@ function DuelSide({ player, isHostSide, myCharacter, myLanguage, canInvite, onPl
         )}
       </div>
       <div
-        className={`duel-status ${player ? (player.isReady ? 'status-ready' : 'status-waiting') : 'hidden'}`}
+        className={`duel-status ${
+          player
+            ? player.isHost
+              ? 'status-host'
+              : player.isReady
+                ? 'status-ready'
+                : 'status-waiting'
+            : 'hidden'
+        }`}
       >
-        {player ? (player.isReady ? 'READY' : 'WAITING') : ''}
+        {player ? (player.isHost ? 'HOST' : player.isReady ? 'READY' : 'WAITING') : ''}
       </div>
     </div>
   );

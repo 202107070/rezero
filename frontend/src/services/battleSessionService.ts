@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from '../constants/storageKeys';
 import type { BattleProblem, RoomUser } from '../types/battle';
 import type { DemoBot } from '../utils/battle/demoBots';
+import type { FinalRankingSnapshot } from '../utils/battle/rankUtils';
 
 function shouldSyncBackend(): boolean {
   return !import.meta.env.DEV || import.meta.env.VITE_SYNC_BACKEND === 'true';
@@ -154,6 +155,8 @@ export function persistBattleSubmission(params: {
   remaining: number;
   roundSeconds: number;
   localSolvedProblems: number[];
+  problemResults?: boolean[];
+  finishedAtElapsedSec: number;
   demoSpectating: boolean;
   spectatorLocked: boolean;
   battleBots: DemoBot[];
@@ -176,6 +179,7 @@ export function persistBattleSubmission(params: {
       currentIndex: params.currentIndex,
       ingameScore: params.ingameScore,
       solveTimes: params.solveTimes,
+      problemResults: params.problemResults,
       myRatingScore: params.myRatingScore,
     }),
   );
@@ -207,11 +211,13 @@ export function persistBattleSubmission(params: {
       roundSeconds: params.roundSeconds,
       answers: params.answers,
       localSolvedProblems: params.localSolvedProblems,
+      finishedAtElapsedSec: params.finishedAtElapsedSec,
       demoSpectating: params.demoSpectating,
       spectatorLocked: params.spectatorLocked,
       battleBots: params.battleBots,
       ingameScore: params.ingameScore,
       solveTimes: params.solveTimes,
+      problemResults: params.problemResults,
       myRatingScore: params.myRatingScore,
       updatedAt: new Date().toISOString(),
     }),
@@ -256,6 +262,7 @@ export function clearBattleAndLeave(sessionId: string, roomId: string): void {
       `battleDraftCode_${sessionId}`,
       `battleDraftMeta_${sessionId}`,
       `battleDemoState_${sessionId}`,
+      `battleFinalRankings_${sessionId}`,
       `${STORAGE_KEYS.ROOM_KICKED_PREFIX}${roomId}`,
     ].forEach((key) => localStorage.removeItem(key));
     if (shouldSyncBackend()) {
@@ -263,6 +270,19 @@ export function clearBattleAndLeave(sessionId: string, roomId: string): void {
     }
   } catch (e) {
     console.error('세션 삭제 실패:', e);
+  }
+}
+
+export function saveFinalRankingSnapshot(snapshot: FinalRankingSnapshot): void {
+  localStorage.setItem(`battleFinalRankings_${snapshot.sessionId}`, JSON.stringify(snapshot));
+}
+
+export function readFinalRankingSnapshot(sessionId: string): FinalRankingSnapshot | null {
+  try {
+    const raw = localStorage.getItem(`battleFinalRankings_${sessionId}`);
+    return raw ? (JSON.parse(raw) as FinalRankingSnapshot) : null;
+  } catch {
+    return null;
   }
 }
 

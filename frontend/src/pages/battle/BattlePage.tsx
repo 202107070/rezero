@@ -6,27 +6,36 @@ import ProblemVisualPreview from '../../components/battle/ProblemVisualPreview';
 import ItemSelectModal from '../../components/battle/ItemSelectModal';
 import OpponentPanels, { type BotView } from '../../components/battle/OpponentPanels';
 import {
-  ATTACK_ITEM_KEYS,
-  ITEM_PANEL_EFFECT_MS,
-  SELF_ITEM_KEYS,
-  type ItemKey,
+ATTACK_ITEM_KEYS,
+ITEM_PANEL_EFFECT_MS,
+SELF_ITEM_KEYS,
+type ItemKey,
 } from '../../constants/itemTypes';
 import { ROUTES } from '../../constants/routes';
 import {
-  clearBattleAndLeave,
-  getSessionId,
-  markProblemSubmitted,
-  persistBattleSession,
-  persistBattleSubmission,
-  restoreBattleSession,
-  saveRoomUsers,
-  syncBattleDemoState,
+clearBattleAndLeave,
+getSessionId,
+markProblemSubmitted,
+persistBattleSession,
+persistBattleSubmission,
+restoreBattleSession,
+saveFinalRankingSnapshot,
+saveRoomUsers,
+syncBattleDemoState,
 } from '../../services/battleSessionService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
 import { getBotSolveDelay } from '../../utils/battle/demoBots';
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
 import { applyAudioSettings, BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
 import { comparePlayersByRank } from '../../utils/resultUtils';
+import { BGM, SFX } from '../../utils/battle/audio';
+import {
+  comparePlayersByRank,
+  computeBotRankScore,
+  buildRankingSnapshotFromRoomUsers,
+  getBotRankMetrics,
+  getUserRankMetrics,
+} from '../../utils/battle/rankUtils';
 import {
   clearPaintCanvas,
   clearScribbleCanvas,
@@ -45,6 +54,14 @@ import {
   type DemoBot,
 } from '../../utils/battle/demoBots';
 import { formatTime } from '../../utils/battle/formatTime';
+import {
+  buildBotProblemResults,
+  finalizeProblemResults,
+  isProblemAnswerCorrect,
+  normalizeBattleProblem,
+  normalizeBattleProblems,
+  type ProblemResultsMap,
+} from '../../utils/battle/problemResultUtils';
 import './battle.css';
 
 const DEFAULT_ITEMS: ItemInventory = {
@@ -125,6 +142,9 @@ export default function BattlePage() {
   const [comboCount, setComboCount] = useState(0);
   const [ingameScore, setIngameScore] = useState(0);
   const [solveTimes, setSolveTimes] = useState<Record<number, number>>({});
+  const [finishedAtElapsedSec, setFinishedAtElapsedSec] = useState(-1);
+  const [problemResults, setProblemResults] = useState<ProblemResultsMap>({});
+  const problemResultsRef = useRef<ProblemResultsMap>({});
   const [myRatingScore] = useState(() => {
     try {
       return parseInt(localStorage.getItem('rocky_rating_score') || '1000', 10) || 1000;
@@ -172,13 +192,40 @@ export default function BattlePage() {
   const lastTimedPersistRemainingRef = useRef(-1);
   const itemInventoryInitialized = useRef(false);
 
-  const currentProblem = problems[currentIndex] || ({} as BattleProblem);
+  const currentProblem = useMemo(
+    () => normalizeBattleProblem(problems[currentIndex] || ({} as BattleProblem)),
+    [problems, currentIndex],
+  );
   const currentProblemLocked = localSolvedProblems.includes(currentIndex);
   const hasProblems = problems.length > 0;
   const totalProblems = hasProblems ? problems.length : 1;
   const currentProblemNumber = hasProblems ? currentIndex + 1 : 0;
   const problemProgressText = hasProblems ? `${currentProblemNumber}/${totalProblems}` : '0/1';
   const progressPercent = hasProblems ? (currentProblemNumber / totalProblems) * 100 : 0;
+
+  const finalizedProblemResults = useMemo(() => {
+    problemResultsRef.current = problemResults;
+    return finalizeProblemResults(problemResults, totalProblems);
+  }, [problemResults, totalProblems]);
+
+  const markProblemWrong = useCallback((problemIndex: number) => {
+    setProblemResults((prev) => (prev[problemIndex] !== undefined ? prev : { ...prev, [problemIndex]: false }));
+    setComboCount(0);
+    setProblemSolved(true);
+  }, []);
+
+  const isCurrentAnswerCorrect = useCallback(
+    () =>
+      isProblemAnswerCorrect({
+        problem: currentProblem,
+        problemIndex: currentIndex,
+        langKey,
+        blankAnswers,
+        correctBlanks,
+        selectedOption,
+      }),
+    [currentProblem, currentIndex, langKey, blankAnswers, correctBlanks, selectedOption],
+  );
 
   const selectedDemoBot = battleBots[0] || null;
   const selectedDemoBotCode = selectedDemoBot?.codeByProblem?.[currentIndex] || '// 상대 코드가 아직 없습니다.';
@@ -224,11 +271,7 @@ export default function BattlePage() {
   }, [battleBots, elapsedSec, totalBattleSeconds, demoSpectating, totalProblems]);
 
   const roomUsers: RoomUser[] = useMemo(() => {
-    const meScore = (() => {
-      const n = localSolvedProblems.length;
-      return n > 0 ? n * 1000 + 50 * n * (n - 1) : ingameScore;
-    })();
-    const meTotalSolveTime = Object.values(solveTimes).reduce((s, t) => s + t, 0);
+    const meMetrics = getUserRankMetrics(localSolvedProblems, solveTimes, finishedAtElapsedSec);
     return [
       {
         id: 'me',
@@ -237,22 +280,15 @@ export default function BattlePage() {
         problem: currentProblemNumber,
         solvedCount: localSolvedProblems.length,
         solvedProblems: localSolvedProblems,
-        ingameScore: meScore,
-        totalSolveTime: meTotalSolveTime,
-        completionTime: meTotalSolveTime > 0 ? meTotalSolveTime : Number.POSITIVE_INFINITY,
+        ingameScore,
+        totalSolveTime: meMetrics.totalSolveTime,
+        completionTime: meMetrics.completionTime,
+        finishedAtElapsed: finishedAtElapsedSec >= 0 ? finishedAtElapsedSec : undefined,
+        problemResults: finalizedProblemResults,
       },
       ...currentBotViews.map((bot) => {
-        const n = bot.solvedProblems.length;
-        const botScore = n > 0 ? n * 1000 + 50 * n * (n - 1) : 0;
-        const botTotalSolveTime = bot.solvedProblems.reduce(
-          (sum, pi) => sum + getBotSolveDelay(bot, pi, totalBattleSeconds),
-          0,
-        );
-        const lastSolvedIdx = bot.solvedProblems.length > 0 ? Math.max(...bot.solvedProblems) : -1;
-        const completionTime =
-          lastSolvedIdx >= 0
-            ? getBotSolveDelay(bot, lastSolvedIdx, totalBattleSeconds)
-            : Number.POSITIVE_INFINITY;
+        const botMetrics = getBotRankMetrics(bot, totalBattleSeconds, bot.solvedProblems);
+        const botScore = computeBotRankScore(bot.solvedProblems.length);
         return {
           id: bot.id,
           name: bot.name,
@@ -262,12 +298,23 @@ export default function BattlePage() {
           solvedProblems: bot.solvedProblems,
           status: bot.status,
           ingameScore: botScore,
-          totalSolveTime: botTotalSolveTime,
-          completionTime,
+          totalSolveTime: botMetrics.totalSolveTime,
+          completionTime: botMetrics.completionTime,
+          problemResults: buildBotProblemResults(bot.solvedProblems, totalProblems),
         };
       }),
     ];
-  }, [currentBotViews, currentProblemNumber, totalBattleSeconds, ingameScore, localSolvedProblems, solveTimes]);
+  }, [
+    currentBotViews,
+    currentProblemNumber,
+    totalBattleSeconds,
+    totalProblems,
+    ingameScore,
+    localSolvedProblems,
+    solveTimes,
+    finishedAtElapsedSec,
+    finalizedProblemResults,
+  ]);
 
   const rankedUsers = useMemo(
     () =>
@@ -337,6 +384,8 @@ export default function BattlePage() {
         remaining,
         roundSeconds: totalBattleSeconds,
         localSolvedProblems,
+        finishedAtElapsedSec,
+        problemResults: finalizeProblemResults(problemResultsRef.current, totalProblems),
         demoSpectating,
         spectatorLocked,
         battleBots,
@@ -357,6 +406,8 @@ export default function BattlePage() {
       remaining,
       totalBattleSeconds,
       localSolvedProblems,
+      finishedAtElapsedSec,
+      totalProblems,
       demoSpectating,
       spectatorLocked,
       battleBots,
@@ -380,7 +431,9 @@ export default function BattlePage() {
     try {
       const stored = localStorage.getItem('battleProblems');
       const parsed = stored ? JSON.parse(stored) : null;
-      const baseProblems = Array.isArray(parsed) && parsed.length > 0 ? parsed : [fallback];
+      const baseProblems = normalizeBattleProblems(
+        Array.isArray(parsed) && parsed.length > 0 ? parsed : [fallback],
+      );
       const baseAnswers = Array(baseProblems.length).fill(templateCode) as string[];
       const initialTotalSeconds = getTotalBattleSeconds(battleDiff, baseProblems.length);
 
@@ -392,7 +445,7 @@ export default function BattlePage() {
           baseAnswers,
         });
         if (restored.restored) {
-          if (restored.problems) setProblems(restored.problems);
+          if (restored.problems) setProblems(normalizeBattleProblems(restored.problems));
           if (restored.answers) setAnswers(restored.answers);
           if (restored.currentIndex !== undefined) setCurrentIndex(restored.currentIndex);
           if (restored.remaining !== undefined) setRemaining(restored.remaining);
@@ -476,12 +529,13 @@ export default function BattlePage() {
   }, [showClearFlash]);
 
   useEffect(() => {
+    if (battleFinished) return;
     const timer = setInterval(() => {
       setRemaining((prev) => (prev > 0 ? prev - 1 : 0));
       setElapsedSec((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [battleFinished]);
 
   useEffect(() => {
     LobbyBGM.stop();
@@ -555,6 +609,10 @@ export default function BattlePage() {
     if (!shouldAdvance) return;
 
     if (isLastProblem) {
+      if (timeUp && problemResultsRef.current[currentIndex] === undefined) {
+        problemResultsRef.current = { ...problemResultsRef.current, [currentIndex]: false };
+        setProblemResults(problemResultsRef.current);
+      }
       const playerFinalSubmitted = demoSpectating || spectatorLocked;
       if (timeUp || (allBotsSolved && playerFinalSubmitted)) {
         setBattleFinished(true);
@@ -586,14 +644,44 @@ export default function BattlePage() {
     if (gameOverNavRef.current) return;
     gameOverNavRef.current = true;
     doPersistSession(answers).catch(() => {});
-    saveRoomUsers(roomUsers);
+
+    const snapshotRoomUsers = roomUsers.map((u) =>
+      u.id === 'me'
+        ? { ...u, problemResults: finalizeProblemResults(problemResultsRef.current, totalProblems) }
+        : u,
+    );
+
+    const rankingSnapshot = buildRankingSnapshotFromRoomUsers({
+      sessionId,
+      roomId,
+      elapsedSec,
+      roundSeconds: totalBattleSeconds,
+      totalProblems,
+      roomUsers: snapshotRoomUsers,
+      myRatingScore,
+    });
+    saveFinalRankingSnapshot(rankingSnapshot);
+    saveRoomUsers(snapshotRoomUsers);
     doPersistSubmission(answers, currentIndex);
+
     const t = setTimeout(() => {
       navigate(`${ROUTES.RESULT}?roomId=${roomId}`);
     }, 3000);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showGameOver]);
+  }, [
+    showGameOver,
+    sessionId,
+    roomId,
+    elapsedSec,
+    totalBattleSeconds,
+    roomUsers,
+    myRatingScore,
+    answers,
+    currentIndex,
+    doPersistSession,
+    doPersistSubmission,
+    navigate,
+  ]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -665,6 +753,9 @@ export default function BattlePage() {
     advanceTimerRef.current = setTimeout(() => {
       setShowAdvanceModal(false);
       advanceQueuedRef.current = false;
+      setProblemResults((prev) =>
+        prev[currentIndex] !== undefined ? prev : { ...prev, [currentIndex]: false },
+      );
       if (currentIndex >= problems.length - 1) {
         setBattleFinished(true);
         setShowGameOver(true);
@@ -673,6 +764,11 @@ export default function BattlePage() {
       }
       const nextIndex = currentIndex + 1;
       setCurrentIndex(nextIndex);
+      setProblemSolved(false);
+      setSelectedOption(null);
+      setWrongChoice(null);
+      setProblemStartTime(Date.now());
+      mistakeOnCurrentRef.current = false;
       setShowGameOver(false);
       setDemoSpectating(false);
       setSpectatorLocked(false);
@@ -754,6 +850,18 @@ export default function BattlePage() {
       if (!saved[i]) return false;
     }
     return true;
+  const recordProblemSolve = (problemIndex: number, elapsedForProblem: number, earnedScore: number) => {
+    const battleElapsed = Math.max(0, totalBattleSeconds - remaining);
+    setProblemResults((prev) => ({ ...prev, [problemIndex]: true }));
+    setIngameScore((prev) => prev + earnedScore);
+    setSolveTimes((prev) => ({ ...prev, [problemIndex]: elapsedForProblem }));
+    setLocalSolvedProblems((prev) => {
+      const next = Array.from(new Set([...prev, problemIndex])).sort((a, b) => a - b);
+      markProblemSubmitted(sessionId, next);
+      return next;
+    });
+    setFinishedAtElapsedSec(battleElapsed);
+    setProblemSolved(true);
   };
 
   const handleSubmit = () => {
@@ -762,31 +870,31 @@ export default function BattlePage() {
       if (!allBlanksCorrect()) return;
       const newCombo = comboCount + 1;
       const earnedScore = 1000 + 100 * (newCombo - 1);
+
+    if (isCurrentAnswerCorrect()) {
       const elapsed = (Date.now() - problemStartTime) / 1000;
-      setComboCount(newCombo);
-      setIngameScore((prev) => prev + earnedScore);
-      setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
-      setProblemSolved(true);
-    } else if (currentProblem.type === 'short_answer') {
-      const u = String(blankAnswers[currentIndex]?.[0] || '').trim().toLowerCase();
-      const c = String(currentProblem.answer?.[langKey]?.[0] || '').trim().toLowerCase();
-      if (u === c) {
-        const hadMistake = mistakeOnCurrentRef.current;
-        const newCombo = hadMistake ? 0 : comboCount + 1;
+      if (currentProblem.type === 'short_answer' || currentProblem.type === 'multiple_choice') {
+        const hadMistake = mistakeOnCurrentRef.current || wrongChoice !== null;
+        const newCombo = hadMistake ? 1 : comboCount + 1;
         const earnedScore = 1000 + (hadMistake ? 0 : 100 * (newCombo - 1));
-        const elapsed = (Date.now() - problemStartTime) / 1000;
-        setComboCount(newCombo);
-        setIngameScore((prev) => prev + earnedScore);
-        setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
-        setProblemSolved(true);
+        if (!hadMistake) setComboCount(newCombo);
+        recordProblemSolve(currentIndex, elapsed, earnedScore);
       } else {
-        setComboCount(0);
-        mistakeOnCurrentRef.current = true;
+        const newCombo = comboCount + 1;
+        const earnedScore = 1000 + 100 * (newCombo - 1);
+        setComboCount(newCombo);
+        recordProblemSolve(currentIndex, elapsed, earnedScore);
       }
+      return;
     }
+
+    markProblemWrong(currentIndex);
   };
 
   const handleAdvance = () => {
+    if (problemResults[currentIndex] === undefined) {
+      markProblemWrong(currentIndex);
+    }
     if (currentIndex >= problems.length - 1) {
       lockAndSpectate();
       return;
@@ -809,9 +917,7 @@ export default function BattlePage() {
       setSelectedOption(idx);
       setWrongChoice(null);
       setComboCount(newCombo);
-      setIngameScore((prev) => prev + earnedScore);
-      setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
-      setProblemSolved(true);
+      recordProblemSolve(currentIndex, elapsed, earnedScore);
     } else {
       setWrongChoice(idx);
       setComboCount(0);
@@ -1274,6 +1380,7 @@ export default function BattlePage() {
                   onClick={handleSubmit}
                   style={{ padding: '4px 10px', fontSize: '14px' }}
                   disabled={demoSpectating || spectatorLocked || (isBlankBasedType(currentProblem.type) && !allBlanksCorrect())}
+                  disabled={demoSpectating || spectatorLocked}
                 >
                   {demoSpectating || spectatorLocked ? 'LOCKED' : '제출'}
                 </button>

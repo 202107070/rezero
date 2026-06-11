@@ -31,8 +31,8 @@
 }
 
 .result-body.versus-many {
-  grid-template-columns: 2fr 0.8fr;
-  grid-template-rows: minmax(0, 7fr) minmax(0, 3fr);
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 7fr) minmax(0, 3fr) auto;
 }
 
 .result-body.versus-many .result-ranking-slot {
@@ -45,14 +45,18 @@
   grid-row: 2;
 }
 
-.result-body.versus-many .result-sidebar-slot {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+.result-body.versus-many .result-action-slot {
+  grid-column: 1;
+  grid-row: 3;
 }
 
 .result-body.versus-duel {
-  grid-template-columns: 1.2fr 1.2fr 0.8fr;
-  grid-template-rows: minmax(0, 7fr) minmax(0, 3fr);
+  grid-template-columns: 1.2fr 1.2fr;
+  grid-template-rows: minmax(0, 7fr) auto minmax(0, 3fr) auto;
+}
+
+.result-body.versus-duel.review-active {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 3fr) auto;
 }
 
 .result-body.versus-duel .result-win-slot {
@@ -65,20 +69,39 @@
   grid-row: 1;
 }
 
-.result-body.versus-duel .result-chat-slot {
+.result-body.versus-duel .result-duel-review-bar {
   grid-column: 1 / span 2;
   grid-row: 2;
 }
 
-.result-body.versus-duel .result-sidebar-slot {
-  grid-column: 3;
-  grid-row: 1 / span 2;
+.result-body.versus-duel .result-review-slot {
+  grid-column: 1 / span 2;
+  grid-row: 1;
+}
+
+.result-body.versus-duel .result-chat-slot {
+  grid-column: 1 / span 2;
+  grid-row: 3;
+}
+
+.result-body.versus-duel.review-active .result-chat-slot {
+  grid-row: 2;
+}
+
+.result-body.versus-duel .result-action-slot {
+  grid-column: 1 / span 2;
+  grid-row: 4;
+}
+
+.result-body.versus-duel.review-active .result-action-slot {
+  grid-row: 3;
 }
 
 .result-ranking-slot,
 .result-win-slot,
 .result-lose-slot,
-.result-chat-slot {
+.result-chat-slot,
+.result-action-slot {
   min-height: 0;
   overflow: hidden;
   display: flex;
@@ -92,29 +115,12 @@
   min-height: 0;
 }
 
-.result-sidebar-slot {
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .result-status-slot,
 .result-action-slot {
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-.result-sidebar-slot .result-status-slot {
-  flex: 1 1 0;
-}
-
-.result-sidebar-slot .result-action-slot {
-  flex: 0 0 auto;
-  margin-top: auto;
 }
 
 .result-status-slot > .user-status-panel {
@@ -209,6 +215,52 @@
   color: var(--px-text-muted);
 }
 
+.ranking-footer-with-review {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+
+.ranking-footer-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ranking-footer-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.review-footer-btn {
+  font-size: 13px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.result-duel-review-bar {
+  min-height: 0;
+  flex-shrink: 0;
+  background: var(--px-surface);
+  border: 4px solid var(--px-primary);
+  padding: 6px 8px;
+  box-shadow: var(--px-shadow-hard);
+}
+
+.result-duel-review-bar .ranking-footer-with-review {
+  border-top: none;
+  padding-top: 0;
+}
+
+.result-review-slot {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .team-panel {
   background: var(--px-surface);
   border: 4px solid;
@@ -259,7 +311,57 @@
 .lose .player-row { border-color: var(--px-danger); }
 
 .player-avatar { font-size: 2rem; width: 44px; text-align: center; flex-shrink: 0; }
-.player-nickname { flex-grow: 1; font-size: 18px; color: #fff; min-width: 0; }
+.player-info-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.player-nickname { font-size: 18px; color: #fff; min-width: 0; }
+.player-problem-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.problem-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-family: var(--font-pixel);
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+.problem-dot.correct {
+  background: var(--px-success);
+  color: #fff;
+  border-color: #3a5f12;
+}
+.problem-dot.wrong {
+  background: var(--px-danger);
+  color: #fff;
+  border-color: #8b3a2a;
+}
+.problem-dot.selectable {
+  cursor: pointer;
+  padding: 0;
+}
+.problem-dot.selectable:hover {
+  filter: brightness(1.15);
+  transform: scale(1.08);
+}
+.problem-dot.selected {
+  box-shadow: 0 0 0 3px var(--px-primary), 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+.ranking-panel .player-info-col { gap: 3px; }
+.ranking-panel .player-problem-dots { gap: 3px; }
+.ranking-panel .problem-dot { width: 20px; height: 20px; font-size: 10px; }
 .player-score-info { font-size: 14px; color: #aaa; text-align: right; flex-shrink: 0; }
 .score-val { font-size: 18px; display: block; margin-top: 2px; }
 .win .score-val { color: var(--px-success); text-shadow: 1px 1px 0 #000; }
@@ -477,5 +579,147 @@
 .result-popup-title.rarity-uncommon { border-color: var(--px-success); background: rgba(146, 204, 65, 0.12); color: var(--px-success); }
 .result-popup-title.rarity-rare { border-color: var(--px-primary); background: rgba(32, 156, 238, 0.12); color: var(--px-primary); }
 .result-popup-title.rarity-legendary { border-color: var(--px-warning); background: rgba(247, 213, 29, 0.15); color: var(--px-warning); }
+
+.review-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 3500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.review-modal-panel {
+  width: min(900px, 94vw);
+  height: min(80vh, 640px);
+  max-height: 80vh;
+}
+
+.ranking-panel .player-row.invite-selectable {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+.ranking-panel .player-row.invite-selectable:hover {
+  filter: brightness(1.08);
+}
+
+.ranking-panel .player-row.invite-selected {
+  border-color: var(--px-primary) !important;
+  box-shadow: 0 0 0 2px rgba(32, 156, 238, 0.35), var(--px-shadow-hard);
+}
+
+.ranking-panel .player-row.invite-selectable:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.review-incoming-msg {
+  text-align: center;
+  font-size: 18px;
+  color: var(--px-text);
+  line-height: 1.5;
+  padding: 12px 8px 16px;
+}
+
+.review-problem-panel {
+  height: 100%;
+}
+
+.review-problem-partner {
+  text-align: center;
+  font-size: 15px;
+  color: var(--px-text-muted);
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.review-problem-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-gutter: stable;
+}
+
+.review-problem-card {
+  background: #252f3f;
+  border: 4px solid var(--px-border);
+  padding: 8px 10px;
+  box-shadow: var(--px-shadow-hard);
+  flex-shrink: 0;
+}
+
+.review-problem-card.correct {
+  border-color: var(--px-success);
+}
+
+.review-problem-card.wrong {
+  border-color: var(--px-danger);
+}
+
+.review-problem-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.review-problem-title {
+  flex: 1 1 0;
+  font-size: 17px;
+  color: #fff;
+  min-width: 0;
+}
+
+.review-problem-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 2px solid #000;
+  flex-shrink: 0;
+}
+
+.review-problem-badge.correct {
+  background: var(--px-success);
+  color: #fff;
+}
+
+.review-problem-badge.wrong {
+  background: var(--px-danger);
+  color: #fff;
+}
+
+.review-problem-question {
+  font-size: 15px;
+  color: var(--px-text);
+  margin-bottom: 6px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.review-problem-answers {
+  font-size: 14px;
+  color: #ccc;
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+.review-problem-explanation {
+  font-size: 14px;
+  color: var(--px-warning);
+  line-height: 1.5;
+}
+
+.review-label {
+  color: var(--px-text-muted);
+  margin-right: 4px;
+}
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
