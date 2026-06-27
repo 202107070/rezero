@@ -42,18 +42,19 @@ export function isProblemAnswerCorrect(params: {
   problemIndex: number;
   langKey: string;
   blankAnswers: string[][];
-  correctBlanks: Record<number, Record<number, boolean>>;
   selectedOption: number | null;
 }): boolean {
   const problem = normalizeBattleProblem(params.problem);
-  const { problemIndex, langKey, blankAnswers, correctBlanks, selectedOption } = params;
+  const { problemIndex, langKey, blankAnswers, selectedOption } = params;
 
-  if (problem.type === 'fill_blank') {
+  if (problem.type === 'fill_blank' || problem.type === 'visual_fill_blank') {
     const correct = problem.answer?.[langKey] || [];
-    const saved = correctBlanks[problemIndex] || {};
+    const user = blankAnswers[problemIndex] || [];
     if (correct.length === 0) return false;
     for (let i = 0; i < correct.length; i++) {
-      if (!saved[i]) return false;
+      const u = String(user[i] || '').trim().toLowerCase();
+      const c = String(correct[i] || '').trim().toLowerCase();
+      if (u !== c) return false;
     }
     return true;
   }
@@ -66,6 +67,39 @@ export function isProblemAnswerCorrect(params: {
 
   if (problem.type === 'multiple_choice') {
     return selectedOption !== null && selectedOption === problem.correctIndex;
+  }
+
+  return false;
+}
+
+export function hasProblemAnswerAttempted(params: {
+  problem: BattleProblem;
+  problemIndex: number;
+  langKey: string;
+  blankAnswers: string[][];
+  selectedOption: number | null;
+}): boolean {
+  const problem = normalizeBattleProblem(params.problem);
+  const { problemIndex, langKey, blankAnswers, selectedOption } = params;
+
+  if (problem.type === 'multiple_choice') {
+    return selectedOption !== null;
+  }
+
+  if (problem.type === 'short_answer') {
+    return String(blankAnswers[problemIndex]?.[0] || '').trim() !== '';
+  }
+
+  if (problem.type === 'fill_blank' || problem.type === 'visual_fill_blank') {
+    const question = problem.question || '';
+    const correct = problem.answer?.[langKey] || [];
+    const blankCount = Math.max(correct.length, (question.match(/_____/g) || []).length);
+    if (blankCount === 0) return false;
+    const user = blankAnswers[problemIndex] || [];
+    for (let i = 0; i < blankCount; i++) {
+      if (String(user[i] || '').trim() === '') return false;
+    }
+    return true;
   }
 
   return false;

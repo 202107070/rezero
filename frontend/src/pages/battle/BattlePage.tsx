@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BattleChatPanel, { type ChatMessage } from '../../components/battle/BattleChatPanel';
+import BattleBuildPanel from '../../components/battle/BattleBuildPanel';
 import FillBlankRenderer from '../../components/battle/FillBlankRenderer';
 import ProblemVisualPreview from '../../components/battle/ProblemVisualPreview';
 import ItemSelectModal from '../../components/battle/ItemSelectModal';
 import OpponentPanels, { type BotView } from '../../components/battle/OpponentPanels';
 import {
 ATTACK_ITEM_KEYS,
+BATTLE_BUILD_ITEM_BONUS,
+BATTLE_BUILD_LIMIT,
 ITEM_PANEL_EFFECT_MS,
 SELF_ITEM_KEYS,
 type ItemKey,
@@ -55,11 +58,20 @@ import {
   buildBotProblemResults,
   finalizeProblemResults,
   isProblemAnswerCorrect,
+  hasProblemAnswerAttempted,
   normalizeBattleProblem,
   normalizeBattleProblems,
   type ProblemResultsMap,
 } from '../../utils/battle/problemResultUtils';
+import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSimulator';
 import './battle.css';
+
+const SELF_ITEM_META: Record<string, { icon: string; name: string }> = {
+  revealLength: { icon: '📏', name: '글자수' },
+  revealPrev: { icon: '🔍', name: '앞글자' },
+  blankBreak: { icon: '🔨', name: '깨기' },
+  buildCharge: { icon: '🔧', name: '빌드+' },
+};
 
 const DEFAULT_ITEMS: ItemInventory = {
   paint: 40,
@@ -69,6 +81,7 @@ const DEFAULT_ITEMS: ItemInventory = {
   timeReduce: 40,
   scribble: 40,
   blankBreak: 40,
+  buildCharge: 40,
 };
 
 export default function BattlePage() {
@@ -125,8 +138,6 @@ export default function BattlePage() {
   const [showGameOver, setShowGameOver] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showClearFlash, setShowClearFlash] = useState(false);
-  const [showAdvanceModal, setShowAdvanceModal] = useState(false);
-  const [advanceReason, setAdvanceReason] = useState('time');
   const [demoSpectating, setDemoSpectating] = useState(false);
   const [spectatorLocked, setSpectatorLocked] = useState(false);
   const [battleFinished, setBattleFinished] = useState(false);
@@ -135,7 +146,6 @@ export default function BattlePage() {
   const [problemCollapsed, setProblemCollapsed] = useState(true);
   const [localSolvedProblems, setLocalSolvedProblems] = useState<number[]>([]);
   const [blankAnswers, setBlankAnswers] = useState<string[][]>([]);
-  const [correctBlanks, setCorrectBlanks] = useState<Record<number, Record<number, boolean>>>({});
   const [comboCount, setComboCount] = useState(0);
   const [ingameScore, setIngameScore] = useState(0);
   const [solveTimes, setSolveTimes] = useState<Record<number, number>>({});
@@ -152,7 +162,6 @@ export default function BattlePage() {
   const [problemSolved, setProblemSolved] = useState(false);
   const [problemStartTime, setProblemStartTime] = useState(Date.now());
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [wrongChoice, setWrongChoice] = useState<number | null>(null);
   const [revealHint, setRevealHint] = useState<string | null>(null);
   const [breakingBlanks, setBreakingBlanks] = useState<Record<string, boolean>>({});
   const [itemCastState, setItemCastState] = useState<{ type: string; ts: number } | null>(null);
@@ -176,9 +185,16 @@ export default function BattlePage() {
   ]);
   const [chatMsg, setChatMsg] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
-  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const itemTargetBotIdRef = useRef<string | null>(null);
+  const [buildCodeByProblem, setBuildCodeByProblem] = useState<Record<number, string>>({});
+  const [buildLogsByProblem, setBuildLogsByProblem] = useState<Record<number, BuildLogLine[]>>({});
+  const [buildsUsedByProblem, setBuildsUsedByProblem] = useState<Record<number, number>>({});
+  const [buildBonusByProblem, setBuildBonusByProblem] = useState<Record<number, number>>({});
+  const [buildPanelCollapsed, setBuildPanelCollapsed] = useState(false);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const assembledBuildCodeRef = useRef('');
+  const buildCancelledRef = useRef(false);
   const advanceQueuedRef = useRef(false);
+  const itemTargetBotIdRef = useRef<string | null>(null);
   const gameOverNavRef = useRef(false);
   const saveModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -218,11 +234,87 @@ export default function BattlePage() {
         problemIndex: currentIndex,
         langKey,
         blankAnswers,
-        correctBlanks,
         selectedOption,
       }),
-    [currentProblem, currentIndex, langKey, blankAnswers, correctBlanks, selectedOption],
+    [currentProblem, currentIndex, langKey, blankAnswers, selectedOption],
   );
+
+  const hasCurrentAnswerAttempted = useCallback(
+    () =>
+      hasProblemAnswerAttempted({
+        problem: currentProblem,
+        problemIndex: currentIndex,
+        langKey,
+        blankAnswers,
+        selectedOption,
+      }),
+    [currentProblem, currentIndex, langKey, blankAnswers, selectedOption],
+  );
+
+  const showBuildPanel = isBlankBasedType(currentProblem.type);
+  const buildsAllowed = BATTLE_BUILD_LIMIT + (buildBonusByProblem[currentIndex] || 0);
+  const buildsUsed = buildsUsedByProblem[currentIndex] || 0;
+  const currentBuildCode = buildCodeByProblem[currentIndex] ?? '';
+  const currentBuildLogs = buildLogsByProblem[currentIndex] || [];
+
+  useEffect(() => {
+    if (!showBuildPanel) return;
+    const assembled = assembleCode(currentProblem.question || '', blankAnswers[currentIndex] || []);
+    setBuildCodeByProblem((prev) => {
+      const current = prev[currentIndex];
+      if (current === undefined || current === assembledBuildCodeRef.current) {
+        assembledBuildCodeRef.current = assembled;
+        return { ...prev, [currentIndex]: assembled };
+      }
+      return prev;
+    });
+  }, [showBuildPanel, currentIndex, currentProblem.question, blankAnswers]);
+
+  useEffect(() => {
+    assembledBuildCodeRef.current = '';
+    buildCancelledRef.current = true;
+    setIsBuilding(false);
+  }, [currentIndex]);
+
+  const handleBuildCodeChange = useCallback(
+    (code: string) => {
+      setBuildCodeByProblem((prev) => ({ ...prev, [currentIndex]: code }));
+    },
+    [currentIndex],
+  );
+
+  const handleBattleBuild = useCallback(async () => {
+    if (!showBuildPanel || isBuilding) return;
+    if (buildsUsed >= buildsAllowed) return;
+
+    buildCancelledRef.current = false;
+    setIsBuilding(true);
+    setBuildsUsedByProblem((prev) => ({ ...prev, [currentIndex]: (prev[currentIndex] || 0) + 1 }));
+    setBuildLogsByProblem((prev) => ({ ...prev, [currentIndex]: [] }));
+
+    const code = buildCodeByProblem[currentIndex] ?? assembledBuildCodeRef.current;
+    const appendLog = (line: BuildLogLine) => {
+      if (buildCancelledRef.current) return;
+      setBuildLogsByProblem((prev) => ({
+        ...prev,
+        [currentIndex]: [...(prev[currentIndex] || []), line],
+      }));
+    };
+
+    try {
+      await runBuildSimulation(code, langKey, appendLog, { cancelled: () => buildCancelledRef.current });
+    } finally {
+      if (!buildCancelledRef.current) setIsBuilding(false);
+    }
+  }, [
+    showBuildPanel,
+    isBuilding,
+    buildsUsed,
+    buildsAllowed,
+    currentIndex,
+    buildCodeByProblem,
+    langKey,
+  ]);
 
   const selectedDemoBot = battleBots[0] || null;
   const selectedDemoBotCode = selectedDemoBot?.codeByProblem?.[currentIndex] || '// 상대 코드가 아직 없습니다.';
@@ -591,7 +683,7 @@ export default function BattlePage() {
 
   useEffect(() => {
     if (battleFinished || problems.length === 0) return;
-    if (advanceQueuedRef.current || showAdvanceModal) return;
+    if (advanceQueuedRef.current) return;
 
     const allBotsSolved = areAllBotsSolvedOnPlayerProblem(
       battleBots,
@@ -620,10 +712,9 @@ export default function BattlePage() {
     }
 
     const reason = timeUp ? 'time' : 'all-clear';
-    setAdvanceReason(reason);
     queueAdvanceProblem(reason);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remaining, currentIndex, problems.length, battleBots, elapsedSec, totalBattleSeconds, currentProblemLocked, battleFinished, showAdvanceModal, demoSpectating, spectatorLocked]);
+  }, [remaining, currentIndex, problems.length, battleBots, elapsedSec, totalBattleSeconds, currentProblemLocked, battleFinished, demoSpectating, spectatorLocked]);
 
   useEffect(() => {
     if (!initialSessionLoadedRef.current || showGameOver) return;
@@ -690,7 +781,6 @@ export default function BattlePage() {
 
   useEffect(() => {
     return () => {
-      if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
       if (saveModalTimerRef.current) clearTimeout(saveModalTimerRef.current);
       if (clearFlashTimerRef.current) clearTimeout(clearFlashTimerRef.current);
     };
@@ -741,45 +831,41 @@ export default function BattlePage() {
     doPersistSession(answers).catch(() => {});
   }, [currentIndex, doPersistSession, answers]);
 
-  const queueAdvanceProblem = (reason = 'time') => {
-    if (showAdvanceModal || battleFinished) return;
-    setShowAdvanceModal(true);
-    syncBattleDemoState(sessionId, { event: 'advance-queued', reason, currentIndex, remaining });
-    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+  const queueAdvanceProblem = (_reason = 'time') => {
+    if (advanceQueuedRef.current || battleFinished) return;
     advanceQueuedRef.current = true;
-    advanceTimerRef.current = setTimeout(() => {
-      setShowAdvanceModal(false);
+    syncBattleDemoState(sessionId, { event: 'advance-queued', reason: _reason, currentIndex, remaining });
+
+    setProblemResults((prev) =>
+      prev[currentIndex] !== undefined ? prev : { ...prev, [currentIndex]: false },
+    );
+    if (currentIndex >= problems.length - 1) {
+      setBattleFinished(true);
+      setShowGameOver(true);
+      doPersistSubmission(answers, currentIndex);
       advanceQueuedRef.current = false;
-      setProblemResults((prev) =>
-        prev[currentIndex] !== undefined ? prev : { ...prev, [currentIndex]: false },
-      );
-      if (currentIndex >= problems.length - 1) {
-        setBattleFinished(true);
-        setShowGameOver(true);
-        doPersistSubmission(answers, currentIndex);
-        return;
-      }
-      const nextIndex = currentIndex + 1;
-      setCurrentIndex(nextIndex);
-      setProblemSolved(false);
-      setSelectedOption(null);
-      setWrongChoice(null);
-      setProblemStartTime(Date.now());
-      mistakeOnCurrentRef.current = false;
-      setShowGameOver(false);
-      setDemoSpectating(false);
-      setSpectatorLocked(false);
-      setExpandedOpponentId(battleBots[0]?.id || 'bot-1');
-      setShowSaveModal(false);
-      setShowClearFlash(false);
-      syncBattleDemoState(sessionId, {
-        event: 'advance-complete',
-        currentIndex: nextIndex,
-        remaining,
-        demoSpectating: false,
-        spectatorLocked: false,
-      });
-    }, 3000);
+      return;
+    }
+    const nextIndex = currentIndex + 1;
+    setCurrentIndex(nextIndex);
+    setProblemSolved(false);
+    setSelectedOption(null);
+    setProblemStartTime(Date.now());
+    mistakeOnCurrentRef.current = false;
+    setShowGameOver(false);
+    setDemoSpectating(false);
+    setSpectatorLocked(false);
+    setExpandedOpponentId(battleBots[0]?.id || 'bot-1');
+    setShowSaveModal(false);
+    setShowClearFlash(false);
+    syncBattleDemoState(sessionId, {
+      event: 'advance-complete',
+      currentIndex: nextIndex,
+      remaining,
+      demoSpectating: false,
+      spectatorLocked: false,
+    });
+    advanceQueuedRef.current = false;
   };
 
   const lockAndSpectate = () => {
@@ -823,67 +909,39 @@ export default function BattlePage() {
     });
   };
 
-  const handleBlankEnter = (blankIndex: number, e: React.KeyboardEvent) => {
+  const submitCurrentProblem = () => {
     if (demoSpectating || spectatorLocked || problemSolved) return;
-    e.preventDefault();
-    if (!isBlankBasedType(currentProblem.type)) return;
-    const blanks = blankAnswers[currentIndex] || [];
-    const correct = currentProblem.answer?.[langKey] || [];
-    const u = String(blanks[blankIndex] || '').trim().toLowerCase();
-    const c = String(correct[blankIndex] || '').trim().toLowerCase();
-    if (u === c) {
-      setCorrectBlanks((prev) => ({
-        ...prev,
-        [currentIndex]: { ...(prev[currentIndex] || {}), [blankIndex]: true },
-      }));
-    }
-  };
+    if (!hasCurrentAnswerAttempted()) return;
 
-  const allBlanksCorrect = () => {
-    if (!isBlankBasedType(currentProblem.type)) return false;
-    const correct = currentProblem.answer?.[langKey] || [];
-    const saved = correctBlanks[currentIndex] || {};
-    for (let i = 0; i < correct.length; i++) {
-      if (!saved[i]) return false;
-    }
-    return true;
-  };
-
-  const recordProblemSolve = (problemIndex: number, elapsedForProblem: number, earnedScore: number) => {
+    const isCorrect = isCurrentAnswerCorrect();
+    const elapsed = (Date.now() - problemStartTime) / 1000;
     const battleElapsed = Math.max(0, totalBattleSeconds - remaining);
-    setProblemResults((prev) => ({ ...prev, [problemIndex]: true }));
-    setIngameScore((prev) => prev + earnedScore);
-    setSolveTimes((prev) => ({ ...prev, [problemIndex]: elapsedForProblem }));
-    setLocalSolvedProblems((prev) => {
-      const next = Array.from(new Set([...prev, problemIndex])).sort((a, b) => a - b);
-      markProblemSubmitted(sessionId, next);
-      return next;
-    });
-    setFinishedAtElapsedSec(battleElapsed);
+
+    setProblemResults((prev) => ({ ...prev, [currentIndex]: isCorrect }));
+
+    if (isCorrect) {
+      const hadMistake = mistakeOnCurrentRef.current;
+      const newCombo = hadMistake ? 1 : comboCount + 1;
+      const earnedScore = 1000 + (hadMistake ? 0 : 100 * (newCombo - 1));
+      setComboCount(newCombo);
+      setIngameScore((prev) => prev + earnedScore);
+      setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
+      setLocalSolvedProblems((prev) => {
+        const next = Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b);
+        markProblemSubmitted(sessionId, next);
+        return next;
+      });
+      setFinishedAtElapsedSec(battleElapsed);
+    } else {
+      setComboCount(0);
+      mistakeOnCurrentRef.current = true;
+    }
+
     setProblemSolved(true);
   };
 
   const handleSubmit = () => {
-    if (demoSpectating || spectatorLocked || problemSolved) return;
-
-    if (isCurrentAnswerCorrect()) {
-      const elapsed = (Date.now() - problemStartTime) / 1000;
-      if (currentProblem.type === 'short_answer' || currentProblem.type === 'multiple_choice') {
-        const hadMistake = mistakeOnCurrentRef.current || wrongChoice !== null;
-        const newCombo = hadMistake ? 1 : comboCount + 1;
-        const earnedScore = 1000 + (hadMistake ? 0 : 100 * (newCombo - 1));
-        if (!hadMistake) setComboCount(newCombo);
-        recordProblemSolve(currentIndex, elapsed, earnedScore);
-      } else {
-        const newCombo = comboCount + 1;
-        const earnedScore = 1000 + 100 * (newCombo - 1);
-        setComboCount(newCombo);
-        recordProblemSolve(currentIndex, elapsed, earnedScore);
-      }
-      return;
-    }
-
-    markProblemWrong(currentIndex);
+    submitCurrentProblem();
   };
 
   const handleAdvance = () => {
@@ -897,27 +955,13 @@ export default function BattlePage() {
     setCurrentIndex(currentIndex + 1);
     setProblemSolved(false);
     setSelectedOption(null);
-    setWrongChoice(null);
     setProblemStartTime(Date.now());
     mistakeOnCurrentRef.current = false;
   };
 
-  const onSubmitChoice = (idx: number) => {
+  const selectChoice = (idx: number) => {
     if (problemSolved) return;
-    if (idx === currentProblem.correctIndex) {
-      const hadMistake = wrongChoice !== null || mistakeOnCurrentRef.current;
-      const newCombo = hadMistake ? 0 : comboCount + 1;
-      const earnedScore = 1000 + (hadMistake ? 0 : 100 * (newCombo - 1));
-      const elapsed = (Date.now() - problemStartTime) / 1000;
-      setSelectedOption(idx);
-      setWrongChoice(null);
-      setComboCount(newCombo);
-      recordProblemSolve(currentIndex, elapsed, earnedScore);
-    } else {
-      setWrongChoice(idx);
-      setComboCount(0);
-      mistakeOnCurrentRef.current = true;
-    }
+    setSelectedOption(idx);
   };
 
   const handleUseSelfItem = (type: keyof ItemInventory) => {
@@ -935,6 +979,14 @@ export default function BattlePage() {
     } else if (type === 'blankBreak') {
       applyBlankBreak(correct);
       return;
+    } else if (type === 'buildCharge') {
+      if (!isBlankBasedType(currentProblem.type)) return;
+      setBuildBonusByProblem((prev) => ({
+        ...prev,
+        [currentIndex]: (prev[currentIndex] || 0) + BATTLE_BUILD_ITEM_BONUS,
+      }));
+    } else {
+      return;
     }
     setItemInventory((prev) => ({ ...prev, [type]: prev[type] - 1 }));
     SFX.play(type);
@@ -951,7 +1003,6 @@ export default function BattlePage() {
           next[currentIndex][0] = correct[0] || '';
           return next;
         });
-        setCorrectBlanks((prev) => ({ ...prev, [currentIndex]: { ...(prev[currentIndex] || {}), 0: true } }));
         setBreakingBlanks((prev) => {
           const n = { ...prev };
           delete n[`${currentIndex}_0`];
@@ -964,10 +1015,10 @@ export default function BattlePage() {
     }
     const blankCount = (partial.match(/_____/g) || []).length;
     if (blankCount === 0) return;
-    const solved = correctBlanks[currentIndex] || {};
+    const blanks = blankAnswers[currentIndex] || [];
     const unsolved: number[] = [];
     for (let i = 0; i < blankCount; i++) {
-      if (!solved[i]) unsolved.push(i);
+      if (!String(blanks[i] || '').trim()) unsolved.push(i);
     }
     if (unsolved.length === 0) return;
     const blankIdx = unsolved[Math.floor(Math.random() * unsolved.length)];
@@ -979,7 +1030,6 @@ export default function BattlePage() {
         next[currentIndex][blankIdx] = correct[blankIdx] || '';
         return next;
       });
-      setCorrectBlanks((prev) => ({ ...prev, [currentIndex]: { ...(prev[currentIndex] || {}), [blankIdx]: true } }));
       setBreakingBlanks((prev) => {
         const n = { ...prev };
         delete n[`${currentIndex}_${blankIdx}`];
@@ -1165,16 +1215,12 @@ export default function BattlePage() {
                   <>
                     <span style={{ color: '#aaa', marginLeft: 'auto' }}>내 아이템:</span>
                     {selectedSelfItems.map((type) => {
-                      const meta =
-                        type === 'revealLength'
-                          ? { icon: '📏', name: '글자수' }
-                          : type === 'revealPrev'
-                            ? { icon: '🔍', name: '앞글자' }
-                            : { icon: '🔨', name: '깨기' };
+                      const meta = SELF_ITEM_META[type] || { icon: '?', name: type };
                       const disabled =
                         currentProblem.type === 'multiple_choice' ||
                         itemInventory[type] <= 0 ||
-                        (currentProblem.type === 'short_answer' && type === 'blankBreak');
+                        (currentProblem.type === 'short_answer' && type === 'blankBreak') ||
+                        (type === 'buildCharge' && !isBlankBasedType(currentProblem.type));
                       return (
                         <button
                           key={type}
@@ -1232,57 +1278,56 @@ export default function BattlePage() {
                 </div>
               </div>
               {isBlankBasedType(currentProblem.type) && (
-                <div className="fill-blank-area">
-                  {currentProblem.visual && (
-                    <ProblemVisualPreview visual={currentProblem.visual} />
-                  )}
-                  <div className="fill-blank-code">
-                    <FillBlankRenderer
-                      code={currentProblem.question || ''}
-                      answers={blankAnswers[currentIndex] || []}
-                      problemIndex={currentIndex}
-                      correctBlanks={correctBlanks[currentIndex] || {}}
-                      breakingBlanks={breakingBlanks}
-                      isLocked={isLocked}
-                      onUpdate={(i, v) => updateBlankAnswer(currentIndex, i, v)}
-                      onEnter={handleBlankEnter}
-                    />
+                <>
+                  <div className="fill-blank-area">
+                    {currentProblem.visual && (
+                      <ProblemVisualPreview visual={currentProblem.visual} />
+                    )}
+                    <div className="fill-blank-code">
+                      <FillBlankRenderer
+                        code={currentProblem.question || ''}
+                        answers={blankAnswers[currentIndex] || []}
+                        problemIndex={currentIndex}
+                        breakingBlanks={breakingBlanks}
+                        isLocked={isLocked}
+                        onUpdate={(i, v) => updateBlankAnswer(currentIndex, i, v)}
+                      />
+                    </div>
                   </div>
-                </div>
+                  <BattleBuildPanel
+                    code={currentBuildCode}
+                    lang={langKey}
+                    langLabel={langLabel}
+                    buildsUsed={buildsUsed}
+                    buildsAllowed={buildsAllowed}
+                    isBuilding={isBuilding}
+                    logs={currentBuildLogs}
+                    collapsed={buildPanelCollapsed}
+                    disabled={demoSpectating || spectatorLocked || problemSolved}
+                    onCodeChange={handleBuildCodeChange}
+                    onBuild={handleBattleBuild}
+                    onToggleCollapse={() => setBuildPanelCollapsed((v) => !v)}
+                  />
+                </>
               )}
               {currentProblem.type === 'multiple_choice' && (
                 <div className="fill-blank-area">
                   {currentProblem.visual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
                   <div className="fill-blank-question">{currentProblem.question}</div>
                   {(currentProblem.options || []).map((opt, i) => {
-                    const isCorrect = problemSolved && i === currentProblem.correctIndex;
-                    const isWrong = !problemSolved && wrongChoice === i;
                     const isSelected = selectedOption === i;
                     return (
                       <button
                         key={i}
                         type="button"
                         className={`pixel-btn battle-choice-btn${problemSolved ? ' is-locked' : ''}`}
-                        onClick={() => {
-                          if (!problemSolved) onSubmitChoice(i);
-                        }}
+                        onClick={() => selectChoice(i)}
+                        disabled={problemSolved}
                         style={{
-                          background: isCorrect
-                            ? 'rgba(146,204,65,0.35)'
-                            : isWrong
-                              ? 'rgba(231,76,60,0.35)'
-                              : isSelected
-                                ? 'rgba(52,152,219,0.25)'
-                                : '#2c3e50',
-                          borderColor: isCorrect
-                            ? 'var(--px-success)'
-                            : isWrong
-                              ? 'var(--px-danger)'
-                              : isSelected
-                                ? '#3498db'
-                                : 'var(--px-primary)',
-                          color: isCorrect || isWrong ? '#fff' : '#e0e0e0',
-                          opacity: problemSolved && i !== currentProblem.correctIndex ? 0.5 : 1,
+                          background: isSelected ? 'rgba(52,152,219,0.25)' : '#2c3e50',
+                          borderColor: isSelected ? '#3498db' : 'var(--px-primary)',
+                          color: '#e0e0e0',
+                          opacity: problemSolved && !isSelected ? 0.55 : 1,
                         }}
                       >
                         {String.fromCharCode(65 + i)}. {opt}
@@ -1299,26 +1344,8 @@ export default function BattlePage() {
                     className="blank-input battle-short-input"
                     value={blankAnswers[currentIndex]?.[0] || ''}
                     onChange={(e) => updateBlankAnswer(currentIndex, 0, e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                     disabled={problemSolved}
                   />
-                  {problemSolved && (
-                    <div
-                      className="battle-feedback-text"
-                      style={{
-                        color:
-                          blankAnswers[currentIndex]?.[0]?.trim()?.toLowerCase() ===
-                          (currentProblem.answer?.[langKey]?.[0] || '').trim().toLowerCase()
-                            ? 'var(--px-success)'
-                            : 'var(--px-danger)',
-                      }}
-                    >
-                      {blankAnswers[currentIndex]?.[0]?.trim()?.toLowerCase() ===
-                      (currentProblem.answer?.[langKey]?.[0] || '').trim().toLowerCase()
-                        ? '정답!'
-                        : `오답 (정답: ${currentProblem.answer?.[langKey]?.[0] || ''})`}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -1374,7 +1401,7 @@ export default function BattlePage() {
                   className="pixel-btn pixel-btn-success"
                   onClick={handleSubmit}
                   style={{ padding: '4px 10px', fontSize: '14px' }}
-                  disabled={demoSpectating || spectatorLocked || (isBlankBasedType(currentProblem.type) && !allBlanksCorrect())}
+                  disabled={demoSpectating || spectatorLocked || !hasCurrentAnswerAttempted()}
                 >
                   {demoSpectating || spectatorLocked ? 'LOCKED' : '제출'}
                 </button>
@@ -1422,19 +1449,6 @@ export default function BattlePage() {
           <div className="game-over-box">
             <div className="game-over-text">CLEAR</div>
             <div className="game-over-sub">관전모드에 진입했습니다</div>
-          </div>
-        </div>
-      )}
-
-      {showAdvanceModal && !showGameOver && (
-        <div className="game-over-overlay" style={{ zIndex: 3050 }}>
-          <div className="game-over-box" style={{ maxWidth: '520px', borderColor: 'var(--px-primary)' }}>
-            <div className="game-over-text" style={{ fontSize: '26px', color: 'var(--px-primary)' }}>
-              다음 문제로 넘어갑니다
-            </div>
-            <div className="game-over-sub" style={{ marginBottom: '18px' }}>
-              {advanceReason === 'time' ? '시간이 종료되었습니다.' : '모두 클리어했습니다!'}
-            </div>
           </div>
         </div>
       )}

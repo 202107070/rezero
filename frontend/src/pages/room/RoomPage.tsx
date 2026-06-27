@@ -350,7 +350,6 @@ export default function RoomPage() {
         playerIndex={profilePlayerIndex}
         myCharacter={myCharacter}
         isHost={Boolean(host?.isHost)}
-        roomMode={roomMode}
         onClose={() => setShowProfileModal(false)}
         onKick={(index, name) => {
           setKickTarget({ index, name });

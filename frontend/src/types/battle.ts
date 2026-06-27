@@ -30,6 +30,7 @@ export interface ItemInventory {
   timeReduce: number;
   scribble: number;
   blankBreak: number;
+  buildCharge: number;
 }
 
 export interface RoomUser {

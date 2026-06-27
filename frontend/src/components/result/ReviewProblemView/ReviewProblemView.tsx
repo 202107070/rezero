@@ -13,6 +13,8 @@ interface ReviewProblemViewProps {
   partnerName: string;
   rankBorderColor: string;
   rankGlow: string;
+  reviewExpanded: boolean;
+  onToggleReviewLayout: () => void;
   onExitReview: () => void;
 }
 
@@ -21,11 +23,18 @@ export function ReviewProblemView({
   partnerName,
   rankBorderColor,
   rankGlow,
+  reviewExpanded,
+  onToggleReviewLayout,
   onExitReview,
 }: ReviewProblemViewProps) {
   return (
     <div className="ranking-panel review-problem-panel" style={{ borderColor: rankBorderColor, boxShadow: rankGlow }}>
-      <div className="rank-title">REVIEW</div>
+      <div className="rank-title">
+        <span>REVIEW</span>
+        <button type="button" className="pixel-btn pixel-btn-secondary review-layout-toggle" onClick={onToggleReviewLayout}>
+          {reviewExpanded ? '문제 축소' : '문제 확대'}
+        </button>
+      </div>
       <div className="review-problem-partner">리뷰 파트너: {partnerName}</div>
       <div className="review-problem-list">
         {problems.map((item) => (

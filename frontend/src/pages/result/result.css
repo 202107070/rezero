@@ -55,8 +55,20 @@
   grid-template-rows: minmax(0, 7fr) auto minmax(0, 3fr) auto;
 }
 
+.result-body.versus-many.review-active {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.result-body.versus-many.review-active.review-focus-problems {
+  grid-template-rows: minmax(0, 3fr) minmax(0, 1fr) auto;
+}
+
 .result-body.versus-duel.review-active {
-  grid-template-rows: minmax(0, 1fr) minmax(0, 3fr) auto;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.result-body.versus-duel.review-active.review-focus-problems {
+  grid-template-rows: minmax(0, 3fr) minmax(0, 1fr) auto;
 }
 
 .result-body.versus-duel .result-win-slot {
@@ -629,6 +641,22 @@
 
 .review-problem-panel {
   height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-problem-panel .rank-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-layout-toggle {
+  font-size: 14px;
+  padding: 2px 8px;
+  flex-shrink: 0;
 }
 
 .review-problem-partner {

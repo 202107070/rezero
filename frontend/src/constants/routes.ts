@@ -4,4 +4,5 @@ export const ROUTES = {
   BATTLE: '/battle',
   RESULT: '/result',
   PRACTICE: '/practice',
+  BUILD: '/build',
 } as const;

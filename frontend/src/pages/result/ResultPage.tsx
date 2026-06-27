@@ -198,6 +198,7 @@ export default function ResultPage() {
   const [inviteTargetId, setInviteTargetId] = useState<string | null>(null);
   const [inviteWaiting, setInviteWaiting] = useState(false);
   const [reviewPartnerId, setReviewPartnerId] = useState<string | null>(null);
+  const [reviewExpanded, setReviewExpanded] = useState(false);
   const botAcceptTimerRef = useRef<(() => void) | null>(null);
 
   const reviewSelectMode = reviewPhase === 'selecting';
@@ -395,6 +396,7 @@ export default function ResultPage() {
     setInviteTargetId(null);
     setInviteWaiting(false);
     setShowInviteModal(false);
+    setReviewExpanded(false);
     clearReviewInvite(sessionId);
   };
 
@@ -456,7 +458,7 @@ export default function ResultPage() {
         💰 GOLD +{earnedGold.toLocaleString()} (총 보유: {totalGold.toLocaleString()} G)
       </div>
 
-      <div className={`result-body ${isVersusMany ? 'versus-many' : 'versus-duel'}${reviewPhase === 'reviewing' ? ' review-active' : ''}`}>
+      <div className={`result-body ${isVersusMany ? 'versus-many' : 'versus-duel'}${reviewPhase === 'reviewing' ? ' review-active' : ''}${reviewExpanded ? ' review-focus-problems' : ''}`}>
         {reviewPhase === 'reviewing' ? (
           <div className={isVersusMany ? 'result-ranking-slot' : 'result-review-slot'}>
             <ReviewProblemView
@@ -464,6 +466,8 @@ export default function ResultPage() {
               partnerName={reviewPartnerName}
               rankBorderColor={rankBorderColor}
               rankGlow={rankGlow}
+              reviewExpanded={reviewExpanded}
+              onToggleReviewLayout={() => setReviewExpanded((v) => !v)}
               onExitReview={handleExitReview}
             />
           </div>

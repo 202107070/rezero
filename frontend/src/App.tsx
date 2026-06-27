@@ -6,7 +6,9 @@ import RoomPage from './pages/room/RoomPage';
 import BattlePage from './pages/battle/BattlePage';
 import ResultPage from './pages/result/ResultPage';
 import PracticePage from './pages/practice/PracticePage';
+import BuildPage from './pages/build/BuildPage';
 import { applyDisplayMode, applyDisplayModeToDom, loadDisplayMode, updateUiScale } from './utils/windowBridge';
+import { installClipboardBlockers } from './utils/blockClipboard';
 
 function App() {
   useEffect(() => {
@@ -16,9 +18,11 @@ function App() {
     }, 200);
     const handleResize = () => updateUiScale();
     window.addEventListener('resize', handleResize);
+    const removeClipboardBlockers = installClipboardBlockers();
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener('resize', handleResize);
+      removeClipboardBlockers();
     };
   }, []);
 
@@ -30,6 +34,7 @@ function App() {
         <Route path={ROUTES.BATTLE} element={<BattlePage />} />
         <Route path={ROUTES.RESULT} element={<ResultPage />} />
         <Route path={ROUTES.PRACTICE} element={<PracticePage />} />
+        <Route path={ROUTES.BUILD} element={<BuildPage />} />
         <Route path="*" element={<Navigate to={ROUTES.LOBBY} replace />} />
       </Routes>
     </BrowserRouter>

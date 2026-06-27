@@ -6,6 +6,7 @@ export interface ItemInventory {
   timeReduce: number;
   scribble: number;
   blankBreak: number;
+  buildCharge: number;
 }
 
 export const DEFAULT_ITEM_INVENTORY: ItemInventory = {
@@ -16,7 +17,11 @@ export const DEFAULT_ITEM_INVENTORY: ItemInventory = {
   timeReduce: 40,
   scribble: 40,
   blankBreak: 40,
+  buildCharge: 40,
 };
+
+export const BATTLE_BUILD_LIMIT = 3;
+export const BATTLE_BUILD_ITEM_BONUS = 3;
 
 export interface RouletteItem {
   type: keyof ItemInventory | 'miss';
@@ -34,6 +39,7 @@ export const ROULETTE_ITEMS: RouletteItem[] = [
   { type: 'miss', icon: '💀', name: '꽝', rare: false },
   { type: 'scribble', icon: '✏️', name: '낙서', rare: true },
   { type: 'blankBreak', icon: '🔨', name: '빈칸깨기', rare: true },
+  { type: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
 ];
 
 export const ROULETTE_COST = 1000;
@@ -49,11 +55,12 @@ export const BATTLE_ITEM_DEFS: Array<{ key: ItemKey; icon: string; name: string;
   { key: 'revealPrev', icon: '🔍', name: '앞글자' },
   { key: 'scribble', icon: '✏️', name: '낙서', rare: true },
   { key: 'blankBreak', icon: '🔨', name: '빈칸깨기', rare: true },
+  { key: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
 ];
 
 export const ATTACK_ITEM_KEYS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble'];
 export const ITEM_PANEL_EFFECT_MS = 7000;
-export const SELF_ITEM_KEYS: ItemKey[] = ['revealLength', 'revealPrev', 'blankBreak'];
+export const SELF_ITEM_KEYS: ItemKey[] = ['revealLength', 'revealPrev', 'blankBreak', 'buildCharge'];
 
 export function loadItemInventory(): ItemInventory {
   try {

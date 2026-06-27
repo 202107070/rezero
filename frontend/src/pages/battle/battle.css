@@ -16,7 +16,7 @@
 }
 
 * { box-sizing: border-box; image-rendering: pixelated; border-radius: 0 !important; }
-::selection { background: var(--px-primary); color: var(--px-text); }
+::selection { background: transparent; color: inherit; }
 html, body { margin:0; padding:0; background: var(--px-bg); font-family: var(--font-pixel); color: var(--px-text); line-height:1.4; height:100vh; overflow:hidden; font-size: 22px; }
 body { background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 16px 16px; }
 body::after { content:""; position:fixed; inset:0; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 2px); pointer-events:none; z-index:9999; }
@@ -89,7 +89,7 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .code-problem-body .example-box { margin-top:0; padding:7px; }
 .opponent-code-panel .panel-editor { position:relative; }
 .opponent-code-panel.hidden .pixel-textarea { filter: blur(1.6px) saturate(0.75); user-select:none; pointer-events:none; }
-.opponent-code-panel.revealed .pixel-textarea { filter:none; user-select:text; pointer-events:auto; }
+.opponent-code-panel.revealed .pixel-textarea { filter:none; user-select:none; pointer-events:auto; }
 .opponent-code-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; flex-direction:column; color:#fff; text-shadow:2px 2px 0 #000; letter-spacing:2px; font-size:20px; pointer-events:none; }
 .opponent-code-panel.revealed .opponent-code-overlay { display:none; }
 .opponent-code-overlay small { color:#bbb; font-size:14px; letter-spacing:1px; margin-top:6px; }
@@ -109,7 +109,7 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .opponent-code-panel-mini.hidden .mini-code-textarea,
 .opponent-code-panel-mini.hidden .mini-code-lines { filter: blur(6px) saturate(0.3); user-select: none; pointer-events: none; }
 .opponent-code-panel-mini.revealed .mini-code-textarea,
-.opponent-code-panel-mini.revealed .mini-code-lines { filter: none; user-select: text; pointer-events: auto; }
+.opponent-code-panel-mini.revealed .mini-code-lines { filter: none; user-select: none; pointer-events: auto; }
 .opponent-code-panel-mini.expanded { flex: 1; min-height: 0; cursor: default; }
 .opponent-code-panel-mini.expanded:hover { border-color: var(--px-border); }
 .opponent-code-panel-mini.expanded .mini-header { padding: 6px 12px; font-size: 18px; }
@@ -286,3 +286,18 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .battle-short-input { width: 100%; font-size: 26px; padding: 10px 14px; }
 .battle-feedback-text { font-size: 21px; padding: 6px 0; }
 .fill-blank-actions { display: flex; gap: 8px; padding: 8px; border-top: 3px solid var(--px-border); }
+
+.battle-build-panel { flex: 0 0 auto; display: flex; flex-direction: column; border-top: 4px solid var(--px-border); background: #1a1e21; min-height: 0; max-height: 42%; }
+.battle-build-panel.is-collapsed { max-height: none; }
+.battle-build-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; background: #222; border-bottom: 2px dashed #444; flex-shrink: 0; }
+.battle-build-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.battle-build-kicker { color: var(--px-success); font-size: 18px; letter-spacing: 1px; }
+.battle-build-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.battle-build-btn { font-size: 17px; padding: 3px 10px; min-width: 72px; }
+.battle-build-body { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 0; min-height: 140px; flex: 1 1 auto; overflow: hidden; }
+.battle-build-editor { min-height: 0; border-right: 3px solid var(--px-border); overflow: hidden; }
+.battle-build-editor .build-codemirror { height: 100%; }
+.battle-build-editor .cm-scroller { font-size: 16px; line-height: 1.45; }
+.battle-build-editor .cm-content { padding: 8px 10px; }
+.battle-build-console { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.battle-build-console .terminal-content { font-size: 16px; line-height: 1.4; }

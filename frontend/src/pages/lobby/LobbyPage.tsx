@@ -321,6 +321,7 @@ export default function LobbyPage() {
                   resetCreateForm();
                   setShowModal(true);
                 }}
+                onOpenBuild={() => navigate(ROUTES.BUILD)}
                 onOpenFilter={() => setShowRoomFilterModal(true)}
                 onPractice={() => setShowPracticeModal(true)}
               />

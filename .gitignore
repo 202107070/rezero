@@ -4,16 +4,26 @@ node_modules/
 # Build outputs
 dist/
 dist-electron/
-build/
 out/
+# Repo-root build folder only (do not ignore frontend/src/**/build source folders)
+/build/
 
 # Environment
 .env
 .env.*
+backend/**/.env
+backend/**/.env.*
+frontend/**/.env
+frontend/**/.env.*
 
 # Logs
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # OS / Editor
 .DS_Store
@@ -21,14 +31,16 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-backend/**/node_modules/
-frontend/**/node_modules/
-
-backend/**/.env
-frontend/**/.env
-
-backend/**/.env.*
-frontend/**/.env.*
-backend/.env.*
-frontend/.env.*
+# 프로젝트 메타 문서 및 AI 설정 파일 제외
+.cursor/rules
+.omo
+AGENTS.md
+architecture_and_react_migration.md
+localStorage_flow.md
+project_summary.md

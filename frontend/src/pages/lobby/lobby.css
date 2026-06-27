@@ -243,10 +243,12 @@
 }
 
 .room-list-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
   flex-shrink: 0;
+  min-height: 32px;
 }
 
 .room-filter-btn {
@@ -256,14 +258,17 @@
 }
 
 .room-filter-label {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 15px;
   color: var(--px-primary);
   text-shadow: 1px 1px 0 #000;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0;
+  max-width: 45%;
 }
 
 .room-filter-modal {
@@ -504,15 +509,17 @@
 
 .lobby-actions {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: stretch;
+  gap: 6px;
   margin-top: 4px;
 }
 
 .lobby-actions .pixel-btn {
   flex: 1;
-  font-size: 17px;
-  padding: 6px 10px;
+  min-width: 0;
+  font-size: 15px;
+  padding: 6px 6px;
+  white-space: nowrap;
 }
 
 .lobby-page .chat-wrapper {

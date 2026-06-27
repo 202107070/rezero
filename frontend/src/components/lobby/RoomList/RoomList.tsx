@@ -10,6 +10,7 @@ interface RoomListProps {
   onPageChange: (page: number) => void;
   onJoinRoom: (room: Room) => void;
   onCreateRoom: () => void;
+  onOpenBuild: () => void;
   onOpenFilter: () => void;
   onPractice: () => void;
 }
@@ -21,6 +22,7 @@ export function RoomList({
   onPageChange,
   onJoinRoom,
   onCreateRoom,
+  onOpenBuild,
   onOpenFilter,
   onPractice,
 }: RoomListProps) {
@@ -30,10 +32,10 @@ export function RoomList({
   return (
     <div className="pixel-card d-flex flex-column room-list-card">
       <div className="room-list-toolbar">
+        <span className="room-filter-label">{filterSummary}</span>
         <button type="button" className="pixel-btn pixel-btn-secondary room-filter-btn" onClick={onOpenFilter}>
           필터
         </button>
-        <span className="room-filter-label">{filterSummary}</span>
       </div>
       <div className="room-list-grid">
         {Array.from({ length: ROOMS_PER_PAGE }, (_, i) => {
@@ -64,6 +66,9 @@ export function RoomList({
       <div className="lobby-actions">
         <button type="button" className="pixel-btn pixel-btn-primary" onClick={onCreateRoom}>
           방만들기
+        </button>
+        <button type="button" className="pixel-btn pixel-btn-warning" onClick={onOpenBuild}>
+          빌드 시스템
         </button>
         <button type="button" className="pixel-btn pixel-btn-secondary" onClick={onPractice}>
           연습모드

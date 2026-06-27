@@ -8,7 +8,6 @@ interface RoomProfileModalProps {
   playerIndex: number | null;
   myCharacter: string;
   isHost: boolean;
-  roomMode: string;
   onClose: () => void;
   onKick: (index: number, name: string) => void;
 }
@@ -19,7 +18,6 @@ export function RoomProfileModal({
   playerIndex,
   myCharacter,
   isHost,
-  roomMode,
   onClose,
   onKick,
 }: RoomProfileModalProps) {
@@ -40,7 +38,7 @@ export function RoomProfileModal({
           {player.isHost && <div className="slot-host-badge" style={{ visibility: 'visible', fontSize: '18px' }}>HOST</div>}
         </div>
         <div className="text-center">
-          {isHost && !player.isHost && roomMode !== '1/1' && playerIndex !== null && (
+          {isHost && !player.isHost && playerIndex !== null && (
             <button
               type="button"
               className="pixel-btn pixel-btn-primary"

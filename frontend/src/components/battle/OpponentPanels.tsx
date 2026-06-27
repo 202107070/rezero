@@ -117,7 +117,6 @@ export default function OpponentPanels({
               code={(problems[bot.currentProblem] || currentProblem).question || ''}
               answers={[]}
               problemIndex={-1}
-              correctBlanks={{}}
               breakingBlanks={{}}
               isLocked
               isBotView
