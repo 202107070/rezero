@@ -97,11 +97,33 @@ npm run backend
 
 ### ⚠️ 협업 시 주의사항
 
-1. **`node_modules`는 Git에 올리지 않습니다.** 저장소 루트에서 `npm install` 한 번만 실행하세요.
-2. **리눅스 서버의 `node_modules`를 Windows에서 그대로 쓰지 마세요.** Electron은 OS별 바이너리가 달라 실행이 실패할 수 있습니다.
-3. **코드는 Git으로 공유**하고, 의존성은 저장소 루트에서 `npm install` 한 번으로 설치하세요.
-4. 기존 `frontend/node_modules`, `backend/node_modules` 폴더가 있다면 삭제 후 루트에서 다시 `npm install` 하세요.
-5. `package-lock.json`은 루트에만 유지합니다. (버전 고정용)
+1. **`package.json` / `package-lock.json`은 Git에 반드시 포함합니다.** `.gitignore`에 넣지 마세요. 팀 전체가 같은 의존성 버전을 쓰려면 이 파일들이 저장소에 있어야 합니다.
+2. **`node_modules`만 Git에 올리지 않습니다.** clone/pull 후 **저장소 루트(`rezero/`)** 에서 `npm install` 한 번 실행하세요.
+3. **명령어도 루트에서 실행합니다.** `frontend/` 또는 `backend/` 폴더 안에서 `npm run …` 하면 모듈을 찾지 못하는 경우가 많습니다.
+4. **리눅스 서버의 `node_modules`를 Windows PC로 복사해 쓰지 마세요.** Electron은 OS별 바이너리가 달라 실행이 실패할 수 있습니다.
+5. 예전 구조로 남아 있는 `frontend/node_modules`, `backend/node_modules` 폴더가 있으면 **삭제**한 뒤, 루트에서 `npm install` 을 다시 하세요.
+6. `package-lock.json`은 **루트에만** 유지합니다. (버전 고정용)
+
+### 자주 나는 오류 (트러블슈팅)
+
+| 증상 | 해결 |
+|------|------|
+| `Cannot find module 'react'` 등 모듈 없음 | 루트에서 `npm install` 실행. `frontend/` 안에서 install 하지 않기 |
+| `frontend` 폴더에서 `npm run dev` 실패 | `cd ..` 후 `npm run dev` 또는 `npm run electron:dev` |
+| pull 후 갑자기 실행 안 됨 | 루트에서 `git pull` → `npm install` (lock 파일이 바뀌었을 수 있음) |
+| Electron 관련 이상 | `frontend/node_modules` 삭제 후 루트에서 `npm install` 재실행 |
+| `preinstall` / 루트 설치 안내 메시지 | `frontend/`·`backend/`가 아닌 **프로젝트 루트**에서 `npm install` |
+
+**클린 재설치 (문제 계속될 때, 루트에서):**
+
+```bash
+# Windows PowerShell 예시
+Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force frontend/node_modules -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force backend/node_modules -ErrorAction SilentlyContinue
+npm install
+npm run electron:dev
+```
 
 ### 자주 쓰는 명령어
 

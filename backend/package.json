@@ -1,3 +1,6 @@
 {
-  "type": "commonjs"
+  "type": "commonjs",
+  "scripts": {
+    "preinstall": "node ../scripts/guard-root-install.js"
+  }
 }

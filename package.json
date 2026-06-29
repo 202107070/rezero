@@ -2,6 +2,10 @@
   "name": "rezero",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
   "main": "frontend/dist-electron/main.js",
   "scripts": {
     "dev": "vite --config frontend/vite.config.ts --host 0.0.0.0 --port 5173",
