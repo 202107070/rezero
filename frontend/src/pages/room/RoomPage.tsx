@@ -23,8 +23,8 @@ import {
   loadItemInventory,
   type ItemKey,
 } from '../../constants/itemTypes';
+import { setKickedCount, getKickedCount } from '../../services/roomStore';
 import { ROUTES } from '../../constants/routes';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
 import type { GameMode } from '../../types/lobby';
 import {
   clearRoomSession,
@@ -83,13 +83,7 @@ export default function RoomPage() {
   const [kickTarget, setKickTarget] = useState<{ index: number; name: string } | null>(null);
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlertModal, setShowAlertModal] = useState(false);
-  const [kickedCount, setKickedCount] = useState(() => {
-    try {
-      return parseInt(localStorage.getItem(`${STORAGE_KEYS.ROOM_KICKED_PREFIX}${roomId}`) || '0', 10);
-    } catch {
-      return 0;
-    }
-  });
+  const [kickedCount, setKickedCountState] = useState(() => getKickedCount(roomId));
 
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(initialPlayers);
   const botReadyTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
@@ -210,8 +204,8 @@ export default function RoomPage() {
     });
 
     const newKicked = kickedCount + 1;
-    setKickedCount(newKicked);
-    localStorage.setItem(`${STORAGE_KEYS.ROOM_KICKED_PREFIX}${roomId}`, String(newKicked));
+    setKickedCountState(newKicked);
+    setKickedCount(roomId, newKicked);
     setMessages((prev) => [...prev, { type: 'sys', text: `>> [${kickedName}] 님이 강퇴되었습니다.` }]);
     updateRoomPlayerCount(roomId);
     setShowKickModal(false);
@@ -235,6 +229,8 @@ export default function RoomPage() {
   };
 
   const handleInviteBot = (index: number) => {
+    if (DEMO_BOT_POOL.length === 0) return;
+
     const slotIndex = roomMode === '1/1' ? 1 : index;
     if (!host?.isHost || players[slotIndex] !== null || occupiedCount >= maxOccupancy) return;
 

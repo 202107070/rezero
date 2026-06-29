@@ -1,5 +1,3 @@
-import { STORAGE_KEYS } from '../../constants/storageKeys';
-
 export interface DemoBot {
   id: string;
   name: string;
@@ -17,16 +15,9 @@ export interface DemoBot {
   scoreBonusByProblem?: number[];
 }
 
-export const DEMO_BOT_POOL = [
-  { name: '알고리즘깎는노인', avatar: '👴', style: 'brute', tag: 'BASE' },
-  { name: 'DP마스터', avatar: '🧙', style: 'dp', tag: 'MEMO' },
-  { name: '그리디왕', avatar: '🦊', style: 'greedy', tag: 'FAST' },
-  { name: '자료구조봇', avatar: '🤖', style: 'hash', tag: 'HASH' },
-  { name: '이분탐색요정', avatar: '🧚', style: 'binary', tag: 'BINARY' },
-  { name: '큐러버', avatar: '🐼', style: 'queue', tag: 'QUEUE' },
-  { name: '백트래커', avatar: '🐉', style: 'backtrack', tag: 'DFS' },
-  { name: '시뮬레이터', avatar: '🐱', style: 'simulate', tag: 'SIM' },
-];
+export const DEMO_BOT_POOL: Array<{ name: string; avatar: string; style: string; tag: string }> = [];
+
+const GENERIC_OPPONENT_PROFILE = { style: 'player', tag: 'PVP' };
 
 function hashString(value: string): number {
   let hash = 2166136261;
@@ -62,7 +53,7 @@ export interface BattleRoomPlayer {
 function buildBotFromProfile(
   index: number,
   botCount: number,
-  profile: (typeof DEMO_BOT_POOL)[number],
+  profile: { style: string; tag: string },
   name: string,
   avatar: string,
   id: string,
@@ -83,41 +74,27 @@ function buildBotFromProfile(
 }
 
 export function createDemoOpponentRoster(
-  roomMode: string,
-  maxPlayers: string,
-  roomId: string,
+  _roomMode: string,
+  _maxPlayers: string,
+  _roomId: string,
   roomRoster?: BattleRoomPlayer[],
 ): Omit<DemoBot, 'solveScheduleByProblem' | 'blankAnswersByProblem' | 'scoreBonusByProblem'>[] {
   const roomOpponents = (roomRoster || []).filter((player) => !player.isHost);
   if (roomOpponents.length > 0) {
     const botCount = roomOpponents.length;
-    return roomOpponents.map((player, index) => {
-      const profile = DEMO_BOT_POOL[index % DEMO_BOT_POOL.length];
-      return buildBotFromProfile(
+    return roomOpponents.map((player, index) =>
+      buildBotFromProfile(
         index,
         botCount,
-        profile,
+        GENERIC_OPPONENT_PROFILE,
         player.name,
         player.character,
-        `bot-${player.id}`,
-      );
-    });
+        `player-${player.id}`,
+      ),
+    );
   }
 
-  const parsedMax = Math.max(2, parseInt(maxPlayers, 10) || 2);
-  let kicked = 0;
-  try {
-    kicked = parseInt(localStorage.getItem(`${STORAGE_KEYS.ROOM_KICKED_PREFIX}${roomId}`) || '0', 10);
-  } catch {
-    kicked = 0;
-  }
-  const botCount = roomMode === '1/1' ? 1 : clamp(parsedMax - 1 - kicked, 1, 7);
-
-  return Array.from({ length: botCount }, (_, index) => {
-    const profile = DEMO_BOT_POOL[index % DEMO_BOT_POOL.length];
-    const name = index < DEMO_BOT_POOL.length ? profile.name : `${profile.name}${Math.floor(index / DEMO_BOT_POOL.length) + 1}`;
-    return buildBotFromProfile(index, botCount, profile, name, profile.avatar, `bot-${index + 1}`);
-  });
+  return [];
 }
 
 type ProblemLike = { title?: string; question?: string; answer?: Record<string, string[]>; difficulty?: string };

@@ -1,6 +1,5 @@
 import problems from '../data/problems.js';
 import type { ItemKey } from '../constants/itemTypes';
-import { STORAGE_KEYS } from '../constants/storageKeys';
 import { DIFF_TO_KOREAN } from '../constants/roomConstants';
 import type { GameMode } from '../types/lobby';
 import type { RoomPlayer } from '../types/room';
@@ -8,6 +7,14 @@ import type { ProblemVisual } from '../types/battle';
 import { getLangKey } from '../utils/battle/codeUtils';
 import { problemSupportsLang } from '../utils/problemTypeUtils';
 import { normalizeBattleProblem } from '../utils/battle/problemResultUtils';
+import {
+  clearKickedCount,
+  loadDynamicRooms,
+  persistDynamicRooms,
+  removeRoomById,
+  updateRoomStatus,
+} from './roomStore';
+import { clearBattleSessionForLeave, setBattleProblems, setBattleSettings } from './sessionStore';
 
 type ProblemRecord = {
   id: string;
@@ -21,22 +28,6 @@ type ProblemRecord = {
   explanation: string;
   visual?: ProblemVisual | null;
 };
-
-const SESSION_KEYS_TO_CLEAR = (sessionKey: string) => [
-  `battleDraft_${sessionKey}`,
-  `battleDraftCode_${sessionKey}`,
-  `battleDraftMeta_${sessionKey}`,
-  `battleSubmittedProblems_${sessionKey}`,
-  `battleDemoState_${sessionKey}`,
-  'battleSubmission',
-  'battleProblemData',
-  'battleProblemTitle',
-  'myBattleCode',
-  'opponentBattleCode',
-  'roomUsers',
-  'battleProblems',
-  'battleSettings',
-];
 
 function mapProblem(p: ProblemRecord) {
   return normalizeBattleProblem({
@@ -88,38 +79,28 @@ export function prepareBattleStart(params: {
   const sessionKey = params.roomId ? `battle-${params.roomId}` : 'battle-solo';
 
   try {
-    SESSION_KEYS_TO_CLEAR(sessionKey).forEach((key) => localStorage.removeItem(key));
+    clearBattleSessionForLeave(sessionKey);
 
-    localStorage.setItem('battleProblems', JSON.stringify(selectedProblems));
-    localStorage.setItem(
-      'battleSettings',
-      JSON.stringify({
-        roomId: params.roomId,
-        lang: params.myLanguage,
-        diff: params.settingsDiff,
-        count: String(selectedProblems.length || count),
-        maxPlayers: String(params.settingsMaxPlayers),
-        roomMode: params.roomMode,
-        gameMode: params.gameMode || 'item',
-        selectedItems: params.selectedItems || [],
-        roomRoster: (params.roomRoster || []).map((player) => ({
-          id: player.id,
-          name: player.name,
-          character: player.character,
-          isHost: player.isHost,
-        })),
-      }),
-    );
+    setBattleProblems(selectedProblems);
+    setBattleSettings({
+      roomId: params.roomId,
+      lang: params.myLanguage,
+      diff: params.settingsDiff,
+      count: String(selectedProblems.length || count),
+      maxPlayers: String(params.settingsMaxPlayers),
+      roomMode: params.roomMode,
+      gameMode: params.gameMode || 'item',
+      selectedItems: params.selectedItems || [],
+      roomRoster: (params.roomRoster || []).map((player) => ({
+        id: player.id,
+        name: player.name,
+        character: player.character,
+        isHost: player.isHost,
+      })),
+    });
 
-    const storedRooms = localStorage.getItem(STORAGE_KEYS.DYNAMIC_ROOMS);
-    if (storedRooms) {
-      const dynamicRooms = JSON.parse(storedRooms);
-      const updatedRooms = Array.isArray(dynamicRooms)
-        ? dynamicRooms.map((r: { id: string | number; status: string }) =>
-            String(r.id) === String(params.roomId) ? { ...r, status: 'STARTED' } : r,
-          )
-        : dynamicRooms;
-      localStorage.setItem(STORAGE_KEYS.DYNAMIC_ROOMS, JSON.stringify(updatedRooms));
+    if (params.roomId) {
+      updateRoomStatus(params.roomId, 'STARTED');
     }
   } catch (e) {
     console.error('이전 전투 상태 정리 실패:', e);
@@ -128,33 +109,22 @@ export function prepareBattleStart(params: {
 
 export function clearRoomSession(roomId: string): void {
   try {
-    localStorage.removeItem(`${STORAGE_KEYS.ROOM_KICKED_PREFIX}${roomId}`);
+    clearKickedCount(roomId);
     const sessionKey = roomId ? `battle-${roomId}` : 'battle-solo';
-    SESSION_KEYS_TO_CLEAR(sessionKey).forEach((key) => localStorage.removeItem(key));
+    clearBattleSessionForLeave(sessionKey);
   } catch (e) {
     console.error('세션 정리 실패:', e);
   }
 }
 
 export function removeRoomFromLobby(roomId: string): void {
-  try {
-    const storedRooms = localStorage.getItem(STORAGE_KEYS.DYNAMIC_ROOMS);
-    const dynamicRooms = storedRooms ? JSON.parse(storedRooms) : [];
-    if (Array.isArray(dynamicRooms)) {
-      const updatedRooms = dynamicRooms.filter((r: { id: string | number }) => String(r.id) !== String(roomId));
-      localStorage.setItem(STORAGE_KEYS.DYNAMIC_ROOMS, JSON.stringify(updatedRooms));
-    }
-  } catch {
-    // 삭제 실패해도 로비 이동은 유지
-  }
+  removeRoomById(roomId);
 }
 
 export function updateRoomPlayerCount(roomId: string): void {
   try {
-    const stored = localStorage.getItem(STORAGE_KEYS.DYNAMIC_ROOMS);
-    if (!stored) return;
-    const rooms = JSON.parse(stored);
-    const updated = rooms.map((r: { id: string | number; players: string }) => {
+    const rooms = loadDynamicRooms();
+    const updated = rooms.map((r) => {
       if (String(r.id) === String(roomId)) {
         const parts = String(r.players).split('/');
         const max = parseInt(parts[1] || '8', 10);
@@ -163,7 +133,7 @@ export function updateRoomPlayerCount(roomId: string): void {
       }
       return r;
     });
-    localStorage.setItem(STORAGE_KEYS.DYNAMIC_ROOMS, JSON.stringify(updated));
+    persistDynamicRooms(updated);
   } catch (e) {
     console.error('방 인원 업데이트 실패:', e);
   }

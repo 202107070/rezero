@@ -9,11 +9,17 @@ import { ResultReviewFooter } from '../../components/result/ResultReviewFooter/R
 import { ResultTeamPanel } from '../../components/result/ResultTeamPanel/ResultTeamPanel';
 import { ReviewInviteModal } from '../../components/result/ReviewInviteModal/ReviewInviteModal';
 import { ReviewProblemView } from '../../components/result/ReviewProblemView/ReviewProblemView';
-import { checkNewTitles, loadTitles, saveTitles, type TitleDef } from '../../constants/titleTypes';
+import { checkNewTitles, type TitleDef } from '../../constants/titleTypes';
 import { ROUTES } from '../../constants/routes';
 import { ENABLE_RESULT_BOT_DEPARTURE, MY_RESULT_USER_ID, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
 import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot } from '../../services/battleSessionService';
+import {
+  getBattleDemoState,
+  getBattleSubmission,
+  getRoomUsers,
+  updateRoomUsers,
+} from '../../services/sessionStore';
+import { addGold, getGold, saveTitles, setNewTitleIds, getTitles } from '../../services/userService';
 import {
   clearReviewInvite,
   createReviewInviteId,
@@ -71,24 +77,11 @@ const MY_USER_ID = MY_RESULT_USER_ID;
 type ReviewPhase = 'idle' | 'selecting' | 'reviewing';
 
 function removeMyPresence(): void {
-  try {
-    const stored = localStorage.getItem('roomUsers');
-    if (!stored) return;
-    const users = JSON.parse(stored) as OnlineUser[];
-    const filtered = users.filter((u) => !u.name?.includes(MY_USER_ID));
-    localStorage.setItem('roomUsers', JSON.stringify(filtered));
-  } catch {
-    /* ignore */
-  }
+  updateRoomUsers((users) => users.filter((u) => !u.name?.includes(MY_USER_ID)));
 }
 
 function readOnlineUsers(): OnlineUser[] {
-  try {
-    const stored = localStorage.getItem('roomUsers');
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
+  return getRoomUsers();
 }
 
 export default function ResultPage() {
@@ -97,32 +90,13 @@ export default function ResultPage() {
   const roomId = searchParams.get('roomId') || '';
   const sessionId = getSessionId(roomId);
 
-  const submission = useMemo((): BattleSubmission => {
-    try {
-      return JSON.parse(localStorage.getItem('battleSubmission') || '{}');
-    } catch {
-      return {};
-    }
-  }, []);
+  const submission = useMemo((): BattleSubmission => getBattleSubmission<BattleSubmission>(), []);
 
-  const demoState = useMemo((): DemoState | null => {
-    try {
-      return JSON.parse(localStorage.getItem(`battleDemoState_${sessionId}`) || 'null');
-    } catch {
-      return null;
-    }
-  }, [sessionId]);
+  const demoState = useMemo((): DemoState | null => getBattleDemoState<DemoState>(sessionId), [sessionId]);
 
   const rankingSnapshot = useMemo(() => readFinalRankingSnapshot(sessionId), [sessionId]);
 
-  const roomUsers = useMemo(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('roomUsers') || 'null');
-      return Array.isArray(raw) ? raw : [];
-    } catch {
-      return [];
-    }
-  }, []);
+  const roomUsers = useMemo(() => getRoomUsers(), []);
 
   const demoBots = useMemo(
     () => (Array.isArray(demoState?.battleBots) ? demoState.battleBots : []) as DemoBot[],
@@ -158,13 +132,7 @@ export default function ResultPage() {
   const myCorrectCount =
     allPlayers.find((p) => p.id === MY_USER_ID)?.problemResults?.filter(Boolean).length ?? 0;
 
-  const [totalGold, setTotalGold] = useState(() => {
-    try {
-      return parseInt(localStorage.getItem(STORAGE_KEYS.ROCKY_GOLD) || '0', 10) || 0;
-    } catch {
-      return 0;
-    }
-  });
+  const [totalGold, setTotalGold] = useState(() => getGold());
 
   const [resultPopup, setResultPopup] = useState<{
     show: boolean;
@@ -212,18 +180,12 @@ export default function ResultPage() {
   const losers = allPlayers.slice(Math.ceil(allPlayers.length / 2));
 
   useEffect(() => {
-    try {
-      const storedGold = parseInt(localStorage.getItem(STORAGE_KEYS.ROCKY_GOLD) || '0', 10) || 0;
-      const newGold = storedGold + earnedGold;
-      localStorage.setItem(STORAGE_KEYS.ROCKY_GOLD, String(newGold));
-      setTotalGold(newGold);
-    } catch (e) {
-      console.error('골드 저장 실패:', e);
-    }
+    const newGold = addGold(earnedGold);
+    setTotalGold(newGold);
   }, [earnedGold]);
 
   useEffect(() => {
-    const prev = loadTitles();
+    const prev = getTitles();
     const newStats = { ...prev.stats };
     newStats.totalGames += 1;
 
@@ -239,7 +201,7 @@ export default function ResultPage() {
     const updated = { ...prev, stats: newStats };
     const newTitles = checkNewTitles(updated, newStats);
     saveTitles(updated);
-    localStorage.setItem('rocky_new_titles', JSON.stringify(newTitles.map((t) => t.id)));
+    setNewTitleIds(newTitles.map((t) => t.id));
 
     const totalPlayers = allPlayers.length;
     let mainMsg = '';

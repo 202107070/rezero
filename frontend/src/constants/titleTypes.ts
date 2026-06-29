@@ -1,3 +1,5 @@
+import { getTitles, saveTitles as persistTitles } from '../services/userService';
+
 export type TitleRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 
 export interface TitleStats {
@@ -37,23 +39,12 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'all_rounder', name: '올라운더', desc: '모든 언어 1승', icon: '🌟', rarity: 'legendary', check: (s) => (s.langWins?.JAVA || 0) > 0 && (s.langWins?.PYTHON || 0) > 0 && (s.langWins?.CPP || 0) > 0 },
 ];
 
-const DEFAULT_TITLE_DATA: TitleData = {
-  owned: [],
-  equipped: null,
-  stats: { totalWins: 0, consecutiveWins: 0, totalGames: 0, perfectGame: false, avgSpeed: 0, langWins: {} },
-};
-
 export function loadTitles(): TitleData {
-  try {
-    const raw = localStorage.getItem('rocky_titles');
-    return raw ? (JSON.parse(raw) as TitleData) : { ...DEFAULT_TITLE_DATA };
-  } catch {
-    return { ...DEFAULT_TITLE_DATA };
-  }
+  return getTitles();
 }
 
 export function saveTitles(data: TitleData): void {
-  localStorage.setItem('rocky_titles', JSON.stringify(data));
+  persistTitles(data);
 }
 
 export function getEquippedTitle(data: TitleData | null | undefined): TitleDef | null {

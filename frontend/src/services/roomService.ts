@@ -1,6 +1,5 @@
 import type { GameMode, Room } from '../types/lobby';
-import { STORAGE_KEYS } from '../constants/storageKeys';
-import { loadDynamicRooms, persistDynamicRooms } from '../utils/roomUtils';
+import { clearKickedCount, loadDynamicRooms, persistDynamicRooms } from './roomStore';
 
 export interface CreateRoomParams {
   roomTitle: string;
@@ -16,7 +15,7 @@ export function createRoom(params: CreateRoomParams): Room {
   const currentDynamic = loadDynamicRooms();
   const maxDynamicId = currentDynamic.reduce((max, r) => Math.max(max, parseInt(String(r.id)) || 0), 0);
   const newId = Math.max(4, maxDynamicId) + 1;
-  localStorage.removeItem(`${STORAGE_KEYS.ROOM_KICKED_PREFIX}${String(newId)}`);
+  clearKickedCount(String(newId));
 
   const finalMax = '8';
   const finalCount = params.problemCount;

@@ -15,17 +15,19 @@ SELF_ITEM_KEYS,
 type ItemKey,
 } from '../../constants/itemTypes';
 import { ROUTES } from '../../constants/routes';
+import { getBattleProblems, getBattleSettings } from '../../services/sessionStore';
 import {
-clearBattleAndLeave,
-getSessionId,
-markProblemSubmitted,
-persistBattleSession,
-persistBattleSubmission,
-restoreBattleSession,
-saveFinalRankingSnapshot,
-saveRoomUsers,
-syncBattleDemoState,
+  clearBattleAndLeave,
+  getSessionId,
+  markProblemSubmitted,
+  persistBattleSession,
+  persistBattleSubmission,
+  restoreBattleSession,
+  saveFinalRankingSnapshot,
+  saveRoomUsers,
+  syncBattleDemoState,
 } from '../../services/battleSessionService';
+import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
 import { applyAudioSettings, BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
@@ -73,17 +75,6 @@ const SELF_ITEM_META: Record<string, { icon: string; name: string }> = {
   buildCharge: { icon: '🔧', name: '빌드+' },
 };
 
-const DEFAULT_ITEMS: ItemInventory = {
-  paint: 40,
-  revealLength: 40,
-  revealPrev: 40,
-  lightning: 40,
-  timeReduce: 40,
-  scribble: 40,
-  blankBreak: 40,
-  buildCharge: 40,
-};
-
 export default function BattlePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -91,14 +82,7 @@ export default function BattlePage() {
   const freshStart = params.get('fresh') === '1';
   const roomId = params.get('roomId') || '';
   const roomMode = params.get('mode') || '1/1';
-  const battleMeta = useMemo(() => {
-    try {
-      const stored = localStorage.getItem('battleSettings');
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  }, []);
+  const battleMeta = useMemo(() => getBattleSettings(), []);
   const gameMode = params.get('gameMode') || battleMeta.gameMode || 'item';
   const isItemMode = gameMode === 'item';
   const selectedItemKeys = useMemo(() => {
@@ -114,7 +98,8 @@ export default function BattlePage() {
     () => SELF_ITEM_KEYS.filter((key) => selectedItemKeys.has(key)),
     [selectedItemKeys],
   );
-  const battleDiff = battleMeta.diff || 'NORMAL';
+  const battleDiff = String(battleMeta.diff ?? 'NORMAL');
+  const battleCount = String(battleMeta.count ?? '5');
   const roomRoster = Array.isArray(battleMeta.roomRoster) ? battleMeta.roomRoster : undefined;
   const maxPlayersParam = params.get('maxPlayers') || '2';
   const lang = params.get('lang') || 'JAVA';
@@ -128,11 +113,11 @@ export default function BattlePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
   const totalBattleSeconds = useMemo(
-    () => getTotalBattleSeconds(battleDiff, Math.max(1, problems.length || parseInt(battleMeta.count, 10) || 5)),
-    [battleDiff, problems.length, battleMeta.count],
+    () => getTotalBattleSeconds(battleDiff, Math.max(1, problems.length || parseInt(battleCount, 10) || 5)),
+    [battleDiff, problems.length, battleCount],
   );
   const [remaining, setRemaining] = useState(() =>
-    getTotalBattleSeconds(battleDiff, Math.max(1, parseInt(battleMeta.count, 10) || 5)),
+    getTotalBattleSeconds(battleDiff, Math.max(1, parseInt(battleCount, 10) || 5)),
   );
   const [elapsedSec, setElapsedSec] = useState(0);
   const [showGameOver, setShowGameOver] = useState(false);
@@ -152,13 +137,7 @@ export default function BattlePage() {
   const [finishedAtElapsedSec, setFinishedAtElapsedSec] = useState(-1);
   const [problemResults, setProblemResults] = useState<ProblemResultsMap>({});
   const problemResultsRef = useRef<ProblemResultsMap>({});
-  const [myRatingScore] = useState(() => {
-    try {
-      return parseInt(localStorage.getItem('rocky_rating_score') || '1000', 10) || 1000;
-    } catch {
-      return 1000;
-    }
-  });
+  const [myRatingScore] = useState(() => getRatingScore());
   const [problemSolved, setProblemSolved] = useState(false);
   const [problemStartTime, setProblemStartTime] = useState(Date.now());
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -170,14 +149,7 @@ export default function BattlePage() {
   const [opponentEffects, setOpponentEffects] = useState<
     Record<string, Record<number, { panelEffect?: { type: string; expiresAt: number } }>>
   >({});
-  const [itemInventory, setItemInventory] = useState<ItemInventory>(() => {
-    try {
-      const stored = localStorage.getItem('rocky_items');
-      return stored ? { ...DEFAULT_ITEMS, ...JSON.parse(stored) } : { ...DEFAULT_ITEMS };
-    } catch {
-      return { ...DEFAULT_ITEMS };
-    }
-  });
+  const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [sessionSavedSnapshot, setSessionSavedSnapshot] = useState('');
   const [, setSaveStatus] = useState<'saving' | 'saved' | 'unsaved'>('saved');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -518,8 +490,7 @@ export default function BattlePage() {
     };
 
     try {
-      const stored = localStorage.getItem('battleProblems');
-      const parsed = stored ? JSON.parse(stored) : null;
+      const parsed = getBattleProblems();
       const baseProblems = normalizeBattleProblems(
         Array.isArray(parsed) && parsed.length > 0 ? parsed : [fallback],
       );
@@ -791,7 +762,7 @@ export default function BattlePage() {
       itemInventoryInitialized.current = true;
       return;
     }
-    localStorage.setItem('rocky_items', JSON.stringify(itemInventory));
+    persistItemInventory(itemInventory);
   }, [itemInventory]);
 
   useEffect(() => {

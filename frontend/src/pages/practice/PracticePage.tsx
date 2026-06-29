@@ -12,7 +12,6 @@ import { isBlankBasedType } from '../../utils/problemTypeUtils';
 import {
   createExercisePool,
   isExerciseCorrect,
-  PRACTICE_STATE_KEY,
   type PracticeExercise,
 } from '../../utils/practiceUtils';
 import './practice.css';
@@ -57,7 +56,6 @@ export default function PracticePage() {
     setUserAnswers(Array(pool.length).fill(-1));
     setBlankAnswers(Array(pool.length).fill(null).map(() => []));
     setShowSetup(false);
-    localStorage.removeItem(PRACTICE_STATE_KEY);
   }, [count, diff, type, langKey]);
 
   useEffect(() => {
@@ -139,7 +137,6 @@ export default function PracticePage() {
 
   const handleExit = () => {
     if (window.confirm('연습을 종료하고 로비로 돌아가시겠습니까?')) {
-      localStorage.removeItem(PRACTICE_STATE_KEY);
       navigate(ROUTES.LOBBY);
     }
   };

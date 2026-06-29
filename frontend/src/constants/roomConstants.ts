@@ -1,5 +1,5 @@
-import type { CharacterOption, LanguageOption, RoomPlayer } from '../types/room';
-import { STORAGE_KEYS } from './storageKeys';
+import type { RoomPlayer, CharacterOption, LanguageOption } from '../types/room';
+import { getKickedCount } from '../services/roomStore';
 
 export const LANGUAGES: LanguageOption[] = [
   { id: 'java', icon: '☕', label: 'Java' },
@@ -16,16 +16,7 @@ export const CHARACTERS: CharacterOption[] = [
   { id: 'char4', icon: '🤖', label: '로봇' },
 ];
 
-export const DEMO_BOT_POOL = [
-  { name: '알고리즘노인', language: '🐍', character: '🧙' },
-  { name: 'DP마스터', language: '☕', character: '🤖' },
-  { name: '그리디왕', language: '🐍', character: '🦊' },
-  { name: '자료구조봇', language: '☕', character: '🤖' },
-  { name: '이분탐색요정', language: '🐍', character: '🧚' },
-  { name: '큐러버', language: '☕', character: '🐼' },
-  { name: '백트래커', language: '🐍', character: '🐉' },
-  { name: '시뮬레이터', language: '☕', character: '🐱' },
-];
+export const DEMO_BOT_POOL: Array<{ name: string; language: string; character: string }> = [];
 
 export const LANG_MAP: Record<string, string> = {
   JAVA: 'java',
@@ -37,12 +28,8 @@ export const LANG_MAP: Record<string, string> = {
 export const DIFF_MAP: Record<string, string> = { 쉬움: 'EASY', 보통: 'NORMAL', 어려움: 'HARD' };
 export const DIFF_TO_KOREAN: Record<string, string> = { EASY: '쉬움', NORMAL: '보통', HARD: '어려움', EXTREME: '어려움' };
 
-export function getKickedCount(roomId: string): number {
-  try {
-    return parseInt(localStorage.getItem(`${STORAGE_KEYS.ROOM_KICKED_PREFIX}${roomId}`) || '0', 10);
-  } catch {
-    return 0;
-  }
+export function getKickedCountForRoom(roomId: string): number {
+  return getKickedCount(roomId);
 }
 
 export function buildInitialPlayers(): (RoomPlayer | null)[] {

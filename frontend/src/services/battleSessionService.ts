@@ -1,7 +1,26 @@
-import { STORAGE_KEYS } from '../constants/storageKeys';
 import type { BattleProblem, RoomUser } from '../types/battle';
 import type { DemoBot } from '../utils/battle/demoBots';
 import type { FinalRankingSnapshot } from '../utils/battle/rankUtils';
+import { removeRoomById } from './roomStore';
+import {
+  clearBattleSessionForLeave,
+  getBattleDraft,
+  getBattleDraftCodes,
+  getBattleDraftMeta,
+  mergeBattleDemoState,
+  setBattleDraft,
+  setBattleDraftCodes,
+  setBattleDraftMeta,
+  setBattleDemoState,
+  setBattleProblemMeta,
+  setBattleSubmission,
+  setBattleSubmittedProblems,
+  setFinalRankingSnapshot,
+  setMyBattleCode,
+  setOpponentBattleCode,
+  setRoomUsers,
+  getFinalRankingSnapshot,
+} from './sessionStore';
 
 function shouldSyncBackend(): boolean {
   return !import.meta.env.DEV || import.meta.env.VITE_SYNC_BACKEND === 'true';
@@ -27,32 +46,26 @@ export async function persistBattleSession(params: {
   const snapshot = (params.answers || []).join('||');
   try {
     params.onStatus('saving');
-    localStorage.setItem(
-      `battleDraft_${params.sessionId}`,
-      JSON.stringify({
-        roomId: params.roomId,
-        sessionId: params.sessionId,
-        lang: params.langKey,
-        currentIndex: params.currentIndex,
-        remaining: params.remaining,
-        answers: params.answers,
-        problems: params.problems,
-        snapshot,
-        updatedAt: new Date().toISOString(),
-      }),
-    );
-    localStorage.setItem(`battleDraftCode_${params.sessionId}`, JSON.stringify(params.answers));
-    localStorage.setItem(
-      `battleDraftMeta_${params.sessionId}`,
-      JSON.stringify({
-        roomId: params.roomId,
-        sessionId: params.sessionId,
-        lang: params.langKey,
-        currentIndex: params.currentIndex,
-        remaining: params.remaining,
-        updatedAt: new Date().toISOString(),
-      }),
-    );
+    setBattleDraft(params.sessionId, {
+      roomId: params.roomId,
+      sessionId: params.sessionId,
+      lang: params.langKey,
+      currentIndex: params.currentIndex,
+      remaining: params.remaining,
+      answers: params.answers,
+      problems: params.problems,
+      snapshot,
+      updatedAt: new Date().toISOString(),
+    });
+    setBattleDraftCodes(params.sessionId, params.answers);
+    setBattleDraftMeta(params.sessionId, {
+      roomId: params.roomId,
+      sessionId: params.sessionId,
+      lang: params.langKey,
+      currentIndex: params.currentIndex,
+      remaining: params.remaining,
+      updatedAt: new Date().toISOString(),
+    });
 
     if (shouldSyncBackend()) {
       await fetch('/api/v1/build/session/save', {
@@ -103,25 +116,29 @@ export function restoreBattleSession(params: {
   snapshot?: string;
 } {
   try {
-    const storedDraft = localStorage.getItem(`battleDraft_${params.sessionId}`);
-    if (!storedDraft) return { restored: false };
+    const draft = getBattleDraft(params.sessionId);
+    if (!draft) return { restored: false };
 
-    const draft = JSON.parse(storedDraft);
-    const storedCodes = localStorage.getItem(`battleDraftCode_${params.sessionId}`);
-    const parsedCodes = storedCodes ? JSON.parse(storedCodes) : draft.answers;
+    const parsedCodes = getBattleDraftCodes(params.sessionId) ?? (draft.answers as string[] | undefined);
     const nextAnswers = Array.isArray(parsedCodes) ? parsedCodes : [];
-    const nextProblems = Array.isArray(draft.problems) && draft.problems.length > 0 ? draft.problems : params.baseProblems;
+    const draftProblems = draft.problems;
+    const nextProblems =
+      Array.isArray(draftProblems) && draftProblems.length > 0
+        ? (draftProblems as BattleProblem[])
+        : params.baseProblems;
 
     let currentIndex = 0;
     let remaining = params.defaultRemainingSeconds;
-    const storedMeta = localStorage.getItem(`battleDraftMeta_${params.sessionId}`);
-    if (storedMeta) {
-      const meta = JSON.parse(storedMeta);
-      if (meta?.currentIndex !== undefined) {
-        currentIndex = Math.min(Math.max(parseInt(meta.currentIndex, 10) || 0, 0), Math.max((nextProblems.length || params.baseProblems.length) - 1, 0));
+    const meta = getBattleDraftMeta(params.sessionId);
+    if (meta) {
+      if (meta.currentIndex !== undefined) {
+        currentIndex = Math.min(
+          Math.max(parseInt(String(meta.currentIndex), 10) || 0, 0),
+          Math.max((nextProblems.length || params.baseProblems.length) - 1, 0),
+        );
       }
-      if (meta?.remaining !== undefined) {
-        remaining = Math.max(0, parseInt(meta.remaining, 10) || params.defaultRemainingSeconds);
+      if (meta.remaining !== undefined) {
+        remaining = Math.max(0, parseInt(String(meta.remaining), 10) || params.defaultRemainingSeconds);
       }
     }
 
@@ -163,129 +180,87 @@ export function persistBattleSubmission(params: {
   selectedDemoBotCode: string;
 }): void {
   const currentCode = params.answers[params.currentIndex] || params.answers[0] || '';
-  localStorage.setItem(
-    'battleSubmission',
-    JSON.stringify({
-      historyId: `${params.roomId || 'solo'}::${Date.now()}`,
-      roomId: params.roomId,
-      problems: params.problems,
-      answers: params.answers,
-      lang: params.langKey,
-      submittedAt: new Date().toISOString(),
-      codes: params.answers.slice(),
-      code: currentCode,
-      mode: params.battleMode,
-      maxPlayers: params.maxPlayersParam,
-      currentIndex: params.currentIndex,
-      ingameScore: params.ingameScore,
-      solveTimes: params.solveTimes,
-      problemResults: params.problemResults,
-      myRatingScore: params.myRatingScore,
-    }),
-  );
-  localStorage.setItem('myBattleCode', currentCode);
-  localStorage.setItem('battleProblemTitle', params.problems[params.currentIndex]?.title || params.problems[0]?.title || '');
+  setBattleSubmission({
+    historyId: `${params.roomId || 'solo'}::${Date.now()}`,
+    roomId: params.roomId,
+    problems: params.problems,
+    answers: params.answers,
+    lang: params.langKey,
+    submittedAt: new Date().toISOString(),
+    codes: params.answers.slice(),
+    code: currentCode,
+    mode: params.battleMode,
+    maxPlayers: params.maxPlayersParam,
+    currentIndex: params.currentIndex,
+    ingameScore: params.ingameScore,
+    solveTimes: params.solveTimes,
+    problemResults: params.problemResults,
+    myRatingScore: params.myRatingScore,
+  });
+  setMyBattleCode(currentCode);
   const p = params.problems[params.currentIndex] || params.problems[0];
-  localStorage.setItem(
-    'battleProblemData',
-    JSON.stringify({
-      title: p?.title || '',
-      question: p?.question || '',
-      explanation: p?.explanation || '',
-      answer: p?.answer || {},
-      options: p?.options || null,
-      type: p?.type || '',
-    }),
-  );
-  localStorage.setItem('opponentBattleCode', params.selectedDemoBotCode);
-  localStorage.setItem(
-    `battleDemoState_${params.sessionId}`,
-    JSON.stringify({
-      roomId: params.roomId,
-      sessionId: params.sessionId,
-      mode: params.battleMode,
-      maxPlayers: params.maxPlayersParam,
-      lang: params.langKey,
-      currentIndex: params.currentIndex,
-      remaining: params.remaining,
-      roundSeconds: params.roundSeconds,
-      answers: params.answers,
-      localSolvedProblems: params.localSolvedProblems,
-      finishedAtElapsedSec: params.finishedAtElapsedSec,
-      demoSpectating: params.demoSpectating,
-      spectatorLocked: params.spectatorLocked,
-      battleBots: params.battleBots,
-      ingameScore: params.ingameScore,
-      solveTimes: params.solveTimes,
-      problemResults: params.problemResults,
-      myRatingScore: params.myRatingScore,
-      updatedAt: new Date().toISOString(),
-    }),
-  );
+  setBattleProblemMeta(p?.title || '', {
+    title: p?.title || '',
+    question: p?.question || '',
+    explanation: p?.explanation || '',
+    answer: p?.answer || {},
+    options: p?.options || null,
+    type: p?.type || '',
+  });
+  setOpponentBattleCode(params.selectedDemoBotCode);
+  setBattleDemoState(params.sessionId, {
+    roomId: params.roomId,
+    sessionId: params.sessionId,
+    mode: params.battleMode,
+    maxPlayers: params.maxPlayersParam,
+    lang: params.langKey,
+    currentIndex: params.currentIndex,
+    remaining: params.remaining,
+    roundSeconds: params.roundSeconds,
+    answers: params.answers,
+    localSolvedProblems: params.localSolvedProblems,
+    finishedAtElapsedSec: params.finishedAtElapsedSec,
+    demoSpectating: params.demoSpectating,
+    spectatorLocked: params.spectatorLocked,
+    battleBots: params.battleBots,
+    ingameScore: params.ingameScore,
+    solveTimes: params.solveTimes,
+    problemResults: params.problemResults,
+    myRatingScore: params.myRatingScore,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function syncBattleDemoState(sessionId: string, state: Record<string, unknown>): void {
   try {
-    localStorage.setItem(`battleDemoState_${sessionId}`, JSON.stringify({ ...state, updatedAt: new Date().toISOString() }));
+    mergeBattleDemoState(sessionId, state);
   } catch (e) {
     console.error('데모 상태 저장 실패:', e);
   }
 }
 
 export function markProblemSubmitted(sessionId: string, indices: number[]): void {
-  localStorage.setItem(`battleSubmittedProblems_${sessionId}`, JSON.stringify(indices));
+  setBattleSubmittedProblems(sessionId, indices);
 }
 
 export function clearBattleAndLeave(sessionId: string, roomId: string): void {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.DYNAMIC_ROOMS);
-    if (stored && roomId) {
-      const rooms = JSON.parse(stored);
-      const updated = rooms.filter((r: { id: string | number }) => String(r.id) !== String(roomId));
-      localStorage.setItem(STORAGE_KEYS.DYNAMIC_ROOMS, JSON.stringify(updated));
-    }
-  } catch (e) {
-    console.error('방 삭제 실패:', e);
+  if (roomId) {
+    removeRoomById(roomId);
   }
-  try {
-    [
-      'battleProblems',
-      'battleSettings',
-      'battleSubmission',
-      'battleProblemData',
-      'battleProblemTitle',
-      'myBattleCode',
-      'opponentBattleCode',
-      'roomUsers',
-      `battleSubmittedProblems_${sessionId}`,
-      `battleDraft_${sessionId}`,
-      `battleDraftCode_${sessionId}`,
-      `battleDraftMeta_${sessionId}`,
-      `battleDemoState_${sessionId}`,
-      `battleFinalRankings_${sessionId}`,
-      `${STORAGE_KEYS.ROOM_KICKED_PREFIX}${roomId}`,
-    ].forEach((key) => localStorage.removeItem(key));
-    if (shouldSyncBackend()) {
-      fetch(`/api/v1/build/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }).catch(() => {});
-    }
-  } catch (e) {
-    console.error('세션 삭제 실패:', e);
+  clearBattleSessionForLeave(sessionId);
+  if (shouldSyncBackend()) {
+    fetch(`/api/v1/build/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }).catch(() => {});
   }
 }
 
 export function saveFinalRankingSnapshot(snapshot: FinalRankingSnapshot): void {
-  localStorage.setItem(`battleFinalRankings_${snapshot.sessionId}`, JSON.stringify(snapshot));
+  setFinalRankingSnapshot(snapshot);
 }
 
 export function readFinalRankingSnapshot(sessionId: string): FinalRankingSnapshot | null {
-  try {
-    const raw = localStorage.getItem(`battleFinalRankings_${sessionId}`);
-    return raw ? (JSON.parse(raw) as FinalRankingSnapshot) : null;
-  } catch {
-    return null;
-  }
+  return getFinalRankingSnapshot(sessionId);
 }
 
 export function saveRoomUsers(users: RoomUser[]): void {
-  localStorage.setItem('roomUsers', JSON.stringify(users));
+  setRoomUsers(users);
 }

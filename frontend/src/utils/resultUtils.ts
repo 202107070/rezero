@@ -1,3 +1,4 @@
+import { getBattleSettings, getOpponentBattleCode } from '../services/sessionStore';
 import type { DemoBot } from './battle/demoBots';
 import {
   comparePlayersByRank,
@@ -64,9 +65,9 @@ interface DemoStateLike {
 function readBattleRoundSeconds(problemCount: number, demoState: DemoStateLike | null): number {
   if (demoState?.roundSeconds) return demoState.roundSeconds;
   try {
-    const settings = JSON.parse(localStorage.getItem('battleSettings') || '{}');
-    const count = parseInt(settings.count, 10) || problemCount || 5;
-    return getTotalBattleSeconds(settings.diff || 'NORMAL', count);
+    const settings = getBattleSettings();
+    const count = parseInt(String(settings.count), 10) || problemCount || 5;
+    return getTotalBattleSeconds(String(settings.diff || 'NORMAL'), count);
   } catch {
     return getTotalBattleSeconds('NORMAL', problemCount || 5);
   }
@@ -77,7 +78,7 @@ function parseScore(scoreStr: string | number | undefined): number {
   return Number.isFinite(num) ? num : 0;
 }
 
-/** 스냅샷 우선, 없으면 localStorage 데이터로 재구성 (폴백) */
+/** 스냅샷 우선, 없으면 세션 데이터로 재구성 (폴백) */
 export function buildResultPlayers(params: {
   rankingSnapshot?: FinalRankingSnapshot | null;
   roomUsers: RoomUserLike[];
@@ -239,7 +240,7 @@ export function getPlayerCodeByProblem(
   if (bot && Array.isArray(bot.codeByProblem)) {
     return bot.codeByProblem[problemIndex] || '// 코드를 찾을 수 없습니다.';
   }
-  return localStorage.getItem('opponentBattleCode') || '// 코드를 찾을 수 없습니다.';
+  return getOpponentBattleCode();
 }
 
 // Re-export for tests / battle page

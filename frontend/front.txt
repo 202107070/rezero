@@ -1,0 +1,1201 @@
+================================================================================
+ front.txt — Rocky 배틀 로비 프론트엔드 컴포넌트 가이드
+================================================================================
+
+이 문서는 src/ 아래 UI 코드를 처음 보는 사람도 흐름·역할·연결 관계를 이해할 수
+있도록 작성한다. 화면(도메인)별로 섹션을 나누며, 아직 문서화되지 않은 영역은
+목차에 placeholder 로 남겨 둔다.
+
+  변수·타입·store 필드 사전 → frontend/data-dictionary.txt (백엔드 협업용)
+
+
+--------------------------------------------------------------------------------
+ 목차
+--------------------------------------------------------------------------------
+
+  0. 공통 사항
+  1. 로비 (Lobby)
+  2. 대기실 (Room)
+  3. 배틀 (Battle)
+  4. 결과 (Result)
+  5. 연습 (Practice)
+
+
+================================================================================
+ 0. 공통 사항
+================================================================================
+
+[프로젝트 한 줄 요약]
+  레트로 픽셀 UI의 실시간 코딩 배틀 게임. React SPA + Electron 데스크톱.
+  앱 제목: "Rocky 배틀 로비 - RETRO ARCADE"
+
+[기술 스택]
+  React 19, TypeScript, Vite, React Router 7, Electron
+
+[라우트 (src/constants/routes.ts)]
+  /           → 로비
+  /room       → 대기실
+  /battle     → 배틀
+  /result     → 결과
+  /practice   → 연습
+  /build      → 빌드 (배틀 준비 흐름에서 사용)
+
+[페이지 vs 컴포넌트 역할 분리]
+  pages/     : 라우트에 1:1 대응. 상태·이벤트·navigate·store/서비스 호출 담당 ("컨트롤러")
+  components/: UI 렌더 + props 콜백으로 상위에 입력 전달 (가능한 한 상태 없음)
+
+[모달 공통 패턴]
+  open=false → null (안 그림)
+  바깥(overlay) 클릭 → 흔들림만, 닫히지 않음
+  modal-content 클릭 → stopPropagation
+  폼 오류 → modal-shake-error 클래스
+
+[데이터 저장 — DB 연동 준비 중]
+
+  localStorage 는 사용하지 않는다. 앱 실행 중에만 유지되는 메모리 store 로
+  통일했으며, 백엔드 API 연동 시 store 내부만 교체하면 된다.
+
+  ┌─────────────────────┬──────────────────────────────────────────────┐
+  │ clientPrefsStore    │ 화면·소리 설정 (메모리, 재시작 시 초기화)     │
+  │                     │ display_mode, audio_settings                 │
+  ├─────────────────────┼──────────────────────────────────────────────┤
+  │ userService         │ 골드, 아이템, 칭호, 코드 히스토리, 레이팅     │
+  │ roomStore           │ 유저가 만든 방 목록, 강퇴 카운트             │
+  │ sessionStore        │ 배틀 설정·문제·제출·세션 상태                │
+  │ reviewInviteStore   │ 리뷰 초대 상태                               │
+  └─────────────────────┴──────────────────────────────────────────────┘
+
+  페이지는 store 를 직접 쓰기보다 roomService, userService,
+  battleSessionService, codeHistoryUtils 등 서비스/유틸을 통해 읽고 씁니다.
+  (battleSessionService 에 /api/v1/build/session 저장·삭제 stub 있음)
+
+  mock / 임시 데이터 정리 (현재 상태):
+    - 사전 등록 방 없음 (DEFAULT_ROOMS = [])
+    - 데모 봇·가짜 유저 제거 (로비 유저 목록은 rocky_user 만)
+    - 골드·아이템·칭호 초기값 0 / 빈 상태
+    - 채팅·랭킹 탭: 서버 미연동 (로컬 UI만 동작)
+    - 방은 유저가 [방만들기]로 생성하거나, 추후 API 로 받아올 예정
+
+
+================================================================================
+ 1. 로비 (Lobby)
+================================================================================
+
+--------------------------------------------------------------------------------
+ 1.1 개요
+--------------------------------------------------------------------------------
+
+로비는 앱의 시작 화면(ROUTES.LOBBY = '/')이다.
+플레이어가 여기서:
+
+  - 방 목록을 보고 필터링·페이지 이동·입장 (처음엔 빈 목록)
+  - 새 방 생성 후 대기실(/room)로 이동
+  - 연습 모드(/practice) 설정 후 시작
+  - 로비 채팅 (현재 로컬 mock, 서버 없음)
+  - 프로필·칭호·매치 스토리(코드 히스토리) 확인
+  - 골드·배틀 아이템 인벤토리·룰렛
+  - 온라인 유저 목록 / 랭킹 탭 (현재 본인만 표시)
+  - 설정(화면 모드, BGM) 및 앱 종료
+
+를 수행한다.
+
+
+--------------------------------------------------------------------------------
+ 1.2 관련 파일 위치
+--------------------------------------------------------------------------------
+
+  pages/
+    src/pages/lobby/LobbyPage.tsx    … 로비 페이지 (상태·로직 중심)
+    src/pages/lobby/lobby.css        … 로비 전용 레이아웃·컴포넌트 스타일
+
+  components/
+    src/components/lobby/
+      RoomList/RoomList.tsx
+      RoomCard/RoomCard.tsx
+      RoomCreateModal/RoomCreateModal.tsx
+      RoomFilterModal/RoomFilterModal.tsx
+      LobbyChatPanel/LobbyChatPanel.tsx
+      ProfilePanel/ProfilePanel.tsx
+      InventoryPanel/InventoryPanel.tsx
+      RankingBoard/RankingBoard.tsx
+      RouletteWheel/RouletteWheel.tsx
+      PracticeModal/PracticeModal.tsx
+      TitleModal/TitleModal.tsx
+      MatchStoryModal/MatchStoryModal.tsx
+      SettingsModal/SettingsModal.tsx
+      ExitConfirmModal/ExitConfirmModal.tsx
+
+  연관 (로비에서 직접 사용)
+    src/services/roomService.ts       … 방 생성, URL 쿼리 생성
+    src/services/roomStore.ts         … 동적 방 목록 (메모리)
+    src/services/userService.ts       … 골드·아이템·칭호·코드 히스토리·레이팅
+    src/services/clientPrefsStore.ts  … 화면·오디오 설정 (메모리)
+    src/utils/roomUtils.ts            … DEFAULT_ROOMS, loadDynamicRooms, parseRoomOccupancy
+    src/utils/roomFilterUtils.ts
+    src/utils/codeHistoryUtils.ts
+    src/utils/windowBridge.ts         … display_mode (clientPrefsStore 경유)
+    src/utils/audio/audioSettings.ts  … audio_settings (clientPrefsStore 경유)
+    src/utils/audio/gameAudio.ts
+    src/constants/itemTypes.ts
+    src/constants/titleTypes.ts
+
+
+--------------------------------------------------------------------------------
+ 1.3 화면 레이아웃 (LobbyPage DOM 구조)
+--------------------------------------------------------------------------------
+
+  page-container.lobby-page
+  ├── lobby-layout
+  │   ├── lobby-main (flex: 2)
+  │   │   ├── lobby-main-top  → RoomList
+  │   │   └── lobby-main-bottom → LobbyChatPanel
+  │   └── lobby-sidebar (flex: 1)
+  │       ├── ProfilePanel
+  │       ├── InventoryPanel
+  │       └── RankingBoard
+  └── lobby-action-bar
+      ├── [설정] → SettingsModal
+      └── [나가기] → ExitConfirmModal
+
+  모달들은 layout 바깥에 형제(sibling)로 렌더 (portal 없음, 조건부 null).
+
+  lobby.css 핵심:
+    - 최대 너비 1280px, Electron 창 크기와 맞춤.
+    - lobby-main / lobby-sidebar flex 비율 2:1.
+    - ranking 패널만 overflow 스크롤.
+
+
+--------------------------------------------------------------------------------
+ 1.4 LobbyPage — 상태·데이터 흐름
+--------------------------------------------------------------------------------
+
+[방 목록 rooms]
+  초기값: [...DEFAULT_ROOMS, ...loadDynamicRooms()]
+    - DEFAULT_ROOMS = [] (사전 등록 방 없음)
+    - loadDynamicRooms() → roomStore 에 저장된 유저 생성 방
+  필터: roomFilter → matchesRoomFilter() → filteredRooms
+  페이지: currentPage, 한 페이지 4개 (RoomList 상수 ROOMS_PER_PAGE)
+  대기실에서 돌아올 때: pageshow 이벤트로 refreshRooms()
+
+[방 생성 handleConfirmCreate]
+  1. isCreateFormValid() (실패 → modalShake)
+  2. roomService.createRoom() → roomStore 에 추가
+  3. buildRoomSearchParams() 로 URL 쿼리
+  4. navigate('/room?...')
+  ※ playerMode === '1/1' 이면 maxPlayers=1 쿼리 추가
+
+[방 입장 handleJoinRoom]
+  WAITING 이고 빈 자리 있는 RoomCard 만 클릭 가능 → /room 이동
+
+[골드·아이템]
+  React state ↔ userService 동기화
+  초기값: 골드 0G, 아이템 전 종 0개
+  spinRoulette(): ROULETTE_COST(1,000G) 차감 → 랜덤 아이템 또는 꽝
+    - 골드 부족 시 회전 불가 (RouletteWheel 에서 흔들림)
+
+[칭호 titleData]
+  loadTitles() / saveTitles() → userService 경유 (titleTypes.ts 가 래퍼)
+  초기: owned=[], equipped=null
+
+[코드 히스토리 codeHistory]
+  readCodeHistory() / persistCodeHistory() → userService (연습 모드 제외)
+  배틀·결과 화면에서 쌓인 기록만 매치 스토리에 표시
+
+[오디오·화면]
+  clientPrefsStore (메모리) — 앱 재시작 시 기본값으로 복귀
+  windowBridge / audioSettings 가 store 를 읽고 씀
+  로비 진입 시 LobbyBGM 재생 (lobbyMusic 설정 ON 일 때)
+
+
+--------------------------------------------------------------------------------
+ 1.5 LobbyPage — 로컬 헬퍼
+--------------------------------------------------------------------------------
+
+  loadInitialUsers()   … RankingBoard 용 유저 목록
+                         현재 [{ name: 'rocky_user', rank: '-', title: 장착칭호 }]
+  resetCreateForm()      … 방 생성 모달 초기화
+  isCreateFormValid()    … 필수 입력 검사
+  triggerModalShake()    … 유효성 실패 시 500ms 흔들림
+
+  (골드·아이템·칭호·방 목록은 userService / roomStore 경유 — 별도 loadGold 없음)
+
+
+--------------------------------------------------------------------------------
+ 1.6 components/lobby — 컴포넌트 상세
+--------------------------------------------------------------------------------
+
+── RoomList ──────────────────────────────────────────────────────────────────
+  경로: RoomList/RoomList.tsx
+  역할: 방 목록 그리드·페이지네이션·하단 액션 버튼
+
+  Props:
+    rooms, currentPage, filterSummary
+    onPageChange, onJoinRoom, onCreateRoom, onOpenFilter, onPractice
+
+  동작:
+    - 항상 4칸 그리드. 방이 부족하면 EmptyRoomCard 로 채움.
+    - ◀ ▶ 페이지 이동 (totalPages = ceil(len/4), 최소 1).
+    - toolbar: [필터] 버튼 + filterSummary 텍스트.
+    - 하단: [방만들기] [연습모드]
+
+  자식: RoomCard, EmptyRoomCard (같은 RoomCard 폴더)
+
+
+── RoomCard / EmptyRoomCard ──────────────────────────────────────────────────
+  경로: RoomCard/RoomCard.tsx
+  역할: 개별 방 슬롯 UI
+
+  RoomCard:
+    - parseRoomOccupancy(room) 으로 current/max 계산.
+    - canJoin = status === 'WAITING' && !isFull
+    - 클릭 시 canJoin 일 때만 onJoin(room)
+    - 표시: id, title, current/max, status, lang, diff, mode, count
+
+  EmptyRoomCard:
+    - 빈 슬롯 placeholder (EMPTY, 회색 텍스트)
+
+
+── RoomCreateModal ───────────────────────────────────────────────────────────
+  경로: RoomCreateModal/RoomCreateModal.tsx
+  역할: 방 생성 폼 (상태는 LobbyPage, UI만 담당)
+
+  입력 필드:
+    playerMode     … 1/1 | 1/N (버튼 선택)
+    roomTitle      … 텍스트
+    difficulty     … 쉬움 | 보통 | 어려움
+    language       … JAVA, PYTHON, C++, HTML, CSS, RANDOM
+    gameMode       … normal(일반) | item(아이템)
+    problemCount   … 3~10
+    roomVisibility … public | private (+ private 시 roomPwd)
+
+  shakeError prop: LobbyPage 유효성 실패 시 modal-shake-error
+  onConfirm → LobbyPage.handleConfirmCreate (실제 생성·이동)
+
+
+── RoomFilterModal ───────────────────────────────────────────────────────────
+  경로: RoomFilterModal/RoomFilterModal.tsx
+  역할: 방 목록 필터 (다중 선택 체크박스)
+
+  카테고리 (RoomFilterState):
+    playerModes, difficulties, languages, problemCounts, gameModes, visibility
+
+  draft 상태: 열릴 때 filter 복제, [적용] 시 onApply(draft), [초기화] → EMPTY
+  필터 로직: utils/roomFilterUtils.ts (matchesRoomFilter, getRoomFilterSummary)
+
+
+── LobbyChatPanel ────────────────────────────────────────────────────────────
+  경로: LobbyChatPanel/LobbyChatPanel.tsx
+  역할: 로비 채팅 UI (메시지는 LobbyPage state, 서버 미연동)
+
+  Props: messages, chatMsg, chatMode, onChatMsgChange, onChatModeChange, onSend
+  chatMode: ALL → '[전체]', FRIEND → '[친구]' (라벨만, 실제 라우팅 없음)
+  Enter 키 또는 [전송] → handleSendChat (sender: 'rocky_user' 고정)
+  messages 변경 시 scrollTop = scrollHeight 자동 스크롤
+  초기 messages: [] (빈 채팅)
+
+
+── ProfilePanel ──────────────────────────────────────────────────────────────
+  경로: ProfilePanel/ProfilePanel.tsx
+  역할: 내 프로필 요약 + 진입 버튼
+
+  표시: 아바타(ME), 닉네임 rocky_user, 장착 칭호(있을 때만), Lv.0 | -
+  [📋 매치 스토리] → onOpenMatchStory → MatchStoryModal
+  [🏆 칭호]         → onOpenTitles     → TitleModal
+
+
+── InventoryPanel ────────────────────────────────────────────────────────────
+  경로: InventoryPanel/InventoryPanel.tsx
+  역할: 골드·배틀 아이템 수량 표시 + 룰렛 진입
+
+  8종 아이템 (itemTypes.ts 와 동일):
+    paint, lightning, timeReduce, revealLength, revealPrev,
+    scribble*, blankBreak*, buildCharge*  (* rare)
+  inventory-marquee: CSS marquee 로 아이템 목록 스크롤 연출
+  [🎰 룰렛] → onOpenRoulette → RouletteWheel
+
+
+── RankingBoard ──────────────────────────────────────────────────────────────
+  경로: RankingBoard/RankingBoard.tsx
+  역할: 로비 접속 유저 목록 (현재 mock — 본인만)
+
+  탭:
+    일반 … rocky_user 를 목록 최상단으로
+    랭킹 … TIER_ORDER(마스터>…>브론즈) 내림차순
+
+  MY_USER_NAME = 'rocky_user'
+  titleData.equipped 를 내 행에, 다른 유저는 LobbyUser.title 로 칭호 표시
+  현재 users prop: rocky_user 1명 (rank: '-')
+
+
+── RouletteWheel ─────────────────────────────────────────────────────────────
+  경로: RouletteWheel/RouletteWheel.tsx
+  역할: 아이템 룰렛 UI (회전 애니메이션은 LobbyPage wheelDeg 상태)
+
+  LobbyPage.spinRoulette() 가:
+    - 골드 1,000G 차감, targetIdx 랜덤, wheelDeg 갱신 (8바퀴+ 보정)
+    - 3.2초 후 결과 표시, miss 또는 itemInventory 갱신 → userService 반영
+
+  spinning 중 [닫기] 비활성 (handleClose)
+  골드 부족 시 triggerShake (모달 흔들림)
+
+
+── PracticeModal ─────────────────────────────────────────────────────────────
+  경로: PracticeModal/PracticeModal.tsx
+  역할: 연습 모드 설정 (lang, diff, count)
+
+  [시작] → LobbyPage.startPractice()
+    navigate('/practice?lang=&diff=&count=')
+
+
+── TitleModal ────────────────────────────────────────────────────────────────
+  경로: TitleModal/TitleModal.tsx
+  역할: 보유 칭호 목록·장착/해제
+
+  TITLE_DEFS 순회, owned / locked / equipped 스타일
+  장착 토글 시 saveTitles() + onTitleDataChange
+
+
+── MatchStoryModal ───────────────────────────────────────────────────────────
+  경로: MatchStoryModal/MatchStoryModal.tsx
+  역할: 과거 배틀 코드 히스토리 열람·일괄 삭제
+
+  좌: 히스토리 목록 (체크박스 다중 선택)
+  우: 선택 항목의 문제 탭 + 정답(getSolution) + 해설
+  [전체 선택] [선택 삭제] → LobbyPage 핸들러 → persistCodeHistory
+
+
+── SettingsModal ──────────────────────────────────────────────────────────────
+  경로: SettingsModal/SettingsModal.tsx
+  역할: 화면 모드 + BGM ON/OFF
+
+  draftMode: window (1280×960) | fullscreen
+  draftAudio: lobbyMusic, battleMusic
+  [확인] → onConfirm → LobbyPage.handleSettingsConfirm
+
+
+── ExitConfirmModal ──────────────────────────────────────────────────────────
+  경로: ExitConfirmModal/ExitConfirmModal.tsx
+  역할: Electron 앱 종료 확인
+
+  [예] → quitApp()  /  [아니오] → onCancel
+
+
+--------------------------------------------------------------------------------
+ 1.7 로비 연관 타입·서비스 요약
+--------------------------------------------------------------------------------
+
+[types/lobby.ts]
+  Room          … id, title, status(WAITING|STARTED), players, mode, gameMode,
+                  diff, lang, pwd, count, ...
+  ChatMessage   … sender, text, time, mode
+  CodeHistoryEntry … historyId, roomId, submittedAt, lang, problems, codes
+  LobbyUser     … name, rank, title
+  GameMode      … 'item' | 'normal'
+
+[userService.ts]
+  getGold / setGold / addGold
+  getItemInventory / setItemInventory / updateItemInventory
+  getTitles / saveTitles / getEquippedTitleId
+  readUserCodeHistory / persistUserCodeHistory
+  getRatingScore (초기 1000, UI 미표시)
+
+[roomService.ts]
+  createRoom()            … roomStore 에 방 추가 (id = max 기존 id + 1, 최소 5)
+  buildRoomSearchParams() … /room URL 쿼리
+
+[roomUtils.ts]
+  DEFAULT_ROOMS = []      … 사전 방 없음
+  loadDynamicRooms()      … roomStore.listRooms()
+  parseRoomOccupancy()    … players 문자열 + 강퇴 수로 인원 계산
+
+[roomFilterUtils.ts]
+  matchesRoomFilter, getRoomFilterSummary, toggleFilterValue, cloneRoomFilter
+
+[codeHistoryUtils.ts]
+  readCodeHistory, persistCodeHistory, getSolution
+  (연습 모드 PRACTICE 기록은 목록에서 제외)
+
+[clientPrefsStore.ts]
+  loadDisplayMode, saveDisplayMode, loadAudioSettings, saveAudioSettings
+
+[windowBridge.ts]
+  loadDisplayMode, applyDisplayMode, applyDisplayModeToDom, updateUiScale, quitApp
+
+[itemTypes.ts / titleTypes.ts]
+  타입·상수 정의 + userService 래퍼 함수 (loadItemInventory, loadTitles 등)
+  ※ itemTypes ↔ userService 순환 참조 방지: userService 는 type-only import
+
+
+--------------------------------------------------------------------------------
+ 1.8 로비에서 다른 화면으로의 이동
+--------------------------------------------------------------------------------
+
+  방 생성/입장     → /room?id=&title=&mode=&diff=&lang=&pwd=&count=&gameMode=&maxPlayers=
+  연습 시작        → /practice?lang=&diff=&count=
+  (로비 자체는 다른 route 없음; invalid path 는 App.tsx 에서 / 로 redirect)
+
+
+--------------------------------------------------------------------------------
+ 1.9 로비 개발 시 참고 (제약·mock)
+--------------------------------------------------------------------------------
+
+  - 채팅: 서버 없음, LobbyPage 로컬 state 만
+  - 유저 목록: rocky_user 1명 (추후 API/소켓 연동 예정)
+  - ProfilePanel Lv/티어: Lv.0 | - (백엔드 연동 전 placeholder)
+  - 사전 등록 방·데모 봇 없음 — 방은 [방만들기] 로만 생김
+  - 방 id: createRoom 시 max(기존 id)+1 (최소 5부터)
+  - STARTED·만원 방: RoomCard 클릭 불가
+  - 앱 재시작 시 모든 데이터 초기화 (게임 데이터 + 화면/소리 설정 포함)
+  - 룰렛 1,000G 필요 — 초기 골드 0 이므로 결과 화면 등에서 획득 후 사용
+
+
+================================================================================
+ 2. 대기실 (Room)
+================================================================================
+
+--------------------------------------------------------------------------------
+ 2.1 개요
+--------------------------------------------------------------------------------
+
+대기실은 ROUTES.ROOM = '/room' 이다. 로비에서 방 생성·입장 시 URL 쿼리로 설정값을
+받아, 플레이어가 배틀 시작 전에 준비하는 공간이다.
+
+플레이어가 여기서:
+
+  - 플레이어 슬롯 확인 (호스트 / 빈 슬롯 / 상대)
+  - 캐릭터 선택, 배틀 설정(언어·난이도·문제 수) 확인
+  - 아이템 모드일 때 가져갈 배틀 아이템 선택
+  - 대기실 채팅 (로컬 mock)
+  - 호스트: [START] 로 배틀 시작 / [로비] 로 나가기
+  - 비호스트: READY 토글 / [로비] 로 나가기
+  - (선택) 프로필 클릭 → 강퇴 (호스트만)
+
+를 수행한다.
+
+현재는 멀티플레이 API·소켓 없이 단일 클라이언트 mock 이다.
+SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능하다.
+
+
+--------------------------------------------------------------------------------
+ 2.2 관련 파일 위치
+--------------------------------------------------------------------------------
+
+  pages/
+    src/pages/room/RoomPage.tsx    … 대기실 페이지 (상태·로직 중심)
+    src/pages/room/room.css        … 대기실 레이아웃·스타일
+
+  components/
+    src/components/room/
+      RoomHeader/RoomHeader.tsx
+      PlayerGrid/PlayerGrid.tsx
+      PlayerDuelGrid/PlayerDuelGrid.tsx
+      PlayerSlot/PlayerSlot.tsx
+      RoomChatPanel/RoomChatPanel.tsx
+      CharacterSelect/CharacterSelect.tsx
+      BattleSettingsPanel/BattleSettingsPanel.tsx
+      RoomItemLoadout/RoomItemLoadout.tsx
+      RoomActionBar/RoomActionBar.tsx
+      RoomProfileModal/RoomProfileModal.tsx
+      KickModal/KickModal.tsx
+      RoomAlertModal/RoomAlertModal.tsx
+      StartGameOverlay/StartGameOverlay.tsx
+      OnlineUserList/OnlineUserList.tsx   … (현재 RoomPage 에서 미사용)
+
+  연관
+    src/services/battlePrepService.ts   … prepareBattleStart, clearRoomSession
+    src/services/roomStore.ts           … 강퇴 카운트, 방 상태 STARTED
+    src/constants/roomConstants.ts      … 초기 플레이어, 언어/난이도 매핑
+    src/utils/room/roomStartValidation.ts … 시작 조건 (solo bypass)
+    src/constants/itemTypes.ts          … loadItemInventory, defaultSelectedItemKeys
+
+
+--------------------------------------------------------------------------------
+ 2.3 URL 쿼리 (로비 → 대기실)
+--------------------------------------------------------------------------------
+
+  id, title, mode, diff, lang, pwd, count, gameMode, maxPlayers
+
+  RoomPage 가 searchParams 로 읽어 초기화:
+    roomMode      … '1/1' | '1/N'
+    gameMode      … 'item' | 'normal' (아이템 UI on/off)
+    initialLang   … LANG_MAP[urlLang] (java, python, …)
+    initialDiff   … DIFF_MAP[urlDiff] (EASY, NORMAL, HARD)
+    initialCount  … 3~10
+    parsedMaxPlayers … 2~8 (1/1 모드는 displayMaxPlayers = 2)
+
+
+--------------------------------------------------------------------------------
+ 2.4 화면 레이아웃 (RoomPage DOM 구조)
+--------------------------------------------------------------------------------
+
+  room-page-container
+  └── room-layout
+      ├── room-main-col
+      │   └── pixel-card room-main-card
+      │       ├── RoomHeader
+      │       └── room-main-body
+      │           ├── room-slots-section → PlayerGrid
+      │           └── room-chat-section  → RoomChatPanel
+      └── room-side-col
+          └── pixel-card room-side-card (.item-mode | .normal-mode)
+              ├── CharacterSelect
+              ├── BattleSettingsPanel
+              ├── RoomItemLoadout (gameMode === 'item' 일 때만)
+              └── room-side-bottom → RoomActionBar
+
+  모달: StartGameOverlay, RoomAlertModal, KickModal, RoomProfileModal
+
+
+--------------------------------------------------------------------------------
+ 2.5 RoomPage — 상태·데이터 흐름
+--------------------------------------------------------------------------------
+
+[초기 플레이어 players]
+  buildInitialPlayers() → rocky_user(호스트) 1명 + null 슬롯 7개 (최대 8칸)
+  DEMO_BOT_POOL = [] 이므로 자동 봇 입장 없음
+
+[시작 handleStartGame]
+  1. host 확인
+  2. getStartBlockReason() — SOLO_START_BYPASS=true 이면 항상 null
+     (false 시: 1/1→2명, 1/N→3명, 비호스트 전원 READY 필요)
+  3. prepareBattleStart() → sessionStore 에 문제·설정 저장, 방 STARTED
+  4. navigate('/battle?fresh=1&roomId=&lang=&mode=&count=&maxPlayers=&gameMode=')
+
+[나가기 handleLeaveToLobby]
+  removeRoomFromLobby(roomId)  … roomStore 에서 방 삭제
+  clearRoomSession(roomId)     … 세션·강퇴 카운트 정리
+  navigate('/')
+
+[강퇴 handleKickPlayer]
+  슬롯 null, kickedCount++, roomStore.setKickedCount, updateRoomPlayerCount
+
+[봇 초대 handleInviteBot]
+  DEMO_BOT_POOL.length === 0 이면 동작 없음 (현재 비활성)
+  (풀에 봇이 있으면) 호스트가 빈 슬롯 클릭 → 10초 후 자동 READY
+
+[아이템 선택]
+  loadItemInventory() → userService
+  selectedItems: Set<ItemKey>, 보유 0개는 선택 불가
+  item 모드에서만 RoomItemLoadout 표시, 시작 시 selectedItems 전달
+
+
+--------------------------------------------------------------------------------
+ 2.6 components/room — 컴포넌트 상세
+--------------------------------------------------------------------------------
+
+── RoomHeader ────────────────────────────────────────────────────────────────
+  방 제목, private/public 표시, playerCount / maxPlayers
+
+── PlayerGrid ────────────────────────────────────────────────────────────────
+  roomMode === '1/1' → PlayerDuelGrid (호스트 vs 상대 1:1)
+  그 외 → 8칸 PlayerSlot 그리드
+  빈 슬롯 + canInviteMore → [+ 초대] (현재 DEMO_BOT_POOL 비어 있어 무반응)
+
+── PlayerSlot / PlayerDuelGrid ───────────────────────────────────────────────
+  플레이어 아바타(캐릭터), READY/WAITING/HOST 상태, 클릭 → 프로필 모달
+
+── RoomChatPanel ─────────────────────────────────────────────────────────────
+  LobbyChatPanel 과 유사. messages: sys | user, sender rocky_user
+
+── CharacterSelect ───────────────────────────────────────────────────────────
+  CHARACTERS 4종 (검사·마법사·닌자·로봇), myCharacter state
+
+── BattleSettingsPanel ───────────────────────────────────────────────────────
+  읽기 전용: 언어, 난이도, 문제 수 (URL/로비 생성값)
+
+── RoomItemLoadout ───────────────────────────────────────────────────────────
+  BATTLE_ITEM_DEFS 기준 그리드, 보유 수량·선택(✓) 표시
+
+── RoomActionBar ─────────────────────────────────────────────────────────────
+  호스트: [START] [로비]
+  비호스트: [READY] [로비], 자동 준비 체크박스 (autoReady — UI만, 로직 미연결)
+
+── RoomProfileModal / KickModal ──────────────────────────────────────────────
+  프로필 보기, 호스트 → [강퇴] → KickModal 확인
+
+── RoomAlertModal ─────────────────────────────────────────────────────────────
+  시작 불가 사유 표시 (strict 모드 시)
+
+── StartGameOverlay ──────────────────────────────────────────────────────────
+  showProblemModal — 현재 RoomPage 에서 항상 false (미사용 예약)
+
+
+--------------------------------------------------------------------------------
+ 2.7 대기실 연관 타입·서비스 요약
+--------------------------------------------------------------------------------
+
+[types/room.ts]
+  RoomPlayer, RoomChatMessage, RoomSettings, LanguageOption, CharacterOption
+
+[battlePrepService.prepareBattleStart]
+  problems.js 에서 난이도·언어 필터 → 랜덤 N문제
+  sessionStore.setBattleProblems / setBattleSettings
+  roomRoster, selectedItems, gameMode 포함
+
+[roomStartValidation.ts]
+  SOLO_START_BYPASS = true  … 현재 혼자 시작 허용
+  getStartBlockReasonStrict() … 멀티 연동 시 SOLO_START_BYPASS = false
+
+
+--------------------------------------------------------------------------------
+ 2.8 대기실에서 다른 화면으로의 이동
+--------------------------------------------------------------------------------
+
+  [START] 성공  → /battle?fresh=1&roomId=…
+  [로비]        → /  (방 삭제 + 세션 정리)
+
+
+--------------------------------------------------------------------------------
+ 2.9 대기실 개발 시 참고 (제약·mock)
+--------------------------------------------------------------------------------
+
+  - 실시간 동기화 없음 — 다른 유저 슬롯·READY 는 mock/봇 전용
+  - DEMO_BOT_POOL = [] — 봇 초대 UI는 있으나 동작 안 함
+  - autoReady 체크박스: 상태만 저장, 자동 READY 미구현
+  - 1/1 solo 시작: roomRoster 에 호스트만 → 배틀 상대 0명 (solo 배틀)
+  - roomRoster 에 상대(봇)가 있으면 createDemoOpponentRoster 로 배틀 봇 생성
+
+
+================================================================================
+ 3. 배틀 (Battle)
+================================================================================
+
+--------------------------------------------------------------------------------
+ 3.1 개요
+--------------------------------------------------------------------------------
+
+배틀은 ROUTES.BATTLE = '/battle' 이다. 대기실 [START] 후 진입하며, 제한 시간
+안에 코딩 문제를 풀고 상대(데모 봇)와 점수·순위를 겨룬다.
+
+핵심 흐름:
+  1. sessionStore 에서 문제·설정 로드 (없으면 fallback 1문제)
+  2. 문제 유형별 UI: fill_blank / multiple_choice / short_answer
+  3. 정답 제출 → 점수·콤보 → 관전 모드 또는 다음 문제
+  4. 시간 종료 또는 마지막 문제 처리 → 3초 후 결과 화면
+
+gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기 버프 사용 가능.
+
+
+--------------------------------------------------------------------------------
+ 3.2 관련 파일 위치
+--------------------------------------------------------------------------------
+
+  pages/
+    src/pages/battle/BattlePage.tsx    … 배틀 페이지 (상태·로직·게임 루프)
+    src/pages/battle/battle.css
+
+  components/
+    src/components/battle/
+      FillBlankRenderer.tsx       … 빈칸 채우기 렌더
+      ProblemVisualPreview.tsx    … 문제 시각 자료
+      BattleBuildPanel.tsx        … 빌드(컴파일) 시뮬레이션 패널
+      OpponentPanels.tsx          … 상대 패널·진행 상태
+      BattleChatPanel.tsx         … 관전 중 채팅
+      ItemSelectModal.tsx         … 공격 아이템 대상 선택
+
+  연관
+    src/services/sessionStore.ts
+    src/services/battleSessionService.ts
+    src/services/userService.ts          … 아이템 인벤토리
+    src/data/problems.js                 … 문제 은행
+    src/utils/battle/demoBots.ts         … 상대 시뮬레이션
+    src/utils/battle/codeUtils.ts
+    src/utils/battle/problemResultUtils.ts
+    src/utils/battle/rankUtils.ts
+    src/utils/battle/canvasEffects.ts    … paint/scribble 아이템
+    src/utils/build/buildSimulator.ts
+    src/utils/problemTypeUtils.ts
+
+
+--------------------------------------------------------------------------------
+ 3.3 URL 쿼리
+--------------------------------------------------------------------------------
+
+  fresh=1       … 새 배틀 (세션 복원 스킵)
+  roomId        … 세션 키 battle-{roomId}
+  lang          … java | python | cpp | …
+  mode          … 1/1 | 1/N
+  count         … 문제 수
+  maxPlayers    … 최대 인원
+  gameMode      … item | normal
+
+
+--------------------------------------------------------------------------------
+ 3.4 화면 레이아웃 (BattlePage DOM 구조)
+--------------------------------------------------------------------------------
+
+  page-container battle-page
+  └── battle-layout
+      ├── battle-workspace
+      │   └── battle-main-column
+      │       └── pixel-card code-card
+      │           ├── 헤더: MY CODE, 언어, 진행률, 등수·콤보·점수
+      │           ├── (item) 자기 아이템 버튼
+      │           ├── 문제 요약 (접기/펼치기)
+      │           ├── fill_blank → FillBlankRenderer + BattleBuildPanel
+      │           ├── multiple_choice → 선택지 버튼
+      │           └── short_answer → 입력 필드
+      │           └── (관전 시) BattleChatPanel
+      └── battle-opponent-column
+          ├── 타이머 (TIME LEFT)
+          └── OpponentPanels (상대별 진행·코드 미리보기)
+
+  오버레이: 저장 모달, 클리어 플래시, 게임오버, ItemSelectModal
+
+
+--------------------------------------------------------------------------------
+ 3.5 BattlePage — 상태·데이터 흐름
+--------------------------------------------------------------------------------
+
+[문제 로드]
+  getBattleProblems() → sessionStore (prepareBattleStart 가 설정)
+  fresh !== '1' 이면 restoreBattleSession() 으로 draft 복원 시도
+  없으면 fallback 1문제
+
+[타이머]
+  remaining 1초마다 감소, elapsedSec 증가
+  battleDiff + 문제 수 → getTotalBattleSeconds() 로 전체 제한 시간
+  30초 이하 시 BattleBGM urgent 모드
+
+[문제 풀이 submitCurrentProblem]
+  정답: 콤보·ingameScore 가산, solveTimes 기록
+  오답: 콤보 리셋, problemResults[currentIndex] = false
+  fill_blank 정답 시 lockAndSpectate → finalizeSaveAndSpectate
+    → demoSpectating=true (입력 잠금, 상대 관전)
+
+[문제 진행 queueAdvanceProblem]
+  조건: 시간 종료 OR (현재 문제 제출 완료 AND 모든 봇 해당 문제 풀이)
+  마지막 문제 → showGameOver → 3초 후 /result
+  중간 문제 → currentIndex++, 관전 상태 해제
+
+[봇 시뮬레이션]
+  createDemoBattleRoster(): roomRoster 상대 → DemoBot[]
+  DEMO_BOT_POOL 자동 생성 없음 — 대기실 roster 기준만
+  elapsedSec 기반 solveScheduleByProblem 으로 진행 표시
+
+[세션 저장]
+  persistBattleSession → sessionStore draft + (prod) POST /api/v1/build/session/save
+  persistBattleSubmission → sessionStore (결과 화면용)
+  5초마다·답변 변경 debounce·beforeunload 시 저장
+
+[게임 종료 → 결과]
+  saveFinalRankingSnapshot, saveRoomUsers
+  navigate('/result?roomId=')
+
+
+--------------------------------------------------------------------------------
+ 3.6 components/battle — 컴포넌트 상세
+--------------------------------------------------------------------------------
+
+── FillBlankRenderer ─────────────────────────────────────────────────────────
+  question 내 _____ 빈칸을 input 으로 렌더
+  breakingBlanks (blankBreak 아이템), isLocked
+
+── BattleBuildPanel ──────────────────────────────────────────────────────────
+  fill_blank 전용. Monaco 스타일 코드 편집 + runBuildSimulation
+  buildsUsed / buildsAllowed (기본 3 + buildCharge 보너스)
+
+── ProblemVisualPreview ──────────────────────────────────────────────────────
+  문제 visual 필드 (이미지/다이어그램) 표시
+
+── OpponentPanels ────────────────────────────────────────────────────────────
+  BotView[]: thinking / solved / observing 상태
+  펼치기/접기, paint·scribble 등 패널 이펙트
+
+── ItemSelectModal ───────────────────────────────────────────────────────────
+  공격 아이템(paint, lightning, …) 사용 시 대상 봇 선택
+
+── BattleChatPanel ───────────────────────────────────────────────────────────
+  demoSpectating 일 때만 표시
+
+
+--------------------------------------------------------------------------------
+ 3.7 아이템 모드 (gameMode === 'item')
+--------------------------------------------------------------------------------
+
+  대기실 selectedItems → battleMeta.selectedItems
+
+  자기 버프 (SELF_ITEM_KEYS):
+    revealLength, revealPrev, blankBreak, buildCharge
+  공격 (ATTACK_ITEM_KEYS):
+    paint, lightning, timeReduce, scribble
+  사용 시 userService itemInventory 차감·persist
+
+  lightning/timeReduce: 상대 solveSchedule 지연
+  paint/scribble: OpponentPanels 캔버스 오버레이 (ITEM_PANEL_EFFECT_MS)
+
+
+--------------------------------------------------------------------------------
+ 3.8 배틀 연관 타입·서비스 요약
+--------------------------------------------------------------------------------
+
+[types/battle.ts]
+  BattleProblem, RoomUser, ItemInventory, ProblemVisual
+
+[sessionStore]
+  battleProblems, battleSettings, battleSubmission, roomUsers
+  draft/demoState/finalRanking (sessionId 키)
+
+[battleSessionService]
+  getSessionId(roomId) → 'battle-{roomId}' | 'battle-solo'
+  persistBattleSession, restoreBattleSession, persistBattleSubmission
+  saveFinalRankingSnapshot, clearBattleAndLeave
+  syncBattleDemoState
+
+[problem 유형]
+  fill_blank, multiple_choice, short_answer (+ isBlankBasedType)
+
+
+--------------------------------------------------------------------------------
+ 3.9 배틀에서 다른 화면으로의 이동
+--------------------------------------------------------------------------------
+
+  게임 종료 (자동)  → /result?roomId=
+  (직접 URL 입력 시 문제 없으면 fallback 문제로 solo 진행 가능)
+
+
+--------------------------------------------------------------------------------
+ 3.10 배틀 개발 시 참고 (제약·mock)
+--------------------------------------------------------------------------------
+
+  - 상대는 DemoBot 시뮬레이션 (실제 멀티플레이 아님)
+  - solo(상대 0명): 봇 없이 혼자 풀이, 순위 1위
+  - fresh=1 없이 재진입 시 draft 복원 시도
+  - /build 라우트는 별도 빌드 화면용 (배틀 내 BattleBuildPanel 과 별개)
+
+
+================================================================================
+ 4. 결과 (Result)
+================================================================================
+
+--------------------------------------------------------------------------------
+ 4.1 개요
+--------------------------------------------------------------------------------
+
+결과는 ROUTES.RESULT = '/result' 이다. 배틀 종료 3초 후 자동 진입.
+
+플레이어가 여기서:
+
+  - 순위·팀 승패(1/1) 또는 전체 랭킹(1/N) 확인
+  - 획득 골드 (+점수/10), 칭호 해금 팝업
+  - 코드 히스토리 자동 저장 (매치 스토리)
+  - 결과 채팅, AI 리뷰어 패널 (mock)
+  - 오답 복습(Review): 문제 선택 → 상대 초대 → 문제별 코드·정답 비교
+  - [재대결] → /room  /  [로비] → 세션 정리 후 /
+
+를 수행한다.
+
+
+--------------------------------------------------------------------------------
+ 4.2 관련 파일 위치
+--------------------------------------------------------------------------------
+
+  pages/
+    src/pages/result/ResultPage.tsx
+    src/pages/result/result.css
+
+  components/
+    src/components/result/
+      ResultRankingPanel/ResultRankingPanel.tsx
+      ResultTeamPanel/ResultTeamPanel.tsx
+      ResultPlayerRow/ResultPlayerRow.tsx
+      ResultReviewFooter/ResultReviewFooter.tsx
+      ReviewProblemView/ReviewProblemView.tsx
+      ReviewInviteModal/ReviewInviteModal.tsx
+      ReviewIncomingInviteModal/ReviewIncomingInviteModal.tsx
+      ResultChatPanel/ResultChatPanel.tsx
+      ResultActionBar/ResultActionBar.tsx
+      ResultPopup/ResultPopup.tsx
+      AiReviewerPanel/AiReviewerPanel.tsx
+      PlayerCodesPanel/PlayerCodesPanel.tsx
+      ResultCodeModal/ResultCodeModal.tsx
+
+  연관
+    src/services/sessionStore.ts
+    src/services/battleSessionService.ts
+    src/services/userService.ts
+    src/services/reviewSessionService.ts
+    src/services/reviewInviteStore.ts
+    src/utils/resultUtils.ts
+    src/utils/codeHistoryUtils.ts
+    src/constants/resultConstants.ts
+
+
+--------------------------------------------------------------------------------
+ 4.3 URL 쿼리
+--------------------------------------------------------------------------------
+
+  roomId  … sessionId = battle-{roomId}, submission/demoState 조회용
+
+
+--------------------------------------------------------------------------------
+ 4.4 화면 레이아웃 (ResultPage DOM 구조)
+--------------------------------------------------------------------------------
+
+  page-container result-page
+  ├── result-gold-bar          … GOLD +N (총 보유)
+  └── result-body
+      ├── (1/N) ResultRankingPanel  또는
+      ├── (1/1) result-win-slot / result-lose-slot (ResultTeamPanel ×2)
+      │         + ResultReviewFooter
+      ├── (reviewing) ReviewProblemView
+      ├── result-chat-slot → ResultChatPanel
+      └── result-action-slot → ResultActionBar
+
+  플로ating: AiReviewerPanel, ReviewInviteModal, ResultPopup
+
+
+--------------------------------------------------------------------------------
+ 4.5 ResultPage — 상태·데이터 흐름
+--------------------------------------------------------------------------------
+
+[데이터 소스]
+  getBattleSubmission()     … 점수, codes, problems, problemResults
+  getBattleDemoState()      … battleBots, solveTimes, …
+  readFinalRankingSnapshot() … 배틀 종료 시 저장된 순위 (우선)
+  getRoomUsers()            … 실시간 유저 목록
+  buildResultPlayers()      … 위 데이터 통합 → ResultPlayer[]
+
+[마운트 시]
+  addGold(floor(myScore/10))
+  칭호 stats 갱신 (승/패, 연승, langWins, perfectGame) → checkNewTitles
+  ResultPopup (순위·정답 수·신규 칭호)
+  submission → codeHistory 저장 (연습 제외, 최대 50건)
+
+[Review 흐름]
+  idle → [복습 시작] → selecting (문제 체크)
+  → [복습 요청] → ReviewInviteModal → 상대 선택 → invite
+  → shouldAutoAcceptReviewInvite (비본인) → 10초 후 자동 수락
+  → reviewing → ReviewProblemView
+
+[나가기]
+  clearBattleAndLeave(sessionId, roomId) + navigate('/')
+  replayToRoom → /room?id= (세션 유지)
+
+
+--------------------------------------------------------------------------------
+ 4.6 components/result — 컴포넌트 상세
+--------------------------------------------------------------------------------
+
+── ResultRankingPanel ────────────────────────────────────────────────────────
+  1/N: 전체 순위 리스트, reviewSelectMode 시 문제 체크박스
+
+── ResultTeamPanel ───────────────────────────────────────────────────────────
+  1/1: winners / losers 팀 분할 (상위 50% vs 하위)
+
+── ResultReviewFooter ────────────────────────────────────────────────────────
+  1/1 전용: 복습 시작·취소·요청 버튼
+
+── ReviewProblemView ─────────────────────────────────────────────────────────
+  선택 문제: 내 코드 vs 정답, 해설, partnerName
+
+── ReviewInviteModal ─────────────────────────────────────────────────────────
+  복습 상대 플레이어 선택, waiting 중 닫기 불가
+
+── ResultPopup ─────────────────────────────────────────────────────────────────
+  순위 메시지, detailLines, 신규 칭호 배지
+
+── AiReviewerPanel ─────────────────────────────────────────────────────────────
+  슬라이드 패널 mock AI 채팅 (실 API 없음)
+
+── ResultChatPanel / ResultActionBar ───────────────────────────────────────────
+  결과 로비 채팅, [재대결] [로비]
+
+
+--------------------------------------------------------------------------------
+ 4.7 결과 연관 타입·서비스 요약
+--------------------------------------------------------------------------------
+
+[resultUtils.buildResultPlayers]
+  rankingSnapshot 우선, 없으면 roomUsers + demoBots + submission 재구성
+
+[reviewSessionService]
+  persistReviewInvite, shouldAutoAcceptReviewInvite, scheduleReviewInviteResponse
+
+[resultConstants]
+  MY_RESULT_USER_ID = 'rocky_user'
+  ENABLE_RESULT_BOT_DEPARTURE = false
+  REVIEW_BOT_ACCEPT_DELAY_MS = 10000
+
+
+--------------------------------------------------------------------------------
+ 4.8 결과에서 다른 화면으로의 이동
+--------------------------------------------------------------------------------
+
+  [재대결]  → /room?id={roomId}
+  [로비]    → / (clearBattleAndLeave)
+
+
+--------------------------------------------------------------------------------
+ 4.9 결과 개발 시 참고 (제약·mock)
+--------------------------------------------------------------------------------
+
+  - AI 리뷰어: 로컬 state, 백엔드 없음
+  - 리뷰 초대: reviewInviteStore (메모리), 봇 자동 수락
+  - 초기 채팅 메시지 mock (알고리즘깎는노인 등)
+  - 골드는 마운트 시 1회 지급 (earnedGold 의존)
+
+
+================================================================================
+ 5. 연습 (Practice)
+================================================================================
+
+--------------------------------------------------------------------------------
+ 5.1 개요
+--------------------------------------------------------------------------------
+
+연습은 ROUTES.PRACTICE = '/practice' 이다. 로비 [연습모드] 또는 URL 직접 진입.
+
+멀티플레이·점수·골드·히스토리와 무관하게 problems.js 뱅크에서 문제만 풀어보는
+솔로 학습 모드이다. 정답 확인·해설은 [채점] 후 표시.
+
+
+--------------------------------------------------------------------------------
+ 5.2 관련 파일 위치
+--------------------------------------------------------------------------------
+
+  pages/
+    src/pages/practice/PracticePage.tsx
+    src/pages/practice/practice.css
+
+  components/
+    src/components/practice/
+      PracticeSetupModal/PracticeSetupModal.tsx
+      PracticeHeaderBar/PracticeHeaderBar.tsx
+      PracticeProblemViewer/PracticeProblemViewer.tsx
+      PracticeAnswerSection/PracticeAnswerSection.tsx
+      PracticeProgressPanel/PracticeProgressPanel.tsx
+      PracticeNavigator/PracticeNavigator.tsx
+
+  연관
+    src/utils/practiceUtils.ts    … createExercisePool, isExerciseCorrect
+    src/data/problems.js
+    src/utils/battle/codeUtils.ts … getLangKey
+    src/utils/problemTypeUtils.ts
+
+
+--------------------------------------------------------------------------------
+ 5.3 URL 쿼리
+--------------------------------------------------------------------------------
+
+  lang   … JAVA, PYTHON, CPP, … (로비 PracticeModal 기본 JAVA)
+  diff   … 쉬움 | 보통 | 어려움 | mixed
+  count  … 3~90 (기본 10)
+
+  lang + count 가 있으면 SetupModal 스킵 후 즉시 startPractice()
+
+
+--------------------------------------------------------------------------------
+ 5.4 화면 레이아웃 (PracticePage DOM 구조)
+--------------------------------------------------------------------------------
+
+  page-container practice-page
+  ├── PracticeSetupModal (조건부)
+  ├── PracticeHeaderBar
+  ├── practice-body
+  │   ├── practice-main-card
+  │   │   ├── PracticeProblemViewer
+  │   │   └── PracticeAnswerSection
+  │   └── PracticeProgressPanel (우측 진행·문제 목록)
+  └── PracticeNavigator (이전/다음/종료)
+
+
+--------------------------------------------------------------------------------
+ 5.5 PracticePage — 상태·데이터 흐름
+--------------------------------------------------------------------------------
+
+[startPractice]
+  createExercisePool(count, diff, type, langKey)
+    … 난이도·유형·언어 필터 + shuffle + slice
+  exercises[], currentIndex=0, checked=Set(), userAnswers[], blankAnswers[][]
+
+[채점 handleCheck]
+  multiple_choice: 선택 필수
+  fill_blank: 모든 빈칸 입력 필수
+  short_answer: 답 입력 필수
+  → checked 에 currentIndex 추가 → 정오 표시
+
+[진행]
+  solvedCount = 채점된 문제 중 isExerciseCorrect true 개수
+  PracticeProgressPanel 에서 문제별 O/X/미채점 표시
+
+[종료 handleExit]
+  confirm → navigate('/')
+  codeHistory 에 저장하지 않음 (readCodeHistory 가 PRACTICE 제외)
+
+
+--------------------------------------------------------------------------------
+ 5.6 components/practice — 컴포넌트 상세
+--------------------------------------------------------------------------------
+
+── PracticeSetupModal ──────────────────────────────────────────────────────────
+  lang, diff, type(mixed|유형), count 설정 → onStart
+
+── PracticeHeaderBar ───────────────────────────────────────────────────────────
+  언어, solvedCount/total, [설정] → SetupModal 재오픈
+
+── PracticeProblemViewer ───────────────────────────────────────────────────────
+  문제 본문, fill_blank 입력 (채점 전)
+
+── PracticeAnswerSection ───────────────────────────────────────────────────────
+  multiple_choice / short_answer UI, [채점] 버튼, 정오·해설
+
+── PracticeProgressPanel ───────────────────────────────────────────────────────
+  전체 문제 그리드, 클릭으로 currentIndex 이동
+
+── PracticeNavigator ───────────────────────────────────────────────────────────
+  ◀ 이전 | 다음 ▶ | [로비로]
+
+
+--------------------------------------------------------------------------------
+ 5.7 연습 연관 유틸 요약
+--------------------------------------------------------------------------------
+
+[practiceUtils.createExercisePool]
+  problems.js 필터: difficulty, type, langKey
+  count clamp: 3~90
+
+[practiceUtils.isExerciseCorrect]
+  유형별 정답 비교 (대소문자 무시 trim)
+
+[문제 유형]
+  fill_blank, multiple_choice, short_answer (배틀과 동일 데이터)
+
+
+--------------------------------------------------------------------------------
+ 5.8 연습에서 다른 화면으로의 이동
+--------------------------------------------------------------------------------
+
+  [로비로] / confirm 종료  → /
+  로비 PracticeModal       → /practice?lang=&diff=&count=
+
+
+--------------------------------------------------------------------------------
+ 5.9 연습 개발 시 참고 (제약·mock)
+--------------------------------------------------------------------------------
+
+  - sessionStore / userService 미사용 (완전 로컬 state)
+  - 매치 스토리·칭호·골드에 영향 없음
+  - SetupModal: URL 파라미터 없이 /practice 직접 접속 시 표시
+
+
+================================================================================
+ 부록: 화면 간 데이터 버스 (Room → Battle → Result)
+================================================================================
+
+  대기실 [START]
+    battlePrepService.prepareBattleStart()
+      → sessionStore.battleProblems, battleSettings
+
+  배틀 진행
+    battleSessionService → sessionStore (draft, submission, demoState, ranking)
+
+  결과 진입
+    ResultPage ← submission + demoState + finalRankingSnapshot
+    → userService (gold, titles, codeHistory)
+
+  [로비] (결과/대기실)
+    clearBattleAndLeave / removeRoomFromLobby → session·room 정리
+
+  앱 재시작 시 위 데이터 전부 초기화 (API 연동 전)
+

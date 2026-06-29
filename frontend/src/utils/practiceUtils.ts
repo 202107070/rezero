@@ -45,8 +45,6 @@ export function createExercisePool(count: number, diff: string, type: string, la
   return shuffled.slice(0, Math.max(3, Math.min(90, count)));
 }
 
-export const PRACTICE_STATE_KEY = 'practiceState_rocky_user';
-
 export function isExerciseCorrect(
   ex: PracticeExercise,
   idx: number,

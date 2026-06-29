@@ -1,20 +1,15 @@
-import { STORAGE_KEYS } from '../constants/storageKeys';
+import { loadDisplayMode as readDisplayMode, saveDisplayMode as writeDisplayMode } from '../services/clientPrefsStore';
 import type { DisplayMode } from '../types/electron';
 
 const REF_WIDTH = 1280;
 const REF_HEIGHT = 960;
 
 export function loadDisplayMode(): DisplayMode {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.DISPLAY_MODE);
-    return stored === 'fullscreen' ? 'fullscreen' : 'window';
-  } catch {
-    return 'window';
-  }
+  return readDisplayMode();
 }
 
 export function saveDisplayMode(mode: DisplayMode) {
-  localStorage.setItem(STORAGE_KEYS.DISPLAY_MODE, mode);
+  writeDisplayMode(mode);
 }
 
 export function updateUiScale() {

@@ -1,4 +1,9 @@
 import { MY_RESULT_USER_ID } from '../constants/resultConstants';
+import {
+  clearReviewInviteMemory,
+  persistReviewInviteMemory,
+  readReviewInviteMemory,
+} from './reviewInviteStore';
 
 export type ReviewInviteStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled';
 
@@ -14,27 +19,20 @@ export interface ReviewInvitePayload {
   createdAt: number;
 }
 
-const STORAGE_PREFIX = 'reviewInvite_';
-
 export function createReviewInviteId(): string {
   return `review-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 export function persistReviewInvite(invite: ReviewInvitePayload): void {
   try {
-    localStorage.setItem(`${STORAGE_PREFIX}${invite.sessionId}`, JSON.stringify(invite));
+    persistReviewInviteMemory(invite);
   } catch (e) {
     console.error('리뷰 초대 저장 실패:', e);
   }
 }
 
 export function readReviewInvite(sessionId: string): ReviewInvitePayload | null {
-  try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}${sessionId}`);
-    return raw ? (JSON.parse(raw) as ReviewInvitePayload) : null;
-  } catch {
-    return null;
-  }
+  return readReviewInviteMemory(sessionId);
 }
 
 export function updateReviewInviteStatus(sessionId: string, status: ReviewInviteStatus): void {
@@ -44,11 +42,7 @@ export function updateReviewInviteStatus(sessionId: string, status: ReviewInvite
 }
 
 export function clearReviewInvite(sessionId: string): void {
-  try {
-    localStorage.removeItem(`${STORAGE_PREFIX}${sessionId}`);
-  } catch {
-    /* ignore */
-  }
+  clearReviewInviteMemory(sessionId);
 }
 
 export function isInviterUser(userId: string): boolean {

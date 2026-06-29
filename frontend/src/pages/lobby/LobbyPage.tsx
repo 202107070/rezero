@@ -13,17 +13,23 @@ import { RouletteWheel } from '../../components/lobby/RouletteWheel/RouletteWhee
 import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
 import { SettingsModal } from '../../components/lobby/SettingsModal/SettingsModal';
 import { TitleModal } from '../../components/lobby/TitleModal/TitleModal';
-import { DEFAULT_ITEM_INVENTORY, ROULETTE_COST, ROULETTE_ITEMS, type ItemInventory } from '../../constants/itemTypes';
+import { ROULETTE_COST, ROULETTE_ITEMS, type ItemInventory } from '../../constants/itemTypes';
 import { ROUTES } from '../../constants/routes';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
 import { loadTitles, type TitleData } from '../../constants/titleTypes';
 import { buildRoomSearchParams, createRoom } from '../../services/roomService';
+import {
+  getEquippedTitleId,
+  getGold,
+  getItemInventory,
+  setGold,
+  updateItemInventory,
+} from '../../services/userService';
 import type { ChatMessage, CodeHistoryEntry, GameMode, LobbyUser, Room } from '../../types/lobby';
 import { persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtils';
 import { EMPTY_ROOM_FILTER } from '../../types/roomFilter';
 import type { RoomFilterState } from '../../types/roomFilter';
 import { getRoomFilterSummary, matchesRoomFilter } from '../../utils/roomFilterUtils';
-import { DEFAULT_ROOMS, loadDynamicRooms, normalizeRoomList } from '../../utils/roomUtils';
+import { DEFAULT_ROOMS, loadDynamicRooms } from '../../utils/roomUtils';
 import type { AudioSettings } from '../../types/audioSettings';
 import type { DisplayMode } from '../../types/electron';
 import { loadAudioSettings, saveAudioSettings } from '../../utils/audio/audioSettings';
@@ -33,50 +39,8 @@ import './lobby.css';
 
 const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
 
-function loadGold(): number {
-  try {
-    const v = parseInt(localStorage.getItem(STORAGE_KEYS.ROCKY_GOLD) || '0', 10);
-    if (v < 10000) {
-      localStorage.setItem(STORAGE_KEYS.ROCKY_GOLD, '10000');
-      return 10000;
-    }
-    return v;
-  } catch {
-    return 10000;
-  }
-}
-
-function loadItemInventory(): ItemInventory {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.ROCKY_ITEMS);
-    return stored ? { ...DEFAULT_ITEM_INVENTORY, ...JSON.parse(stored) } : { ...DEFAULT_ITEM_INVENTORY };
-  } catch {
-    return { ...DEFAULT_ITEM_INVENTORY };
-  }
-}
-
-function getEquippedFromStorage(): string | null {
-  try {
-    const d = JSON.parse(localStorage.getItem(STORAGE_KEYS.ROCKY_TITLES) || 'null');
-    return d?.equipped || null;
-  } catch {
-    return null;
-  }
-}
-
 function loadInitialUsers(): LobbyUser[] {
-  return [
-    { name: '알고리즘노인', rank: '플래티넘', title: 'streak3' },
-    { name: '코딩초보', rank: '브론즈', title: null },
-    { name: 'java_master', rank: '골드', title: 'java_master' },
-    { name: 'python_king', rank: '다이아', title: 'python_master' },
-    { name: 'rocky_user', rank: '플래티넘', title: getEquippedFromStorage() },
-    { name: 'Cpp왕초보', rank: '실버', title: null },
-    { name: 'AI코더', rank: '마스터', title: 'streak5' },
-    { name: '버그헌터', rank: '골드', title: 'veteran' },
-    { name: '초고수', rank: '다이아', title: 'all_rounder' },
-    { name: '주니어개발자', rank: '브론즈', title: 'rookie' },
-  ];
+  return [{ name: 'rocky_user', rank: '-', title: getEquippedTitleId() }];
 }
 
 export default function LobbyPage() {
@@ -108,8 +72,8 @@ export default function LobbyPage() {
   const [roomFilter, setRoomFilter] = useState<RoomFilterState>(EMPTY_ROOM_FILTER);
   const [selectedHistoryProblemIndex, setSelectedHistoryProblemIndex] = useState(0);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
-  const [gold, setGold] = useState(loadGold);
-  const [itemInventory, setItemInventory] = useState<ItemInventory>(loadItemInventory);
+  const [gold, setGoldState] = useState(getGold);
+  const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
   const [users] = useState<LobbyUser[]>(loadInitialUsers);
@@ -140,25 +104,8 @@ export default function LobbyPage() {
   }, [audioSettings.lobbyMusic]);
 
   useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEYS.DYNAMIC_ROOMS) {
-        const updated = e.newValue ? JSON.parse(e.newValue) : [];
-        const normalized = normalizeRoomList(updated);
-        if (JSON.stringify(normalized) !== JSON.stringify(updated)) {
-          localStorage.setItem(STORAGE_KEYS.DYNAMIC_ROOMS, JSON.stringify(normalized));
-        }
-        setRooms([...DEFAULT_ROOMS, ...normalized]);
-        setCurrentPage(0);
-      }
-      if (e.key === STORAGE_KEYS.CODE_HISTORY) {
-        setCodeHistory(readCodeHistory());
-      }
-    };
-
-    window.addEventListener('storage', handleStorage);
     window.addEventListener('pageshow', refreshRooms);
     return () => {
-      window.removeEventListener('storage', handleStorage);
       window.removeEventListener('pageshow', refreshRooms);
     };
   }, [refreshRooms]);
@@ -237,9 +184,9 @@ export default function LobbyPage() {
   const spinRoulette = () => {
     if (gold < ROULETTE_COST || rouletteSpinning) return;
 
-    setGold((p) => {
+    setGoldState((p) => {
       const v = p - ROULETTE_COST;
-      localStorage.setItem(STORAGE_KEYS.ROCKY_GOLD, String(v));
+      setGold(v);
       return v;
     });
     setRouletteSpinning(true);
@@ -260,7 +207,7 @@ export default function LobbyPage() {
         setRouletteResult(`${sel.icon} ${sel.name} 획득!`);
         setItemInventory((p) => {
           const n = { ...p, [sel.type]: (p[sel.type as keyof ItemInventory] || 0) + 1 };
-          localStorage.setItem(STORAGE_KEYS.ROCKY_ITEMS, JSON.stringify(n));
+          updateItemInventory(() => n);
           return n;
         });
       }

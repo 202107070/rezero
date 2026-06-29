@@ -1,5 +1,5 @@
 import type { CodeHistoryEntry } from '../types/lobby';
-import { STORAGE_KEYS } from '../constants/storageKeys';
+import { persistUserCodeHistory, readUserCodeHistory } from '../services/userService';
 import problems from '../data/problems.js';
 
 type ProblemRecord = {
@@ -28,22 +28,15 @@ export function normalizeCodeHistoryEntry(entry: unknown): CodeHistoryEntry | nu
 }
 
 export function readCodeHistory(): CodeHistoryEntry[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.CODE_HISTORY);
-    const parsed = stored ? JSON.parse(stored) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map(normalizeCodeHistoryEntry)
-      .filter((entry): entry is CodeHistoryEntry => Boolean(entry))
-      .filter((entry) => entry.mode !== 'PRACTICE' && entry.roomId !== 'PRACTICE')
-      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
-  } catch {
-    return [];
-  }
+  return readUserCodeHistory()
+    .map(normalizeCodeHistoryEntry)
+    .filter((entry): entry is CodeHistoryEntry => Boolean(entry))
+    .filter((entry) => entry.mode !== 'PRACTICE' && entry.roomId !== 'PRACTICE')
+    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
 }
 
 export function persistCodeHistory(nextHistory: CodeHistoryEntry[]): void {
-  localStorage.setItem(STORAGE_KEYS.CODE_HISTORY, JSON.stringify(nextHistory));
+  persistUserCodeHistory(nextHistory);
 }
 
 export function getSolution(problem: CodeHistoryEntry['problems'][0] | null | undefined): string {

@@ -1,3 +1,5 @@
+import { getItemInventory } from '../services/userService';
+
 export interface ItemInventory {
   paint: number;
   revealLength: number;
@@ -10,14 +12,14 @@ export interface ItemInventory {
 }
 
 export const DEFAULT_ITEM_INVENTORY: ItemInventory = {
-  paint: 40,
-  revealLength: 40,
-  revealPrev: 40,
-  lightning: 40,
-  timeReduce: 40,
-  scribble: 40,
-  blankBreak: 40,
-  buildCharge: 40,
+  paint: 0,
+  revealLength: 0,
+  revealPrev: 0,
+  lightning: 0,
+  timeReduce: 0,
+  scribble: 0,
+  blankBreak: 0,
+  buildCharge: 0,
 };
 
 export const BATTLE_BUILD_LIMIT = 3;
@@ -63,12 +65,7 @@ export const ITEM_PANEL_EFFECT_MS = 7000;
 export const SELF_ITEM_KEYS: ItemKey[] = ['revealLength', 'revealPrev', 'blankBreak', 'buildCharge'];
 
 export function loadItemInventory(): ItemInventory {
-  try {
-    const stored = localStorage.getItem('rocky_items');
-    return stored ? { ...DEFAULT_ITEM_INVENTORY, ...JSON.parse(stored) } : { ...DEFAULT_ITEM_INVENTORY };
-  } catch {
-    return { ...DEFAULT_ITEM_INVENTORY };
-  }
+  return getItemInventory();
 }
 
 export function defaultSelectedItemKeys(): ItemKey[] {

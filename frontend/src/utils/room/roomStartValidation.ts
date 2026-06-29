@@ -1,6 +1,14 @@
 import type { RoomPlayer } from '../../types/room';
 
+/** 멀티플레이 API 연동 전까지 혼자 시작 허용. false로 바꾸면 아래 strict 규칙 적용 */
+export const SOLO_START_BYPASS = true;
+
 export function getStartBlockReason(players: (RoomPlayer | null)[], roomMode: string): string | null {
+  if (SOLO_START_BYPASS) return null;
+  return getStartBlockReasonStrict(players, roomMode);
+}
+
+export function getStartBlockReasonStrict(players: (RoomPlayer | null)[], roomMode: string): string | null {
   const occupied = players.filter((p): p is RoomPlayer => p !== null);
 
   if (roomMode === '1/1') {

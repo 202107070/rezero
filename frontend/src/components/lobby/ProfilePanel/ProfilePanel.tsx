@@ -51,7 +51,7 @@ export function ProfilePanel({ titleData, onOpenMatchStory, onOpenTitles }: Prof
           {equipped.icon} {equipped.name}
         </span>
       )}
-      <div style={{ color: '#999', fontSize: '14px' }}>Lv.42 | 플래티넘 II</div>
+      <div style={{ color: '#999', fontSize: '14px' }}>Lv.0 | -</div>
       <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
         <button type="button" className="profile-btn" style={{ fontSize: '13px', padding: '4px 9px' }} onClick={onOpenMatchStory}>
           📋 매치 스토리
