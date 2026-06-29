@@ -72,8 +72,11 @@ Electron 개발은 **Windows 또는 macOS**에서 진행합니다.
 ```bash
 git clone https://github.com/202107070/rezero.git
 cd rezero
-npm install
+npm ci
 ```
+
+> `npm ci`는 `package-lock.json`과 **완전히 동일한** 버전으로 설치합니다.  
+> 일상적인 pull 후 동기화에는 `npm install`보다 `npm ci`를 권장합니다.
 
 **프론트엔드 (Electron)**
 
@@ -98,7 +101,7 @@ npm run backend
 ### ⚠️ 협업 시 주의사항
 
 1. **`package.json` / `package-lock.json`은 Git에 반드시 포함합니다.** `.gitignore`에 넣지 마세요. 팀 전체가 같은 의존성 버전을 쓰려면 이 파일들이 저장소에 있어야 합니다.
-2. **`node_modules`만 Git에 올리지 않습니다.** clone/pull 후 **저장소 루트(`rezero/`)** 에서 `npm install` 한 번 실행하세요.
+2. **`node_modules`만 Git에 올리지 않습니다.** clone/pull 후 **저장소 루트(`rezero/`)** 에서 `npm ci` 실행하세요.
 3. **명령어도 루트에서 실행합니다.** `frontend/` 또는 `backend/` 폴더 안에서 `npm run …` 하면 모듈을 찾지 못하는 경우가 많습니다.
 4. **리눅스 서버의 `node_modules`를 Windows PC로 복사해 쓰지 마세요.** Electron은 OS별 바이너리가 달라 실행이 실패할 수 있습니다.
 5. 예전 구조로 남아 있는 `frontend/node_modules`, `backend/node_modules` 폴더가 있으면 **삭제**한 뒤, 루트에서 `npm install` 을 다시 하세요.
@@ -108,11 +111,14 @@ npm run backend
 
 | 증상 | 해결 |
 |------|------|
-| `Cannot find module 'react'` 등 모듈 없음 | 루트에서 `npm install` 실행. `frontend/` 안에서 install 하지 않기 |
+| `npm ci` — **package-lock.json이 없다** | `frontend/`·`backend/`가 아닌 **루트(`rezero/`)** 에서 실행했는지 확인 |
+| `npm ci` — **package.json and package-lock.json are out of sync** | 로컬에서 lock/json을 수정했을 수 있음 → `git restore package.json package-lock.json` 후 `git pull` → `npm ci` |
+| `Cannot find module 'react'` 등 모듈 없음 | 루트에서 `npm ci`. `frontend/` 안에서 설치하지 않기 |
 | `frontend` 폴더에서 `npm run dev` 실패 | `cd ..` 후 `npm run dev` 또는 `npm run electron:dev` |
-| pull 후 갑자기 실행 안 됨 | 루트에서 `git pull` → `npm install` (lock 파일이 바뀌었을 수 있음) |
-| Electron 관련 이상 | `frontend/node_modules` 삭제 후 루트에서 `npm install` 재실행 |
-| `preinstall` / 루트 설치 안내 메시지 | `frontend/`·`backend/`가 아닌 **프로젝트 루트**에서 `npm install` |
+| pull 후 갑자기 실행 안 됨 | 루트에서 `git pull` → `npm ci` |
+| Electron 관련 이상 | 아래 **클린 재설치** 참고 |
+| `preinstall` / 루트 설치 안내 메시지 | **프로젝트 루트**에서 `npm ci` |
+| `npm ci`가 계속 실패할 때 (최후) | 클린 재설치 후 루트에서 `npm install` 1회 (lock이 바뀌면 팀에 공유) |
 
 **클린 재설치 (문제 계속될 때, 루트에서):**
 
@@ -121,7 +127,8 @@ npm run backend
 Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force frontend/node_modules -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force backend/node_modules -ErrorAction SilentlyContinue
-npm install
+git restore package.json package-lock.json
+npm ci
 npm run electron:dev
 ```
 
