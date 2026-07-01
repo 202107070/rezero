@@ -1,4 +1,4 @@
-import { MY_RESULT_USER_ID } from '../constants/resultConstants';
+import { getCurrentUserId } from '../services/authService';
 import {
   clearReviewInviteMemory,
   persistReviewInviteMemory,
@@ -46,12 +46,12 @@ export function clearReviewInvite(sessionId: string): void {
 }
 
 export function isInviterUser(userId: string): boolean {
-  return userId === MY_RESULT_USER_ID;
+  return userId === getCurrentUserId();
 }
 
 /** 실제 유저 매칭 전까지 봇/비-본인 유저는 자동 수락 대상 */
 export function shouldAutoAcceptReviewInvite(toUserId: string): boolean {
-  return toUserId !== MY_RESULT_USER_ID;
+  return toUserId !== getCurrentUserId();
 }
 
 export function scheduleReviewInviteResponse(

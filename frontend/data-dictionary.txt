@@ -26,6 +26,8 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   D. 화면 간 payload (Room → Battle → Result)
   E. 페이지별 변수 (도메인 / UI 구분)
   F. 상수·enum·고정값
+  G. 인증 (Auth)
+  H. 문제 capabilities · visual 자산
 
 
 ================================================================================
@@ -87,6 +89,29 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   roomId 있음  →  "battle-{roomId}"     예: battle-5
   roomId 없음  →  "battle-solo"
 
+[A.7 authService]  src/services/authService.ts
+  (로컬 계정 — 멀티 API 연동 전 임시)
+
+  저장 위치
+  ─────────────────────────────────────────────────────────────────
+  rezero_auth_accounts    localStorage    계정 목록 (id, username, password, displayName)
+  currentUser             메모리 only     앱 재실행 시 null (재로그인 필요)
+  rezero_auth_session     (레거시)        initAuth() 시 삭제
+
+  TEST_ACCOUNTS (최초 localStorage 없을 때 시드)
+    testuser1 / test1234  (displayName: 테스트유저1)
+    testuser2 / test1234  (displayName: 테스트유저2)
+
+  로그인·회원가입 성공 시 initializeUserSession() 호출 (userService 초기화)
+
+[A.8 devTestConfig]  src/constants/devTestConfig.ts
+
+  DEV_TEST_USER_LOADOUT
+    enabled                 boolean     true 시 로그인·가입 직후 테스트 로드아웃 적용
+    gold                    number      50000
+    items                   object      8종 아이템 각 10개
+    autoSelectAllItemsInRoom boolean    대기실 아이템 로드아웃 전부 자동 선택
+
 
 ================================================================================
  B. 도메인 타입 (types/*.ts, constants)
@@ -132,7 +157,7 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
 
 [B.5 LobbyUser]  types/lobby.ts — 로비 유저 목록 (현재 mock)
 
-  name          string                    'rocky_user'
+  name          string                    getCurrentUserName() (로그인 유저)
   rank          string                    티어 문자열 (현재 '-')
   title         string | null             장착 칭호 id
 
@@ -184,14 +209,16 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   input         string?
   output        string?
   visual        ProblemVisual | null
+  capabilityOverrides Partial<Record<ItemKey, boolean>>?  문제별 아이템 정책 예외
 
 [B.11 ProblemVisual]  types/battle.ts
 
-  kind          'ascii' | 'html' | 'css' | 'svg' | 'canvas'
+  kind          'ascii' | 'html' | 'css' | 'svg' | 'canvas' | 'image'
   content       string?
   previewHtml   string?
   previewCss    string?
   caption       string?
+  imageFile     string?                   public/assets/problem-images/ 내 파일명
 
 [B.12 ItemInventory]  types/battle.ts / itemTypes.ts
 
@@ -289,6 +316,30 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   id, type, difficulty, title, question
   answer, options, correctIndex, explanation, visual
   (BattleProblem 과 유사, problems.js 에서 생성)
+
+[B.22 AuthUser]  services/authService.ts
+
+  id            string                    user_… | test_user_1 등
+  username      string                    로그인 아이디 (소문자 정규화)
+  displayName   string                    게임 표시 닉네임
+
+[B.23 ProblemStyle / ProblemCapabilities]  types/battle.ts, utils/problemCapabilities.ts
+
+  ProblemStyle
+    'code' | 'multiple_choice' | 'short_answer'
+    fill_blank, visual_fill_blank → code
+
+  ProblemCapabilities  (resolveProblemCapabilities 결과)
+    style                 ProblemStyle
+    hasVisual             boolean     렌더 가능한 visual 존재 (모든 kind)
+    hasImage              boolean     kind === 'image' + imageFile
+    items                 Record<ItemKey, boolean>   아이템 모드 허용 여부
+    canUseHint            boolean     revealLength | revealPrev
+    canUseAutoSolve       boolean     (현재 미사용 예약)
+    canUseBuildBonus      boolean     buildCharge
+    showCodePanel         boolean     style === 'code'
+    showMultipleChoicePanel boolean
+    showShortAnswerPanel  boolean
 
 
 ================================================================================
@@ -405,6 +456,20 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
  E. 페이지별 변수 (도메인 / UI 구분)
 ================================================================================
 
+── E.0 LoginPage  src/pages/login/LoginPage.tsx ───────────────────────────────
+
+  [UI]
+  mode            'login' | 'signup'        UI      탭 전환
+  username        string                    UI      아이디 (가입 시 소문자·숫자·_)
+  password        string                    UI      4자 이상
+  displayName     string                    UI      회원가입 시만 (닉네임, max 20)
+  error           string                    UI      authService 오류 메시지
+
+  [도메인 — AuthContext 경유]
+  login(username, password)           → authService.login
+  signup(username, password, displayName?) → authService.signup
+  성공 시 navigate(ROUTES.LOBBY)
+
 ── E.1 LobbyPage  src/pages/lobby/LobbyPage.tsx ─────────────────────────────
 
   [도메인]
@@ -415,7 +480,7 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   itemInventory     ItemInventory     STORE+UI
   titleData         TitleData         STORE+UI
   codeHistory       CodeHistoryEntry[] STORE+UI
-  users             LobbyUser[]       UI          현재 rocky_user 1명
+  users             LobbyUser[]       UI          로그인 유저 1명 (getCurrentUserName)
   chatMessages      ChatMessage[]     UI          서버 미연동
   displayMode       DisplayMode       STORE+UI
   audioSettings     AudioSettings     STORE+UI
@@ -463,6 +528,7 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   [URL + store]
   freshStart, roomId, roomMode, gameMode, lang, maxPlayersParam
   battleMeta        object               STORE   getBattleSettings()
+  currentCaps       ProblemCapabilities  UI      resolveProblemCapabilities(currentProblem, { gameMode })
 
   [도메인 — 게임 진행]
   problems          BattleProblem[]      STORE+UI
@@ -545,10 +611,12 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
 ================================================================================
 
 [F.1 사용자·세션 식별]
-  MY_USER_NAME / MY_RESULT_USER_ID     'rocky_user'
+  getCurrentUserId() / getCurrentUserName()   authService (로그인 유저)
+  getCurrentDisplayName()                     authService (닉네임)
   DEFAULT_ROOMS                       []        사전 등록 방 없음
-  DEMO_BOT_POOL                       []        자동 봇 없음
-  SOLO_START_BYPASS                   true      대기실 혼자 START 허용
+  DEMO_BOT_POOL                       6명       roomConstants (수동 봇 초대용)
+  BOT_READY_DELAY_MS                  3000      봇 입장 후 READY 대기
+  SOLO_START_BYPASS                   false     인원·READY 규칙 적용
 
 [F.2 아이템]
   ROULETTE_COST                       1000 G
@@ -576,6 +644,95 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   ENABLE_RESULT_BOT_DEPARTURE          false
   REVIEW_BOT_ACCEPT_DELAY_MS          10000
 
+[F.7 인증]
+  ROUTES.LOGIN                        '/login'
+  ACCOUNTS_KEY                        'rezero_auth_accounts'
+  signup 규칙                         아이디 3자+, 영문소문자·숫자·_, 비번 4자+
+
+[F.8 문제 visual · capabilities]
+  PROBLEM_IMAGES_DIR                  assets/problem-images
+  PROBLEM_IMAGES_BASE_URL             ./assets/problem-images/
+  STYLE_ITEM_POLICY                   problemCapabilityPolicy.ts
+  resolveProblemCapabilities()        utils/problemCapabilities.ts
+  hasRenderableVisual()               utils/problemVisualUtils.ts
+
+
+================================================================================
+ G. 인증 (Auth) — 변수·흐름 요약
+================================================================================
+
+  [계정 종류]
+    1) 내장 테스트 계정 — testuser1, testuser2 (화면에 노출하지 않음, 수동 입력)
+    2) 개인 회원가입 계정 — [회원가입] 탭에서 아이디·비밀번호·닉네임 입력 후
+       localStorage 에 저장, 이후 [로그인] 탭으로 동일 아이디로 로그인 가능
+
+  [세션]
+    로그인 성공 → currentUser (메모리)
+    앱 종료·재실행 → currentUser = null → /login
+    계정 데이터(rezero_auth_accounts)는 localStorage 에 유지
+
+  [AuthContext]  contexts/AuthContext.tsx
+    user, isAuthenticated, login(), signup(), logout()
+    initAuth() — 앱 시작 시 계정 로드, 레거시 세션 키 삭제
+
+  [라우트 가드]
+    ProtectedRoute  … 미인증 → /login
+    GuestRoute      … 인증됨 → / (로비)
+
+
+================================================================================
+ H. 문제 capabilities · visual 자산
+================================================================================
+
+  [원칙]
+    문제 JSON: type, visual, capabilityOverrides 만 저장
+    UI·배틀 로직: resolveProblemCapabilities() 결과(currentCaps)만 참조
+
+  [동작 방식]  (플래그처럼 쓰지만 JSON에 직접 저장하지 않음)
+    problems.js 에 hasVisual·canUseHint 같은 boolean 을 문제마다 박아 두지 않는다.
+    저장 필드는 type, visual, capabilityOverrides(선택) 뿐이다.
+
+    현재 문제가 바뀔 때마다 아래 파이프라인으로 currentCaps 를 계산한다.
+
+      type + visual + capabilityOverrides + gameMode
+              ↓
+      resolveProblemCapabilities()     … problemCapabilities.ts
+              ↓
+      currentCaps (ProblemCapabilities)   … boolean 플래그 묶음
+
+    BattlePage·PracticeProblemViewer 는 currentCaps 만 보고 UI·아이템을 분기한다.
+      패널 표시     showCodePanel | showMultipleChoicePanel | showShortAnswerPanel
+      보기 렌더     hasVisual || hasImage
+      아이템 사용   canUseItem(currentCaps, itemKey)  →  items[itemKey] true/false
+      힌트·빌드+    canUseHint, canUseBuildBonus (items 에서 파생)
+
+    capabilityOverrides 가 있으면 STYLE_ITEM_POLICY 를 해당 문제만 일부 덮어쓴다.
+    gameMode === 'normal' 이면 items 전 필드를 false 로 만든 뒤 위 플래그에 반영된다.
+
+  [스타일 → type 매핑]
+    code              ← fill_blank, visual_fill_blank
+    short_answer      ← short_answer
+    multiple_choice   ← multiple_choice
+
+  [아이템 정책 — item 모드, STYLE_ITEM_POLICY]
+    code            revealLength, revealPrev, blankBreak, buildCharge + 공격 전부
+    short_answer    revealLength, revealPrev + 공격 전부 (blankBreak·buildCharge 불가)
+    multiple_choice 자기 버프 전부 불가, 공격 아이템만 허용
+    normal 모드     items 전 필드 false
+
+  [visual 렌더]
+    shouldRenderVisual = hasVisual || hasImage
+    hasImage = visual.kind === 'image' && imageFile 존재
+    image 경로: ./assets/problem-images/{imageFile}
+    html/css/ascii/svg/canvas — previewHtml·previewCss·content 인라인 (problems.js)
+
+  [관련 파일]
+    constants/problemCapabilityPolicy.ts
+    constants/problemImages.ts
+    utils/problemCapabilities.ts
+    utils/problemVisualUtils.ts
+    components/battle/ProblemVisualPreview.tsx
+
 
 ================================================================================
  부록: 백엔드 연동 시 우선 매핑 후보
@@ -583,6 +740,8 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
 
   프론트 (현재)              →  백엔드 개념 (제안)
   ─────────────────────────────────────────────────────────────
+  authService (accounts)     →  users 테이블, POST /auth/login|signup
+  currentUser (메모리)       →  JWT / 세션 쿠키 (서버 검증)
   userService.gold           →  user.gold / wallet
   userService.itemInventory  →  user_items
   userService.titleData      →  user_titles, title_stats

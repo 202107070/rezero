@@ -1,3 +1,4 @@
+import { getCurrentUserName } from '../../services/authService';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BattleChatPanel, { type ChatMessage } from '../../components/battle/BattleChatPanel';
@@ -45,7 +46,7 @@ import {
   startScribbleCanvas,
 } from '../../utils/battle/canvasEffects';
 import { assembleCode, DEFAULT_TEMPLATE, getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
-import { isBlankBasedType } from '../../utils/problemTypeUtils';
+import { canUseItem, resolveProblemCapabilities } from '../../utils/problemCapabilities';
 import {
   areAllBotsSolvedOnPlayerProblem,
   createDemoBattleRoster,
@@ -181,6 +182,18 @@ export default function BattlePage() {
     () => normalizeBattleProblem(problems[currentIndex] || ({} as BattleProblem)),
     [problems, currentIndex],
   );
+  const currentCaps = useMemo(
+    () =>
+      resolveProblemCapabilities(currentProblem, {
+        gameMode: isItemMode ? 'item' : 'normal',
+      }),
+    [currentProblem, isItemMode],
+  );
+  const shouldRenderProblemVisual = currentCaps.hasVisual || currentCaps.hasImage;
+  const allowedAttackItems = useMemo(
+    () => selectedAttackItems.filter((key) => canUseItem(currentCaps, key)),
+    [selectedAttackItems, currentCaps],
+  );
   const currentProblemLocked = localSolvedProblems.includes(currentIndex);
   const hasProblems = problems.length > 0;
   const totalProblems = hasProblems ? problems.length : 1;
@@ -223,7 +236,7 @@ export default function BattlePage() {
     [currentProblem, currentIndex, langKey, blankAnswers, selectedOption],
   );
 
-  const showBuildPanel = isBlankBasedType(currentProblem.type);
+  const showBuildPanel = currentCaps.showCodePanel;
   const buildsAllowed = BATTLE_BUILD_LIMIT + (buildBonusByProblem[currentIndex] || 0);
   const buildsUsed = buildsUsedByProblem[currentIndex] || 0;
   const currentBuildCode = buildCodeByProblem[currentIndex] ?? '';
@@ -336,7 +349,7 @@ export default function BattlePage() {
     return [
       {
         id: 'me',
-        name: 'rocky_user',
+        name: getCurrentUserName(),
         avatar: '😎',
         problem: currentProblemNumber,
         solvedCount: localSolvedProblems.length,
@@ -938,8 +951,7 @@ export default function BattlePage() {
   const handleUseSelfItem = (type: keyof ItemInventory) => {
     if (!isItemMode || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
-    if (currentProblem.type === 'multiple_choice') return;
-    if (currentProblem.type === 'short_answer' && type === 'blankBreak') return;
+    if (!canUseItem(currentCaps, type)) return;
     const correct = currentProblem.answer?.[langKey] || [];
     if (type === 'revealLength') {
       const idx = Math.floor(Math.random() * correct.length);
@@ -951,7 +963,7 @@ export default function BattlePage() {
       applyBlankBreak(correct);
       return;
     } else if (type === 'buildCharge') {
-      if (!isBlankBasedType(currentProblem.type)) return;
+      if (!currentCaps.canUseBuildBonus) return;
       setBuildBonusByProblem((prev) => ({
         ...prev,
         [currentIndex]: (prev[currentIndex] || 0) + BATTLE_BUILD_ITEM_BONUS,
@@ -965,7 +977,7 @@ export default function BattlePage() {
 
   const applyBlankBreak = (correct: string[]) => {
     const partial = currentProblem.question || '';
-    if (currentProblem.type === 'short_answer') {
+    if (currentCaps.showShortAnswerPanel) {
       setBreakingBlanks((prev) => ({ ...prev, [`${currentIndex}_0`]: true }));
       setTimeout(() => {
         setBlankAnswers((prev) => {
@@ -1052,6 +1064,7 @@ export default function BattlePage() {
   const handleSelectItemType = (type: keyof ItemInventory) => {
     if (!canUseAttackItems || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
+    if (!canUseItem(currentCaps, type)) return;
     const botId = itemTargetBotIdRef.current || expandedOpponentId;
     if (!botId) return;
 
@@ -1095,7 +1108,7 @@ export default function BattlePage() {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const modeLabel = chatMode === 'ALL' ? '[전체]' : '[친구]';
-    setChatMessages((prev) => [...prev, { sender: 'rocky_user', text: chatMsg, mode: modeLabel, time: timeStr }]);
+    setChatMessages((prev) => [...prev, { sender: getCurrentUserName(), text: chatMsg, mode: modeLabel, time: timeStr }]);
     setChatMsg('');
   };
 
@@ -1187,11 +1200,7 @@ export default function BattlePage() {
                     <span style={{ color: '#aaa', marginLeft: 'auto' }}>내 아이템:</span>
                     {selectedSelfItems.map((type) => {
                       const meta = SELF_ITEM_META[type] || { icon: '?', name: type };
-                      const disabled =
-                        currentProblem.type === 'multiple_choice' ||
-                        itemInventory[type] <= 0 ||
-                        (currentProblem.type === 'short_answer' && type === 'blankBreak') ||
-                        (type === 'buildCharge' && !isBlankBasedType(currentProblem.type));
+                      const disabled = !canUseItem(currentCaps, type) || itemInventory[type] <= 0;
                       return (
                         <button
                           key={type}
@@ -1248,10 +1257,10 @@ export default function BattlePage() {
                   <div>{currentProblem.explanation || ''}</div>
                 </div>
               </div>
-              {isBlankBasedType(currentProblem.type) && (
+              {currentCaps.showCodePanel && (
                 <>
                   <div className="fill-blank-area">
-                    {currentProblem.visual && (
+                    {shouldRenderProblemVisual && (
                       <ProblemVisualPreview visual={currentProblem.visual} />
                     )}
                     <div className="fill-blank-code">
@@ -1281,9 +1290,9 @@ export default function BattlePage() {
                   />
                 </>
               )}
-              {currentProblem.type === 'multiple_choice' && (
+              {currentCaps.showMultipleChoicePanel && (
                 <div className="fill-blank-area">
-                  {currentProblem.visual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
+                  {shouldRenderProblemVisual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
                   <div className="fill-blank-question">{currentProblem.question}</div>
                   {(currentProblem.options || []).map((opt, i) => {
                     const isSelected = selectedOption === i;
@@ -1307,9 +1316,9 @@ export default function BattlePage() {
                   })}
                 </div>
               )}
-              {currentProblem.type === 'short_answer' && (
+              {currentCaps.showShortAnswerPanel && (
                 <div className="fill-blank-area">
-                  {currentProblem.visual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
+                  {shouldRenderProblemVisual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
                   <div className="fill-blank-question">{currentProblem.question}</div>
                   <input
                     className="blank-input battle-short-input"
@@ -1436,7 +1445,7 @@ export default function BattlePage() {
       {showItemModal && isItemMode && (
         <ItemSelectModal
           inventory={itemInventory}
-          allowedTypes={selectedAttackItems}
+          allowedTypes={allowedAttackItems}
           onSelect={handleSelectItemType}
           onClose={handleCloseItemModal}
         />

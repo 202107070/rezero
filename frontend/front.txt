@@ -14,6 +14,7 @@
 --------------------------------------------------------------------------------
 
   0. 공통 사항
+  0.5 로그인·회원가입 (Auth)
   1. 로비 (Lobby)
   2. 대기실 (Room)
   3. 배틀 (Battle)
@@ -33,12 +34,13 @@
   React 19, TypeScript, Vite, React Router 7, Electron
 
 [라우트 (src/constants/routes.ts)]
-  /           → 로비
-  /room       → 대기실
-  /battle     → 배틀
-  /result     → 결과
-  /practice   → 연습
-  /build      → 빌드 (배틀 준비 흐름에서 사용)
+  /login      → 로그인·회원가입 (앱 시작 화면, GuestRoute)
+  /           → 로비 (ProtectedRoute)
+  /room       → 대기실 (ProtectedRoute)
+  /battle     → 배틀 (ProtectedRoute)
+  /result     → 결과 (ProtectedRoute)
+  /practice   → 연습 (ProtectedRoute)
+  /build      → 빌드 (ProtectedRoute)
 
 [페이지 vs 컴포넌트 역할 분리]
   pages/     : 라우트에 1:1 대응. 상태·이벤트·navigate·store/서비스 호출 담당 ("컨트롤러")
@@ -52,10 +54,13 @@
 
 [데이터 저장 — DB 연동 준비 중]
 
-  localStorage 는 사용하지 않는다. 앱 실행 중에만 유지되는 메모리 store 로
-  통일했으며, 백엔드 API 연동 시 store 내부만 교체하면 된다.
+  게임 세션·프로필은 앱 실행 중 메모리 store 로 유지한다.
+  계정 목록만 localStorage (rezero_auth_accounts) 에 저장한다.
+  로그인 세션(currentUser)은 메모리 only — 앱 재실행 시 /login 으로 복귀.
 
   ┌─────────────────────┬──────────────────────────────────────────────┐
+  │ authService         │ 계정 localStorage + 세션 메모리 (로그인 상태)   │
+  ├─────────────────────┼──────────────────────────────────────────────┤
   │ clientPrefsStore    │ 화면·소리 설정 (메모리, 재시작 시 초기화)     │
   │                     │ display_mode, audio_settings                 │
   ├─────────────────────┼──────────────────────────────────────────────┤
@@ -66,15 +71,106 @@
   └─────────────────────┴──────────────────────────────────────────────┘
 
   페이지는 store 를 직접 쓰기보다 roomService, userService,
-  battleSessionService, codeHistoryUtils 등 서비스/유틸을 통해 읽고 씁니다.
+  battleSessionService, authService, codeHistoryUtils 등 서비스/유틸을 통해 읽고 씁니다.
   (battleSessionService 에 /api/v1/build/session 저장·삭제 stub 있음)
 
   mock / 임시 데이터 정리 (현재 상태):
     - 사전 등록 방 없음 (DEFAULT_ROOMS = [])
-    - 데모 봇·가짜 유저 제거 (로비 유저 목록은 rocky_user 만)
-    - 골드·아이템·칭호 초기값 0 / 빈 상태
+    - 로비 유저 목록: 로그인한 본인 1명 (getCurrentUserName)
+    - DEV_TEST_USER_LOADOUT.enabled 시 로그인·가입 직후 골드 50,000G·아이템 각 10개
     - 채팅·랭킹 탭: 서버 미연동 (로컬 UI만 동작)
     - 방은 유저가 [방만들기]로 생성하거나, 추후 API 로 받아올 예정
+    - DEMO_BOT_POOL 6명 — 대기실 [봇 초대] 클릭 시만 입장 (자동 입장 없음)
+
+
+================================================================================
+ 0.5 로그인·회원가입 (Auth)
+================================================================================
+
+--------------------------------------------------------------------------------
+ 0.5.1 개요
+--------------------------------------------------------------------------------
+
+로그인 화면은 ROUTES.LOGIN = '/login' 이다. 앱 최초 진입·재실행 시 여기서 시작한다.
+인증 후에만 로비·대기실·배틀 등 게임 화면에 접근할 수 있다 (ProtectedRoute).
+
+[계정 이용 방법]
+  1) 내장 테스트 계정 — 화면에 표시하지 않음. 수동으로 아이디·비밀번호 입력.
+       testuser1 / test1234
+       testuser2 / test1234
+  2) 개인 회원가입 — [회원가입] 탭에서 아이디·비밀번호·닉네임 입력 후 가입.
+       가입한 계정은 localStorage 에 저장되며, 이후 [로그인] 탭에서 동일 아이디로
+       로그인할 수 있다.
+
+[흐름]
+  앱 시작 → AuthProvider.initAuth() → currentUser = null → /login
+  로그인 또는 회원가입 성공
+    → authService 가 currentUser 설정
+    → initializeUserSession() (테스트 로드아웃 등)
+    → navigate('/') 로비
+  로그인 상태에서 /login 접근 → GuestRoute 가 / 로 리다이렉트
+  앱 종료 후 재실행 → 세션 소멸 → 다시 /login (계정 데이터는 localStorage 유지)
+
+
+--------------------------------------------------------------------------------
+ 0.5.2 관련 파일 위치
+--------------------------------------------------------------------------------
+
+  pages/
+    src/pages/login/LoginPage.tsx       … 로그인·회원가입 UI
+    src/pages/login/login.css
+
+  components/
+    src/components/auth/ProtectedRoute.tsx   … 미인증 → /login
+    src/components/auth/GuestRoute.tsx       … 인증됨 → /
+
+  contexts/
+    src/contexts/AuthContext.tsx        … user, login, signup, logout
+
+  services/
+    src/services/authService.ts         … 계정 CRUD, 세션 (메모리)
+
+  constants/
+    src/constants/devTestConfig.ts      … DEV_TEST_USER_LOADOUT (테스트 골드·아이템)
+
+  App.tsx
+    AuthProvider → BrowserRouter → Routes (LOGIN 은 GuestRoute, 나머지 ProtectedRoute)
+
+
+--------------------------------------------------------------------------------
+ 0.5.3 LoginPage — UI·검증
+--------------------------------------------------------------------------------
+
+  탭: [로그인] | [회원가입]
+
+  로그인 필드: 아이디, 비밀번호
+  회원가입 추가 필드: 닉네임 (displayName, 선택·미입력 시 아이디와 동일)
+
+  가입 규칙 (authService.signup):
+    아이디 3자 이상, 영문 소문자·숫자·_ 만
+    비밀번호 4자 이상
+    중복 아이디 불가
+
+  오류 메시지: 존재하지 않는 계정, 비밀번호 불일치, 아이디 형식·중복 등
+
+  ※ 테스트 계정 안내 문구는 UI에 노출하지 않음 (문서·개발자 참고용)
+
+
+--------------------------------------------------------------------------------
+ 0.5.4 Auth 연관 타입·서비스 요약
+--------------------------------------------------------------------------------
+
+[AuthUser]
+  id, username, displayName
+
+[authService]
+  initAuth(), login(), signup(), logout()
+  getCurrentUser(), getCurrentUserId(), getCurrentUserName(), getCurrentDisplayName()
+  isAuthenticated()
+
+[initializeUserSession]  userService.ts
+  DEV_TEST_USER_LOADOUT.enabled 일 때 골드·아이템 초기화
+  defaultSelectedItemKeys() — 대기실 아이템 자동 선택
 
 
 ================================================================================
@@ -85,7 +181,7 @@
  1.1 개요
 --------------------------------------------------------------------------------
 
-로비는 앱의 시작 화면(ROUTES.LOBBY = '/')이다.
+로비는 ROUTES.LOBBY = '/' 이다. 로그인 후 진입하는 메인 화면이다.
 플레이어가 여기서:
 
   - 방 목록을 보고 필터링·페이지 이동·입장 (처음엔 빈 목록)
@@ -94,7 +190,7 @@
   - 로비 채팅 (현재 로컬 mock, 서버 없음)
   - 프로필·칭호·매치 스토리(코드 히스토리) 확인
   - 골드·배틀 아이템 인벤토리·룰렛
-  - 온라인 유저 목록 / 랭킹 탭 (현재 본인만 표시)
+  - 온라인 유저 목록 / 랭킹 탭 (현재 로그인 유저 본인만 표시)
   - 설정(화면 모드, BGM) 및 앱 종료
 
 를 수행한다.
@@ -189,7 +285,7 @@
 
 [골드·아이템]
   React state ↔ userService 동기화
-  초기값: 골드 0G, 아이템 전 종 0개
+  초기값: initializeUserSession() 결과 (DEV_TEST_USER_LOADOUT 시 50,000G·아이템 각 10)
   spinRoulette(): ROULETTE_COST(1,000G) 차감 → 랜덤 아이템 또는 꽝
     - 골드 부족 시 회전 불가 (RouletteWheel 에서 흔들림)
 
@@ -212,7 +308,7 @@
 --------------------------------------------------------------------------------
 
   loadInitialUsers()   … RankingBoard 용 유저 목록
-                         현재 [{ name: 'rocky_user', rank: '-', title: 장착칭호 }]
+                         현재 [{ name: getCurrentUserName(), rank: '-', title: 장착칭호 }]
   resetCreateForm()      … 방 생성 모달 초기화
   isCreateFormValid()    … 필수 입력 검사
   triggerModalShake()    … 유효성 실패 시 500ms 흔들림
@@ -289,7 +385,7 @@
 
   Props: messages, chatMsg, chatMode, onChatMsgChange, onChatModeChange, onSend
   chatMode: ALL → '[전체]', FRIEND → '[친구]' (라벨만, 실제 라우팅 없음)
-  Enter 키 또는 [전송] → handleSendChat (sender: 'rocky_user' 고정)
+  Enter 키 또는 [전송] → handleSendChat (sender: getCurrentUserName())
   messages 변경 시 scrollTop = scrollHeight 자동 스크롤
   초기 messages: [] (빈 채팅)
 
@@ -298,7 +394,7 @@
   경로: ProfilePanel/ProfilePanel.tsx
   역할: 내 프로필 요약 + 진입 버튼
 
-  표시: 아바타(ME), 닉네임 rocky_user, 장착 칭호(있을 때만), Lv.0 | -
+  표시: 아바타(ME), 닉네임 getCurrentDisplayName() 또는 username, 장착 칭호(있을 때만), Lv.0 | -
   [📋 매치 스토리] → onOpenMatchStory → MatchStoryModal
   [🏆 칭호]         → onOpenTitles     → TitleModal
 
@@ -319,12 +415,12 @@
   역할: 로비 접속 유저 목록 (현재 mock — 본인만)
 
   탭:
-    일반 … rocky_user 를 목록 최상단으로
+    일반 … getCurrentUserName() 를 목록 최상단으로
     랭킹 … TIER_ORDER(마스터>…>브론즈) 내림차순
 
-  MY_USER_NAME = 'rocky_user'
+  myUserName = getCurrentUserName()
   titleData.equipped 를 내 행에, 다른 유저는 LobbyUser.title 로 칭호 표시
-  현재 users prop: rocky_user 1명 (rank: '-')
+  현재 users prop: 로그인 유저 1명 (rank: '-')
 
 
 ── RouletteWheel ─────────────────────────────────────────────────────────────
@@ -440,13 +536,13 @@
 --------------------------------------------------------------------------------
 
   - 채팅: 서버 없음, LobbyPage 로컬 state 만
-  - 유저 목록: rocky_user 1명 (추후 API/소켓 연동 예정)
+  - 유저 목록: 로그인 유저 1명 (추후 API/소켓 연동 예정)
   - ProfilePanel Lv/티어: Lv.0 | - (백엔드 연동 전 placeholder)
-  - 사전 등록 방·데모 봇 없음 — 방은 [방만들기] 로만 생김
+  - 사전 등록 방·자동 봇 없음 — 방은 [방만들기] 로만 생김
   - 방 id: createRoom 시 max(기존 id)+1 (최소 5부터)
   - STARTED·만원 방: RoomCard 클릭 불가
-  - 앱 재시작 시 모든 데이터 초기화 (게임 데이터 + 화면/소리 설정 포함)
-  - 룰렛 1,000G 필요 — 초기 골드 0 이므로 결과 화면 등에서 획득 후 사용
+  - 앱 재시작 시 게임 데이터·화면/소리 설정 초기화 (계정은 localStorage 유지)
+  - 미로그인 시 ProtectedRoute 가 /login 으로 이동
 
 
 ================================================================================
@@ -473,7 +569,8 @@
 를 수행한다.
 
 현재는 멀티플레이 API·소켓 없이 단일 클라이언트 mock 이다.
-SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능하다.
+SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START 가능하다.
+1:1 모드에서는 호스트가 [봇 초대] 로 상대를 추가한 뒤 시작할 수 있다.
 
 
 --------------------------------------------------------------------------------
@@ -551,13 +648,13 @@ SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능�
 --------------------------------------------------------------------------------
 
 [초기 플레이어 players]
-  buildInitialPlayers() → rocky_user(호스트) 1명 + null 슬롯 7개 (최대 8칸)
-  DEMO_BOT_POOL = [] 이므로 자동 봇 입장 없음
+  buildInitialPlayers() → getCurrentUserName()(호스트) 1명 + null 슬롯 7개 (최대 8칸)
+  DEMO_BOT_POOL 6명 — 자동 입장 없음, 호스트가 빈 슬롯 [봇 초대] 클릭 시만 입장
 
 [시작 handleStartGame]
   1. host 확인
-  2. getStartBlockReason() — SOLO_START_BYPASS=true 이면 항상 null
-     (false 시: 1/1→2명, 1/N→3명, 비호스트 전원 READY 필요)
+  2. getStartBlockReason() — SOLO_START_BYPASS=false
+     1/1 → 2명 이상, 1/N → 3명 이상, 비호스트 전원 READY 필요
   3. prepareBattleStart() → sessionStore 에 문제·설정 저장, 방 STARTED
   4. navigate('/battle?fresh=1&roomId=&lang=&mode=&count=&maxPlayers=&gameMode=')
 
@@ -570,12 +667,14 @@ SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능�
   슬롯 null, kickedCount++, roomStore.setKickedCount, updateRoomPlayerCount
 
 [봇 초대 handleInviteBot]
-  DEMO_BOT_POOL.length === 0 이면 동작 없음 (현재 비활성)
-  (풀에 봇이 있으면) 호스트가 빈 슬롯 클릭 → 10초 후 자동 READY
+  호스트만, 빈 슬롯 클릭 시 pickDemoBot() 으로 DEMO_BOT_POOL 에서 선택
+  BOT_READY_DELAY_MS(3초) 후 자동 READY
+  1:1 자동 입장 없음 — 반드시 수동 [봇 초대]
 
 [아이템 선택]
   loadItemInventory() → userService
   selectedItems: Set<ItemKey>, 보유 0개는 선택 불가
+  DEV_TEST_USER_LOADOUT.autoSelectAllItemsInRoom 시 defaultSelectedItemKeys() 로 전부 선택
   item 모드에서만 RoomItemLoadout 표시, 시작 시 selectedItems 전달
 
 
@@ -589,13 +688,13 @@ SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능�
 ── PlayerGrid ────────────────────────────────────────────────────────────────
   roomMode === '1/1' → PlayerDuelGrid (호스트 vs 상대 1:1)
   그 외 → 8칸 PlayerSlot 그리드
-  빈 슬롯 + canInviteMore → [+ 초대] (현재 DEMO_BOT_POOL 비어 있어 무반응)
+  빈 슬롯 + canInviteMore + 호스트 → [🤖 봇 초대] (handleInviteBot)
 
 ── PlayerSlot / PlayerDuelGrid ───────────────────────────────────────────────
   플레이어 아바타(캐릭터), READY/WAITING/HOST 상태, 클릭 → 프로필 모달
 
 ── RoomChatPanel ─────────────────────────────────────────────────────────────
-  LobbyChatPanel 과 유사. messages: sys | user, sender rocky_user
+  LobbyChatPanel 과 유사. messages: sys | user, sender getCurrentUserName()
 
 ── CharacterSelect ───────────────────────────────────────────────────────────
   CHARACTERS 4종 (검사·마법사·닌자·로봇), myCharacter state
@@ -633,8 +732,8 @@ SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능�
   roomRoster, selectedItems, gameMode 포함
 
 [roomStartValidation.ts]
-  SOLO_START_BYPASS = true  … 현재 혼자 시작 허용
-  getStartBlockReasonStrict() … 멀티 연동 시 SOLO_START_BYPASS = false
+  SOLO_START_BYPASS = false  … 인원·READY 규칙 적용
+  getStartBlockReasonStrict() … 1/1: 2명+, 1/N: 3명+, 비호스트 READY
 
 
 --------------------------------------------------------------------------------
@@ -650,9 +749,9 @@ SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능�
 --------------------------------------------------------------------------------
 
   - 실시간 동기화 없음 — 다른 유저 슬롯·READY 는 mock/봇 전용
-  - DEMO_BOT_POOL = [] — 봇 초대 UI는 있으나 동작 안 함
+  - DEMO_BOT_POOL 6명 — [봇 초대] 로만 입장, 1:1 자동 입장 없음
   - autoReady 체크박스: 상태만 저장, 자동 READY 미구현
-  - 1/1 solo 시작: roomRoster 에 호스트만 → 배틀 상대 0명 (solo 배틀)
+  - 1/1: 봇 초대 후 2명 충족 시 START (roomRoster 에 봇 포함)
   - roomRoster 에 상대(봇)가 있으면 createDemoOpponentRoster 로 배틀 봇 생성
 
 
@@ -669,9 +768,10 @@ SOLO_START_BYPASS = true 이므로 호스트 혼자서도 즉시 시작 가능�
 
 핵심 흐름:
   1. sessionStore 에서 문제·설정 로드 (없으면 fallback 1문제)
-  2. 문제 유형별 UI: fill_blank / multiple_choice / short_answer
-  3. 정답 제출 → 점수·콤보 → 관전 모드 또는 다음 문제
-  4. 시간 종료 또는 마지막 문제 처리 → 3초 후 결과 화면
+  2. resolveProblemCapabilities() 로 문제별 UI·아이템 정책 결정
+  3. 문제 유형별 UI: fill_blank / multiple_choice / short_answer (+ visual)
+  4. 정답 제출 → 점수·콤보 → 관전 모드 또는 다음 문제
+  5. 시간 종료 또는 마지막 문제 처리 → 3초 후 결과 화면
 
 gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기 버프 사용 가능.
 
@@ -705,6 +805,10 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
     src/utils/battle/canvasEffects.ts    … paint/scribble 아이템
     src/utils/build/buildSimulator.ts
     src/utils/problemTypeUtils.ts
+    src/constants/problemCapabilityPolicy.ts   … STYLE_ITEM_POLICY
+    src/utils/problemCapabilities.ts           … resolveProblemCapabilities
+    src/utils/problemVisualUtils.ts            … hasVisual, hasImage
+    src/constants/problemImages.ts             … 이미지 자산 경로
 
 
 --------------------------------------------------------------------------------
@@ -796,7 +900,12 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   buildsUsed / buildsAllowed (기본 3 + buildCharge 보너스)
 
 ── ProblemVisualPreview ──────────────────────────────────────────────────────
-  문제 visual 필드 (이미지/다이어그램) 표시
+  문제 visual 필드 표시 (kind별 분기)
+    ascii / svg·canvas / html / css / image(imageFile)
+  image 파일: public/assets/problem-images/ (PROBLEM_IMAGES_BASE_URL)
+  렌더 조건: currentCaps.hasVisual || currentCaps.hasImage
+  ※ html·css previewHtml/previewCss 는 현재 problems.js 인라인
+     (향후 problem-visuals/ 디렉터리 분리 예정)
 
 ── OpponentPanels ────────────────────────────────────────────────────────────
   BotView[]: thinking / solved / observing 상태
@@ -810,13 +919,64 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 
 
 --------------------------------------------------------------------------------
- 3.7 아이템 모드 (gameMode === 'item')
+ 3.7 문제 capabilities (정책 기반)
+--------------------------------------------------------------------------------
+
+  [원칙]
+    문제 데이터에는 type, visual, capabilityOverrides 만 저장
+    BattlePage·PracticeProblemViewer 는 resolveProblemCapabilities() 결과만 사용
+
+  [동작 방식]  (플래그 변수로 분기하지만, 플래그는 매번 계산)
+    문제 JSON에 hasVisual 같은 boolean 을 넣지 않는다.
+    type·visual·(선택) capabilityOverrides 와 gameMode 를 넣으면
+    resolveProblemCapabilities() 가 currentCaps 를 만들어 준다.
+
+      type + visual + capabilityOverrides + gameMode
+              ↓
+      resolveProblemCapabilities()
+              ↓
+      currentCaps  … hasVisual, hasImage, showCodePanel, items.* 등
+
+    화면은 currentCaps 만 참조한다. BattlePage 에서 useMemo 로 문제가 바뀔 때마다 갱신.
+      보기 영역     shouldRenderProblemVisual = hasVisual || hasImage
+      문제 패널     showCodePanel / showMultipleChoicePanel / showShortAnswerPanel
+      아이템 버튼   disabled = !canUseItem(currentCaps, itemKey)
+
+    정책 원본은 constants/problemCapabilityPolicy.ts (STYLE_ITEM_POLICY).
+    특수 문제만 capabilityOverrides 로 아이템 허용을 덮어쓸 수 있다.
+
+  [파일]
+    constants/problemCapabilityPolicy.ts   STYLE_ITEM_POLICY
+    utils/problemCapabilities.ts           resolveProblemStyle, resolveProblemCapabilities, canUseItem
+    utils/problemVisualUtils.ts            hasRenderableVisual, problemHasVisual
+
+  [스타일 매핑]
+    code              ← fill_blank, visual_fill_blank
+    short_answer      ← short_answer
+    multiple_choice   ← multiple_choice
+
+  [아이템 정책 — gameMode === 'item']
+    code            힌트(revealLength·revealPrev), blankBreak, buildCharge + 공격 전부
+    short_answer    힌트만, blankBreak·buildCharge 불가, 공격 허용
+    multiple_choice 자기 버프 전부 불가, 공격 아이템만 허용
+    normal 모드     items 전부 false
+
+  [BattlePage]
+    currentCaps = resolveProblemCapabilities(currentProblem, { gameMode })
+    shouldRenderProblemVisual = hasVisual || hasImage
+    아이템 버튼 disabled = !canUseItem(currentCaps, itemKey)
+    패널 표시: showCodePanel / showMultipleChoicePanel / showShortAnswerPanel
+
+
+--------------------------------------------------------------------------------
+ 3.8 아이템 모드 (gameMode === 'item')
 --------------------------------------------------------------------------------
 
   대기실 selectedItems → battleMeta.selectedItems
 
   자기 버프 (SELF_ITEM_KEYS):
     revealLength, revealPrev, blankBreak, buildCharge
+    ※ currentCaps.items 에서 false 이면 해당 문제에서 사용 불가
   공격 (ATTACK_ITEM_KEYS):
     paint, lightning, timeReduce, scribble
   사용 시 userService itemInventory 차감·persist
@@ -826,11 +986,12 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 
 
 --------------------------------------------------------------------------------
- 3.8 배틀 연관 타입·서비스 요약
+ 3.9 배틀 연관 타입·서비스 요약
 --------------------------------------------------------------------------------
 
 [types/battle.ts]
   BattleProblem, RoomUser, ItemInventory, ProblemVisual
+  ProblemStyle, ProblemCapabilities, capabilityOverrides
 
 [sessionStore]
   battleProblems, battleSettings, battleSubmission, roomUsers
@@ -843,11 +1004,12 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   syncBattleDemoState
 
 [problem 유형]
-  fill_blank, multiple_choice, short_answer (+ isBlankBasedType)
+  fill_blank, multiple_choice, short_answer, visual_fill_blank
+  isBlankBasedType() → resolveProblemStyle(type) === 'code'
 
 
 --------------------------------------------------------------------------------
- 3.9 배틀에서 다른 화면으로의 이동
+ 3.10 배틀에서 다른 화면으로의 이동
 --------------------------------------------------------------------------------
 
   게임 종료 (자동)  → /result?roomId=
@@ -855,7 +1017,7 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 
 
 --------------------------------------------------------------------------------
- 3.10 배틀 개발 시 참고 (제약·mock)
+ 3.11 배틀 개발 시 참고 (제약·mock)
 --------------------------------------------------------------------------------
 
   - 상대는 DemoBot 시뮬레이션 (실제 멀티플레이 아님)
@@ -1013,7 +1175,7 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   persistReviewInvite, shouldAutoAcceptReviewInvite, scheduleReviewInviteResponse
 
 [resultConstants]
-  MY_RESULT_USER_ID = 'rocky_user'
+  getCurrentUserId() — 본인 식별 (authService)
   ENABLE_RESULT_BOT_DEPARTURE = false
   REVIEW_BOT_ACCEPT_DELAY_MS = 10000
 
@@ -1180,8 +1342,11 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 
 
 ================================================================================
- 부록: 화면 간 데이터 버스 (Room → Battle → Result)
+ 부록: 화면 간 데이터 버스 (Login → Room → Battle → Result)
 ================================================================================
+
+  로그인 (/login)
+    authService.login | signup → initializeUserSession → /
 
   대기실 [START]
     battlePrepService.prepareBattleStart()
@@ -1197,5 +1362,6 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   [로비] (결과/대기실)
     clearBattleAndLeave / removeRoomFromLobby → session·room 정리
 
-  앱 재시작 시 위 데이터 전부 초기화 (API 연동 전)
+  앱 재시작 시 게임·세션·화면설정 초기화 (API 연동 전)
+  계정(rezero_auth_accounts)은 localStorage 유지, 로그인 세션은 소멸 → /login
 

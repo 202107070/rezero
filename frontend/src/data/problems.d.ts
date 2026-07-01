@@ -9,11 +9,12 @@ declare const problems: Array<{
   correctIndex: number | null;
   explanation: string;
   visual?: {
-    kind: 'ascii' | 'html' | 'css' | 'svg' | 'canvas';
+    kind: 'ascii' | 'html' | 'css' | 'svg' | 'canvas' | 'image';
     content?: string;
     previewHtml?: string;
     previewCss?: string;
     caption?: string;
+    imageFile?: string;
   } | null;
 }>;
 

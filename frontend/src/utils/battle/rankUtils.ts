@@ -1,4 +1,5 @@
 import type { RoomUser } from '../../types/battle';
+import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
 import type { DemoBot } from './demoBots';
 import { getBotSolveDelay } from './demoBots';
 
@@ -21,12 +22,16 @@ export function computeBotRankScore(solvedCount: number): number {
 }
 
 export function normalizeBattlePlayerId(id: string, name?: string): string {
-  if (id === 'me' || name?.includes('rocky_user')) return 'rocky_user';
+  const myId = getCurrentUserId();
+  const myName = getCurrentUserName();
+  if (id === 'me' || id === myId || name === myName) return myId;
   return id;
 }
 
 export function isBattleMe(id: string, name?: string): boolean {
-  return id === 'me' || Boolean(name?.includes('rocky_user'));
+  const myId = getCurrentUserId();
+  const myName = getCurrentUserName();
+  return id === 'me' || id === myId || name === myName;
 }
 
 export function getUserRankMetrics(

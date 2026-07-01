@@ -11,7 +11,8 @@ import { ReviewInviteModal } from '../../components/result/ReviewInviteModal/Rev
 import { ReviewProblemView } from '../../components/result/ReviewProblemView/ReviewProblemView';
 import { checkNewTitles, type TitleDef } from '../../constants/titleTypes';
 import { ROUTES } from '../../constants/routes';
-import { ENABLE_RESULT_BOT_DEPARTURE, MY_RESULT_USER_ID, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
+import { ENABLE_RESULT_BOT_DEPARTURE, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
+import { useAuthUser } from '../../contexts/AuthContext';
 import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot } from '../../services/battleSessionService';
 import {
   getBattleDemoState,
@@ -72,13 +73,11 @@ interface OnlineUser {
   avatar?: string;
 }
 
-const MY_USER_ID = MY_RESULT_USER_ID;
+function removeMyPresence(myUserId: string): void {
+  updateRoomUsers((users) => users.filter((u) => u.id !== myUserId && u.id !== 'me'));
+}
 
 type ReviewPhase = 'idle' | 'selecting' | 'reviewing';
-
-function removeMyPresence(): void {
-  updateRoomUsers((users) => users.filter((u) => !u.name?.includes(MY_USER_ID)));
-}
 
 function readOnlineUsers(): OnlineUser[] {
   return getRoomUsers();
@@ -86,6 +85,9 @@ function readOnlineUsers(): OnlineUser[] {
 
 export default function ResultPage() {
   const navigate = useNavigate();
+  const authUser = useAuthUser();
+  const myUserId = authUser.id;
+  const myUserName = authUser.username;
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('roomId') || '';
   const sessionId = getSessionId(roomId);
@@ -112,9 +114,9 @@ export default function ResultPage() {
     [rankingSnapshot, roomUsers, demoBots, submission, demoState],
   );
 
-  const myScore = allPlayers.find((p) => p.id === MY_USER_ID)?.ingameScore || 0;
+  const myScore = allPlayers.find((p) => p.id === myUserId)?.ingameScore || 0;
   const earnedGold = Math.floor(myScore / 10);
-  const myRank = allPlayers.findIndex((p) => p.id === MY_USER_ID) + 1;
+  const myRank = allPlayers.findIndex((p) => p.id === myUserId) + 1;
   const rankBorderColor =
     myRank === 1 ? 'var(--px-warning)' : myRank === allPlayers.length ? 'var(--px-danger)' : 'var(--px-success)';
   const rankGlow =
@@ -127,10 +129,10 @@ export default function ResultPage() {
   const totalProblemCount =
     submission.problemResults?.length ||
     submission.problems?.length ||
-    allPlayers.find((p) => p.id === MY_USER_ID)?.problemResults?.length ||
+    allPlayers.find((p) => p.id === myUserId)?.problemResults?.length ||
     0;
   const myCorrectCount =
-    allPlayers.find((p) => p.id === MY_USER_ID)?.problemResults?.filter(Boolean).length ?? 0;
+    allPlayers.find((p) => p.id === myUserId)?.problemResults?.filter(Boolean).length ?? 0;
 
   const [totalGold, setTotalGold] = useState(() => getGold());
 
@@ -146,7 +148,7 @@ export default function ResultPage() {
   const [chatMessages, setChatMessages] = useState([
     { sender: 'SYSTEM', text: '매치가 종료되었습니다.', type: 'sys' as const },
     { sender: '알고리즘깎는노인', text: '수고하셨습니다.', type: 'user' as const },
-    { sender: MY_USER_ID, text: '고생하셨습니다!', type: 'user' as const },
+    { sender: myUserName, text: '고생하셨습니다!', type: 'user' as const },
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
@@ -256,15 +258,16 @@ export default function ResultPage() {
   }, [roomId, submission, mySubmissionCodes]);
 
   useEffect(() => {
-    window.addEventListener('beforeunload', removeMyPresence);
-    return () => window.removeEventListener('beforeunload', removeMyPresence);
-  }, []);
+    const onBeforeUnload = () => removeMyPresence(myUserId);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [myUserId]);
 
   useEffect(() => {
     if (!ENABLE_RESULT_BOT_DEPARTURE) return;
 
     const users = readOnlineUsers();
-    const bots = users.filter((u) => u.id !== 'me' && !u.name?.includes(MY_USER_ID));
+    const bots = users.filter((u) => u.id !== 'me' && u.id !== myUserId);
     const timers = bots.map((bot, index) =>
       window.setTimeout(() => {
         const key = bot.id || bot.name || `bot-${index}`;
@@ -318,8 +321,8 @@ export default function ResultPage() {
     const invite = {
       id: createReviewInviteId(),
       sessionId,
-      fromUserId: MY_USER_ID,
-      fromUserName: MY_USER_ID,
+      fromUserId: myUserId,
+      fromUserName: myUserName,
       toUserId: inviteTargetId,
       toUserName: target?.name || '',
       problemIndices: [...selectedReviewProblems].sort((a, b) => a - b),
@@ -365,7 +368,7 @@ export default function ResultPage() {
   const reviewProblems = useMemo(() => {
     if (reviewPhase !== 'reviewing') return [];
     const problems = submission.problems || [];
-    const myResults = allPlayers.find((p) => p.id === MY_USER_ID)?.problemResults || [];
+    const myResults = allPlayers.find((p) => p.id === myUserId)?.problemResults || [];
 
     return [...selectedReviewProblems].sort((a, b) => a - b).map((index) => {
       const problem = problems[index];
@@ -392,7 +395,7 @@ export default function ResultPage() {
     const modeLabel = chatMode === 'ALL' ? '[전체]' : '[친구]';
     setChatMessages((prev) => [
       ...prev,
-      { sender: MY_USER_ID, text: chatInput, type: 'user', mode: modeLabel, time: timeStr },
+      { sender: myUserName, text: chatInput, type: 'user', mode: modeLabel, time: timeStr },
     ]);
     setChatInput('');
   };
@@ -404,13 +407,13 @@ export default function ResultPage() {
   };
 
   const replayToRoom = () => {
-    removeMyPresence();
+    removeMyPresence(myUserId);
     navigate(roomId ? `${ROUTES.ROOM}?id=${roomId}` : ROUTES.LOBBY);
   };
 
   const clearSessionAndNavigateLobby = () => {
     clearBattleAndLeave(sessionId, roomId);
-    removeMyPresence();
+    removeMyPresence(myUserId);
     navigate(ROUTES.LOBBY);
   };
 
@@ -440,7 +443,7 @@ export default function ResultPage() {
               rankBorderColor={rankBorderColor}
               rankGlow={rankGlow}
               departedUserIds={departedUserIds}
-              myUserId={MY_USER_ID}
+              myUserId={myUserId}
               reviewSelectMode={reviewSelectMode}
               selectedReviewProblems={selectedReviewProblems}
               onToggleReviewProblem={toggleReviewProblem}
@@ -456,7 +459,7 @@ export default function ResultPage() {
                 variant="win"
                 players={winners}
                 departedUserIds={departedUserIds}
-                myUserId={MY_USER_ID}
+                myUserId={myUserId}
                 reviewSelectMode={reviewSelectMode}
                 selectedReviewProblems={selectedReviewProblems}
                 onToggleReviewProblem={toggleReviewProblem}
@@ -467,7 +470,7 @@ export default function ResultPage() {
                 variant="lose"
                 players={losers}
                 departedUserIds={departedUserIds}
-                myUserId={MY_USER_ID}
+                myUserId={myUserId}
                 reviewSelectMode={reviewSelectMode}
                 selectedReviewProblems={selectedReviewProblems}
                 onToggleReviewProblem={toggleReviewProblem}
@@ -491,7 +494,7 @@ export default function ResultPage() {
             messages={chatMessages}
             chatInput={chatInput}
             chatMode={chatMode}
-            myUserId={MY_USER_ID}
+            myUserId={myUserId}
             onChatInputChange={setChatInput}
             onChatModeChange={setChatMode}
             onSend={handleSendChat}
@@ -516,7 +519,7 @@ export default function ResultPage() {
       <ReviewInviteModal
         show={showInviteModal}
         players={allPlayers}
-        myUserId={MY_USER_ID}
+        myUserId={myUserId}
         rankBorderColor={rankBorderColor}
         rankGlow={rankGlow}
         departedUserIds={departedUserIds}

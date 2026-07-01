@@ -1,4 +1,5 @@
 import type { ItemInventory } from '../constants/itemTypes';
+import { DEV_TEST_USER_LOADOUT } from '../constants/devTestConfig';
 import type { TitleData, TitleStats } from '../constants/titleTypes';
 import type { CodeHistoryEntry } from '../types/lobby';
 
@@ -99,4 +100,16 @@ export function readUserCodeHistory(): CodeHistoryEntry[] {
 
 export function persistUserCodeHistory(nextHistory: CodeHistoryEntry[]): void {
   codeHistory = [...nextHistory];
+}
+
+/** 로그인·회원가입 직후 유저 골드/아이템 초기화 (DEV 테스트 세팅 포함) */
+export function initializeUserSession(): void {
+  if (DEV_TEST_USER_LOADOUT.enabled) {
+    setGold(DEV_TEST_USER_LOADOUT.gold);
+    setItemInventory({ ...DEV_TEST_USER_LOADOUT.items } as ItemInventory);
+    return;
+  }
+
+  setGold(0);
+  setItemInventory({ ...EMPTY_ITEM_INVENTORY });
 }

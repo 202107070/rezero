@@ -1,5 +1,6 @@
 import { TITLE_DEFS } from '../../../constants/titleTypes';
 import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
+import { getCurrentUserName } from '../../../services/authService';
 import type { LobbyUser } from '../../../types/lobby';
 
 const TIER_ORDER: Record<string, number> = {
@@ -38,15 +39,14 @@ function UserTitleBadge({ titleId }: { titleId: string | null }) {
   );
 }
 
-const MY_USER_NAME = 'rocky_user';
-
 function sortUsersForTab(users: LobbyUser[], activeTab: string) {
+  const myUserName = getCurrentUserName();
   if (activeTab === '랭킹') {
     return [...users].sort((a, b) => (TIER_ORDER[b.rank] || 0) - (TIER_ORDER[a.rank] || 0));
   }
 
   const list = [...users];
-  const myIndex = list.findIndex((user) => user.name === MY_USER_NAME);
+  const myIndex = list.findIndex((user) => user.name === myUserName);
   if (myIndex > 0) {
     const [me] = list.splice(myIndex, 1);
     list.unshift(me);
@@ -55,6 +55,7 @@ function sortUsersForTab(users: LobbyUser[], activeTab: string) {
 }
 
 export function RankingBoard({ users, activeTab, titleData, onTabChange }: RankingBoardProps) {
+  const myUserName = getCurrentUserName();
   const sortedUsers = sortUsersForTab(users, activeTab);
 
   const myEquipped = getEquippedTitle(titleData);
@@ -107,7 +108,7 @@ export function RankingBoard({ users, activeTab, titleData, onTabChange }: Ranki
                   {u.rank}
                 </td>
                 <td>
-                  {u.name === MY_USER_NAME ? (
+                  {u.name === myUserName ? (
                     <>
                       <strong style={{ color: 'var(--px-warning)' }}>{u.name}</strong>
                       {myEquipped && (

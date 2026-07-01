@@ -15,8 +15,10 @@ import { SettingsModal } from '../../components/lobby/SettingsModal/SettingsModa
 import { TitleModal } from '../../components/lobby/TitleModal/TitleModal';
 import { ROULETTE_COST, ROULETTE_ITEMS, type ItemInventory } from '../../constants/itemTypes';
 import { ROUTES } from '../../constants/routes';
+import { useAuthUser } from '../../contexts/AuthContext';
 import { loadTitles, type TitleData } from '../../constants/titleTypes';
 import { buildRoomSearchParams, createRoom } from '../../services/roomService';
+import { getCurrentUserName } from '../../services/authService';
 import {
   getEquippedTitleId,
   getGold,
@@ -40,11 +42,12 @@ import './lobby.css';
 const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
 
 function loadInitialUsers(): LobbyUser[] {
-  return [{ name: 'rocky_user', rank: '-', title: getEquippedTitleId() }];
+  return [{ name: getCurrentUserName(), rank: '-', title: getEquippedTitleId() }];
 }
 
 export default function LobbyPage() {
   const navigate = useNavigate();
+  const authUser = useAuthUser();
 
   const [showModal, setShowModal] = useState(false);
   const [showPracticeModal, setShowPracticeModal] = useState(false);
@@ -121,7 +124,7 @@ export default function LobbyPage() {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const modeLabel = chatMode === 'ALL' ? '[전체]' : '[친구]';
-    setChatMessages((prev) => [...prev, { sender: 'rocky_user', text: chatMsg, time: timeStr, mode: modeLabel }]);
+    setChatMessages((prev) => [...prev, { sender: authUser.username, text: chatMsg, time: timeStr, mode: modeLabel }]);
     setChatMsg('');
   };
 
@@ -287,6 +290,8 @@ export default function LobbyPage() {
 
           <aside className="lobby-sidebar">
             <ProfilePanel
+              username={authUser.username}
+              displayName={authUser.displayName}
               titleData={titleData}
               onOpenMatchStory={() => {
                 setSelectedHistoryIndex(0);

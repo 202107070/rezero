@@ -1,4 +1,5 @@
 import { getItemInventory } from '../services/userService';
+import { DEV_TEST_USER_LOADOUT } from './devTestConfig';
 
 export interface ItemInventory {
   paint: number;
@@ -69,5 +70,9 @@ export function loadItemInventory(): ItemInventory {
 }
 
 export function defaultSelectedItemKeys(): ItemKey[] {
-  return [];
+  if (!DEV_TEST_USER_LOADOUT.enabled || !DEV_TEST_USER_LOADOUT.autoSelectAllItemsInRoom) {
+    return [];
+  }
+
+  return BATTLE_ITEM_DEFS.map((def) => def.key).filter((key) => DEV_TEST_USER_LOADOUT.items[key] > 0);
 }

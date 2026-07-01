@@ -7,6 +7,7 @@ import type { ProblemVisual } from '../types/battle';
 import { getLangKey } from '../utils/battle/codeUtils';
 import { problemSupportsLang } from '../utils/problemTypeUtils';
 import { normalizeBattleProblem } from '../utils/battle/problemResultUtils';
+import { normalizeProblemVisual } from '../utils/problemVisualUtils';
 import {
   clearKickedCount,
   loadDynamicRooms,
@@ -40,7 +41,7 @@ function mapProblem(p: ProblemRecord) {
     options: p.options,
     correctIndex: p.correctIndex,
     explanation: p.explanation,
-    visual: p.visual ?? null,
+    visual: normalizeProblemVisual(p.visual ?? null),
   });
 }
 

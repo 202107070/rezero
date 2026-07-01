@@ -489,7 +489,7 @@ explanation:`Floyd-Warshall은 모든 정점 쌍 간 최단 경로를 구합니�
 { id:`V01`, type:`visual_fill_blank`, difficulty:`easy`, title:`별 피라미드`,
 question:`for (int i = 1; i <= 5; i++) {\n  for (int j = 0; j < _____; j++) System.out.print(" ");\n  for (int k = 0; k < _____; k++) System.out.print("*");\n  System.out.println();\n}`,
 answer:{ JAVA:["5-i", "2*i-1"], PYTHON:["5-i", "2*i-1"], CPP:["5-i", "2*i-1"] },
-visual:{ kind:`ascii`, content:`    *\n   ***\n  *****\n *******\n*********`, caption:`아래 모양을 출력하기 위해 빈칸을 채우세요.` },
+visual:{ kind:`image`, imageFile:`v01-star-pyramid.svg`, caption:`아래 모양을 출력하기 위해 빈칸을 채우세요.` },
 options:null, correctIndex:null,
 explanation:`공백은 5-i개, 별은 2*i-1개로 피라미드를 만듭니다.` },
 { id:`V02`, type:`visual_fill_blank`, difficulty:`easy`, title:`직각 삼각형`,

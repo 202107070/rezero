@@ -1,4 +1,5 @@
 import type { ProblemVisual } from '../../types/battle';
+import { hasRenderableVisual, resolveProblemImageUrl } from '../../utils/problemVisualUtils';
 import './ProblemVisualPreview.css';
 
 interface ProblemVisualPreviewProps {
@@ -7,9 +8,10 @@ interface ProblemVisualPreviewProps {
 }
 
 export default function ProblemVisualPreview({ visual, compact = false }: ProblemVisualPreviewProps) {
-  if (!visual) return null;
+  if (!hasRenderableVisual(visual)) return null;
 
-  const { kind, content, previewHtml, previewCss, caption } = visual;
+  const { kind, content, previewHtml, previewCss, caption, imageFile } = visual!;
+  const imageUrl = kind === 'image' ? resolveProblemImageUrl(imageFile) : null;
 
   return (
     <div className={`problem-visual ${compact ? 'compact' : ''}`}>
@@ -24,6 +26,16 @@ export default function ProblemVisualPreview({ visual, compact = false }: Proble
           <div
             className="problem-visual-svg-stage"
             dangerouslySetInnerHTML={{ __html: content }}
+          />
+        </div>
+      )}
+      {kind === 'image' && imageUrl && (
+        <div className="problem-visual-image-frame" aria-label="문제 보기 그림">
+          <img
+            className="problem-visual-image"
+            src={imageUrl}
+            alt={caption || '문제 보기'}
+            draggable={false}
           />
         </div>
       )}

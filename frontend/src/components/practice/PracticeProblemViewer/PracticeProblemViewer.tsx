@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import ProblemVisualPreview from '../../../components/battle/ProblemVisualPreview';
+import { resolveProblemCapabilities } from '../../../utils/problemCapabilities';
 import type { PracticeExercise } from '../../../utils/practiceUtils';
-import { isBlankBasedType } from '../../../utils/problemTypeUtils';
 
 interface PracticeProblemViewerProps {
   exercise: PracticeExercise;
@@ -21,14 +22,20 @@ export function PracticeProblemViewer({
   correctAnswers,
   onBlankChange,
 }: PracticeProblemViewerProps) {
+  const caps = useMemo(
+    () => resolveProblemCapabilities(exercise, { gameMode: 'normal' }),
+    [exercise],
+  );
+  const shouldRenderVisual = caps.hasVisual || caps.hasImage;
+
   const renderQuestion = () => {
     if (!exercise.question) return null;
-    if (isBlankBasedType(exercise.type)) {
+    if (caps.showCodePanel) {
       const parts = exercise.question.split('_____');
       const blanks = blankAnswers;
       return (
         <div className="problem-question">
-          {exercise.visual && <ProblemVisualPreview visual={exercise.visual} compact />}
+          {shouldRenderVisual && <ProblemVisualPreview visual={exercise.visual} compact />}
           {parts.map((part, i) => (
             <span key={i}>
               <span style={{ whiteSpace: 'pre-wrap' }}>{part}</span>
@@ -65,7 +72,7 @@ export function PracticeProblemViewer({
         <span style={{ fontSize: '16px', color: '#aaa' }}>{exercise.title || 'Loading...'}</span>
       </div>
       <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        {exercise.visual && !isBlankBasedType(exercise.type) && (
+        {shouldRenderVisual && !caps.showCodePanel && (
           <ProblemVisualPreview visual={exercise.visual} compact />
         )}
         {renderQuestion()}

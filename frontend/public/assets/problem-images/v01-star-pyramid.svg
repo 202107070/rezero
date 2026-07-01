@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="160" viewBox="0 0 220 160" role="img" aria-label="� <|��">
+  <rect width="220" height="160" fill="#1a1a2e"/>
+  <g fill="#92cc41" font-family="Courier New, monospace" font-size="16" text-anchor="middle">
+    <text x="110" y="36">*</text>
+    <text x="110" y="58">***</text>
+    <text x="110" y="80">*****</text>
+    <text x="110" y="102">*******</text>
+    <text x="110" y="124">*********</text>
+  </g>
+</svg>

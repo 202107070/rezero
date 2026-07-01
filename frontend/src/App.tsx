@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { GuestRoute } from './components/auth/GuestRoute';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ROUTES } from './constants/routes';
+import { AuthProvider } from './contexts/AuthContext';
 import LobbyPage from './pages/lobby/LobbyPage';
+import LoginPage from './pages/login/LoginPage';
 import RoomPage from './pages/room/RoomPage';
 import BattlePage from './pages/battle/BattlePage';
 import ResultPage from './pages/result/ResultPage';
@@ -27,17 +31,69 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path={ROUTES.LOBBY} element={<LobbyPage />} />
-        <Route path={ROUTES.ROOM} element={<RoomPage />} />
-        <Route path={ROUTES.BATTLE} element={<BattlePage />} />
-        <Route path={ROUTES.RESULT} element={<ResultPage />} />
-        <Route path={ROUTES.PRACTICE} element={<PracticePage />} />
-        <Route path={ROUTES.BUILD} element={<BuildPage />} />
-        <Route path="*" element={<Navigate to={ROUTES.LOBBY} replace />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path={ROUTES.LOGIN}
+            element={
+              <GuestRoute>
+                <LoginPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path={ROUTES.LOBBY}
+            element={
+              <ProtectedRoute>
+                <LobbyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.ROOM}
+            element={
+              <ProtectedRoute>
+                <RoomPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.BATTLE}
+            element={
+              <ProtectedRoute>
+                <BattlePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.RESULT}
+            element={
+              <ProtectedRoute>
+                <ResultPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.PRACTICE}
+            element={
+              <ProtectedRoute>
+                <PracticePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.BUILD}
+            element={
+              <ProtectedRoute>
+                <BuildPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to={ROUTES.LOGIN} replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

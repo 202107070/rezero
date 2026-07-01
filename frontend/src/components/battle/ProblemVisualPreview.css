@@ -74,6 +74,30 @@
   min-height: 48px;
 }
 
+.problem-visual-image-frame {
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #1a1a2e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  min-height: 80px;
+}
+
+.problem-visual-image {
+  max-width: 100%;
+  max-height: 240px;
+  height: auto;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.problem-visual.compact .problem-visual-image {
+  max-height: 160px;
+}
+
 .problem-visual-css-stage {
   padding: 12px;
   background: linear-gradient(180deg, #87ceeb 0%, #7ec850 100%);

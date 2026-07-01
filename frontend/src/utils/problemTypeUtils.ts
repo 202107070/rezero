@@ -1,3 +1,5 @@
+import { resolveProblemStyle } from './problemCapabilities';
+
 export const PROBLEM_TYPES = {
   FILL_BLANK: 'fill_blank',
   VISUAL_FILL_BLANK: 'visual_fill_blank',
@@ -8,7 +10,7 @@ export const PROBLEM_TYPES = {
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES] | string;
 
 export function isBlankBasedType(type: string | undefined): boolean {
-  return type === PROBLEM_TYPES.FILL_BLANK || type === PROBLEM_TYPES.VISUAL_FILL_BLANK;
+  return resolveProblemStyle(type) === 'code';
 }
 
 export function getProblemTypeLabel(type: string): string {

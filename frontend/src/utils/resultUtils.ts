@@ -1,4 +1,5 @@
 import { getBattleSettings, getOpponentBattleCode } from '../services/sessionStore';
+import { getCurrentUserId, getCurrentUserName } from '../services/authService';
 import type { DemoBot } from './battle/demoBots';
 import {
   comparePlayersByRank,
@@ -171,7 +172,7 @@ function rebuildResultPlayers(params: {
 
     list.push({
       id: normalizeBattlePlayerId(id, u.name),
-      name: u.name || (isMe ? 'rocky_user' : id),
+      name: u.name || (isMe ? getCurrentUserName() : id),
       avatar: u.avatar || '👤',
       ingameScore,
       ratingScore,
@@ -206,8 +207,8 @@ function rebuildResultPlayers(params: {
   if (list.length === 0) {
     return [
       {
-        id: 'rocky_user',
-        name: 'rocky_user',
+        id: getCurrentUserId(),
+        name: getCurrentUserName(),
         ingameScore: 0,
         ratingScore: 1000,
         totalSolveTime: 0,
@@ -233,7 +234,8 @@ export function getPlayerCodeByProblem(
   mySubmissionCodes: string[],
   demoBots: DemoBot[],
 ): string {
-  if (playerId === 'rocky_user' || playerId === 'me') {
+  const myId = getCurrentUserId();
+  if (playerId === myId || playerId === 'me') {
     return mySubmissionCodes[problemIndex] || '// 코드를 찾을 수 없습니다.';
   }
   const bot = demoBots.find((b) => b.id === playerId);

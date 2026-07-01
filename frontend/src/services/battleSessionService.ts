@@ -1,4 +1,5 @@
 import type { BattleProblem, RoomUser } from '../types/battle';
+import { getCurrentUserId } from './authService';
 import type { DemoBot } from '../utils/battle/demoBots';
 import type { FinalRankingSnapshot } from '../utils/battle/rankUtils';
 import { removeRoomById } from './roomStore';
@@ -73,7 +74,7 @@ export async function persistBattleSession(params: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: params.sessionId,
-          userId: 'rocky_user',
+          userId: getCurrentUserId(),
           language: params.langKey,
           roomId: params.roomId,
           status: 'BATTLE',

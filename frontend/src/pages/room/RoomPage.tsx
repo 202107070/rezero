@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getCurrentUserName } from '../../services/authService';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BattleSettingsPanel } from '../../components/room/BattleSettingsPanel/BattleSettingsPanel';
 import { CharacterSelect } from '../../components/room/CharacterSelect/CharacterSelect';
@@ -13,9 +14,11 @@ import { StartGameOverlay } from '../../components/room/StartGameOverlay/StartGa
 import {
   buildInitialMessages,
   buildInitialPlayers,
+  BOT_READY_DELAY_MS,
   DEMO_BOT_POOL,
   DIFF_MAP,
   LANG_MAP,
+  pickDemoBot,
 } from '../../constants/roomConstants';
 import { RoomItemLoadout } from '../../components/room/RoomItemLoadout/RoomItemLoadout';
 import {
@@ -116,7 +119,7 @@ export default function RoomPage() {
         return next;
       });
       botReadyTimersRef.current.delete(playerId);
-    }, 10000);
+    }, BOT_READY_DELAY_MS);
     botReadyTimersRef.current.set(playerId, timer);
   };
   const [chatMsg, setChatMsg] = useState('');
@@ -134,7 +137,7 @@ export default function RoomPage() {
 
   const handleSendChat = () => {
     if (!chatMsg.trim()) return;
-    setMessages((prev) => [...prev, { type: 'user', name: 'rocky_user', text: chatMsg }]);
+    setMessages((prev) => [...prev, { type: 'user', name: getCurrentUserName(), text: chatMsg }]);
     setChatMsg('');
   };
 
@@ -228,34 +231,37 @@ export default function RoomPage() {
     });
   };
 
-  const handleInviteBot = (index: number) => {
-    if (DEMO_BOT_POOL.length === 0) return;
+  const handleInviteBot = useCallback(
+    (index: number) => {
+      if (DEMO_BOT_POOL.length === 0) return;
 
-    const slotIndex = roomMode === '1/1' ? 1 : index;
-    if (!host?.isHost || players[slotIndex] !== null || occupiedCount >= maxOccupancy) return;
+      const slotIndex = roomMode === '1/1' ? 1 : index;
+      if (!host?.isHost || players[slotIndex] !== null || occupiedCount >= maxOccupancy) return;
 
-    const botCount = players.filter((p) => p && !p.isHost).length;
-    const bot = DEMO_BOT_POOL[botCount % DEMO_BOT_POOL.length];
-    const maxId = players.reduce((max, p) => (p ? Math.max(max, p.id) : max), 0);
-    const newBotId = maxId + 1;
+      const botCount = players.filter((p) => p && !p.isHost).length;
+      const bot = pickDemoBot(botCount);
+      const maxId = players.reduce((max, p) => (p ? Math.max(max, p.id) : max), 0);
+      const newBotId = maxId + 1;
 
-    setPlayers((prev) => {
-      const next = [...prev];
-      next[slotIndex] = {
-        id: newBotId,
-        name: bot.name,
-        isHost: false,
-        isReady: false,
-        language: bot.language,
-        character: bot.character,
-        status: 'WAITING',
-      };
-      return next;
-    });
-    scheduleBotReady(newBotId, slotIndex);
-    setMessages((prev) => [...prev, { type: 'sys', text: `>> [${bot.name}] 님이 입장하셨습니다.` }]);
-    updateRoomPlayerCount(roomId);
-  };
+      setPlayers((prev) => {
+        const next = [...prev];
+        next[slotIndex] = {
+          id: newBotId,
+          name: bot.name,
+          isHost: false,
+          isReady: false,
+          language: bot.language,
+          character: bot.character,
+          status: 'WAITING',
+        };
+        return next;
+      });
+      scheduleBotReady(newBotId, slotIndex);
+      setMessages((prev) => [...prev, { type: 'sys', text: `>> [${bot.name}] 님이 입장하셨습니다.` }]);
+      updateRoomPlayerCount(roomId);
+    },
+    [host?.isHost, players, roomMode, occupiedCount, maxOccupancy, roomId],
+  );
 
   return (
     <>

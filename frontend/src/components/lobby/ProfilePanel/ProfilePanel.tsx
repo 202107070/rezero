@@ -1,12 +1,14 @@
 import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
 
 interface ProfilePanelProps {
+  username: string;
+  displayName: string;
   titleData: TitleData;
   onOpenMatchStory: () => void;
   onOpenTitles: () => void;
 }
 
-export function ProfilePanel({ titleData, onOpenMatchStory, onOpenTitles }: ProfilePanelProps) {
+export function ProfilePanel({ username, displayName, titleData, onOpenMatchStory, onOpenTitles }: ProfilePanelProps) {
   const equipped = getEquippedTitle(titleData);
 
   return (
@@ -45,7 +47,7 @@ export function ProfilePanel({ titleData, onOpenMatchStory, onOpenTitles }: Prof
       >
         ME
       </div>
-      <h3 style={{ color: '#eee', margin: '2px 0', fontSize: '17px' }}>rocky_user</h3>
+      <h3 style={{ color: '#eee', margin: '2px 0', fontSize: '17px' }}>{displayName || username}</h3>
       {equipped && (
         <span className={`title-badge rarity-${equipped.rarity}`}>
           {equipped.icon} {equipped.name}

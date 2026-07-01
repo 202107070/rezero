@@ -1,3 +1,4 @@
+import { getCurrentUserName } from '../services/authService';
 import type { RoomPlayer, CharacterOption, LanguageOption } from '../types/room';
 import { getKickedCount } from '../services/roomStore';
 
@@ -16,7 +17,21 @@ export const CHARACTERS: CharacterOption[] = [
   { id: 'char4', icon: '🤖', label: '로봇' },
 ];
 
-export const DEMO_BOT_POOL: Array<{ name: string; language: string; character: string }> = [];
+export const DEMO_BOT_POOL: Array<{ name: string; language: string; character: string }> = [
+  { name: '알고리즘깎는노인', language: '☕', character: '🧙' },
+  { name: '코딩마스터', language: '🐍', character: '🤖' },
+  { name: '빈칸헌터', language: '⚡', character: '🥷' },
+  { name: '자바의달인', language: '☕', character: '🤺' },
+  { name: '프론트요정', language: '🌐', character: '🧙' },
+  { name: '스타일리스트', language: '🎨', character: '🤖' },
+];
+
+/** 봇 입장 후 READY 전환 대기 (ms) — 멀티 연동 전 로컬 봇용 */
+export const BOT_READY_DELAY_MS = 3000;
+
+export function pickDemoBot(existingBotCount: number): (typeof DEMO_BOT_POOL)[number] {
+  return DEMO_BOT_POOL[existingBotCount % DEMO_BOT_POOL.length];
+}
 
 export const LANG_MAP: Record<string, string> = {
   JAVA: 'java',
@@ -33,8 +48,9 @@ export function getKickedCountForRoom(roomId: string): number {
 }
 
 export function buildInitialPlayers(): (RoomPlayer | null)[] {
+  const playerName = getCurrentUserName();
   const base: (RoomPlayer | null)[] = [
-    { id: 1, name: 'rocky_user', isHost: true, isReady: false, language: '☕', character: '🤺', status: 'HOST' },
+    { id: 1, name: playerName, isHost: true, isReady: false, language: '☕', character: '🤺', status: 'HOST' },
   ];
 
   while (base.length < 8) {
@@ -49,9 +65,10 @@ export function buildInitialMessages(
   parsedMaxPlayers: number,
   players: (RoomPlayer | null)[],
 ): Array<{ type: 'sys' | 'user'; text: string; name?: string }> {
+  const playerName = getCurrentUserName();
   const msgs = [
     { type: 'sys' as const, text: `>> ${roomMode === '1/1' ? '1:1 진검승부' : `1/${parsedMaxPlayers} 배틀`} 방이 생성되었습니다.` },
-    { type: 'sys' as const, text: '>> [rocky_user] 님이 입장하셨습니다.' },
+    { type: 'sys' as const, text: `>> [${playerName}] 님이 입장하셨습니다.` },
   ];
 
   players.forEach((p) => {
