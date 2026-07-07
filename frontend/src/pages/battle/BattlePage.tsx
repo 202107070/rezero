@@ -7,6 +7,7 @@ import FillBlankRenderer from '../../components/battle/FillBlankRenderer';
 import ProblemVisualPreview from '../../components/battle/ProblemVisualPreview';
 import ItemSelectModal from '../../components/battle/ItemSelectModal';
 import OpponentPanels, { type BotView } from '../../components/battle/OpponentPanels';
+import { RoomAlertModal } from '../../components/room/RoomAlertModal/RoomAlertModal';
 import {
 ATTACK_ITEM_KEYS,
 BATTLE_BUILD_ITEM_BONUS,
@@ -15,6 +16,7 @@ ITEM_PANEL_EFFECT_MS,
 SELF_ITEM_KEYS,
 type ItemKey,
 } from '../../constants/itemTypes';
+import { BATTLE_CORRECT_SCORE } from '../../constants/battleConstants';
 import { ROUTES } from '../../constants/routes';
 import { getBattleProblems, getBattleSettings } from '../../services/sessionStore';
 import {
@@ -33,7 +35,6 @@ import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle'
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
 import { applyAudioSettings, BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
 import {
-  comparePlayersByRank,
   computeBotRankScore,
   buildRankingSnapshotFromRoomUsers,
   getBotRankMetrics,
@@ -54,6 +55,7 @@ import {
   getBotSolvedProblemsFromElapsed,
   getBotWorkingProblemIndexFromElapsed,
   isBotProblemSolvedByElapsed,
+  resolveSpectatorViewProblemIndex,
   type DemoBot,
 } from '../../utils/battle/demoBots';
 import { formatTime } from '../../utils/battle/formatTime';
@@ -67,6 +69,8 @@ import {
   type ProblemResultsMap,
 } from '../../utils/battle/problemResultUtils';
 import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSimulator';
+import { getProblemAnswersForLang, isCodeBlankBuildProblem } from '../../utils/problemTypeUtils';
+import problemsBank from '../../data/problems.js';
 import './battle.css';
 
 const SELF_ITEM_META: Record<string, { icon: string; name: string }> = {
@@ -75,6 +79,24 @@ const SELF_ITEM_META: Record<string, { icon: string; name: string }> = {
   blankBreak: { icon: '🔨', name: '깨기' },
   buildCharge: { icon: '🔧', name: '빌드+' },
 };
+
+function resolveProblemAnswersWithFallback(problem: BattleProblem, langKey: string): string[] {
+  const fromProblem = getProblemAnswersForLang(problem.answer, langKey);
+  if (fromProblem.length > 0) return fromProblem;
+
+  const bank = problemsBank as BattleProblem[];
+  const match =
+    (problem.id ? bank.find((entry) => entry.id === problem.id) : undefined) ||
+    bank.find(
+      (entry) =>
+        entry.title === problem.title &&
+        String(entry.question || '').trim() === String(problem.question || '').trim(),
+    ) ||
+    bank.find((entry) => entry.title === problem.title);
+
+  if (!match) return [];
+  return getProblemAnswersForLang(match.answer, langKey);
+}
 
 export default function BattlePage() {
   const navigate = useNavigate();
@@ -129,10 +151,11 @@ export default function BattlePage() {
   const [battleFinished, setBattleFinished] = useState(false);
   const [battleBots, setBattleBots] = useState<DemoBot[]>([]);
   const [expandedOpponentId, setExpandedOpponentId] = useState<string | null>(null);
-  const [problemCollapsed, setProblemCollapsed] = useState(true);
+  const [spectatorViewProblemByBot, setSpectatorViewProblemByBot] = useState<Record<string, number>>({});
+  const [spectatorMyViewProblem, setSpectatorMyViewProblem] = useState<number | null>(null);
+  const [selectedOptionByProblem, setSelectedOptionByProblem] = useState<Record<number, number>>({});
   const [localSolvedProblems, setLocalSolvedProblems] = useState<number[]>([]);
   const [blankAnswers, setBlankAnswers] = useState<string[][]>([]);
-  const [comboCount, setComboCount] = useState(0);
   const [ingameScore, setIngameScore] = useState(0);
   const [solveTimes, setSolveTimes] = useState<Record<number, number>>({});
   const [finishedAtElapsedSec, setFinishedAtElapsedSec] = useState(-1);
@@ -143,6 +166,7 @@ export default function BattlePage() {
   const [problemStartTime, setProblemStartTime] = useState(Date.now());
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [revealHint, setRevealHint] = useState<string | null>(null);
+  const [showAnswerRequiredModal, setShowAnswerRequiredModal] = useState(false);
   const [breakingBlanks, setBreakingBlanks] = useState<Record<string, boolean>>({});
   const [itemCastState, setItemCastState] = useState<{ type: string; ts: number } | null>(null);
   const [panelHit, setPanelHit] = useState<Record<string, boolean>>({});
@@ -154,10 +178,9 @@ export default function BattlePage() {
   const [sessionSavedSnapshot, setSessionSavedSnapshot] = useState('');
   const [, setSaveStatus] = useState<'saving' | 'saved' | 'unsaved'>('saved');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { sender: 'SYSTEM', text: '배틀 시작! 서로 화이팅 하세요.', mode: '', time: '' },
+    { sender: 'SYSTEM', text: '배틀 시작! 서로 화이팅 하세요.', time: '' },
   ]);
   const [chatMsg, setChatMsg] = useState('');
-  const [chatMode, setChatMode] = useState('ALL');
   const [buildCodeByProblem, setBuildCodeByProblem] = useState<Record<number, string>>({});
   const [buildLogsByProblem, setBuildLogsByProblem] = useState<Record<number, BuildLogLine[]>>({});
   const [buildsUsedByProblem, setBuildsUsedByProblem] = useState<Record<number, number>>({});
@@ -171,7 +194,6 @@ export default function BattlePage() {
   const gameOverNavRef = useRef(false);
   const saveModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mistakeOnCurrentRef = useRef(false);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialSessionLoadedRef = useRef(false);
   const initialSessionSaveQueuedRef = useRef(false);
@@ -190,10 +212,7 @@ export default function BattlePage() {
     [currentProblem, isItemMode],
   );
   const shouldRenderProblemVisual = currentCaps.hasVisual || currentCaps.hasImage;
-  const allowedAttackItems = useMemo(
-    () => selectedAttackItems.filter((key) => canUseItem(currentCaps, key)),
-    [selectedAttackItems, currentCaps],
-  );
+  const allowedAttackItems = selectedAttackItems;
   const currentProblemLocked = localSolvedProblems.includes(currentIndex);
   const hasProblems = problems.length > 0;
   const totalProblems = hasProblems ? problems.length : 1;
@@ -208,7 +227,6 @@ export default function BattlePage() {
 
   const markProblemWrong = useCallback((problemIndex: number) => {
     setProblemResults((prev) => (prev[problemIndex] !== undefined ? prev : { ...prev, [problemIndex]: false }));
-    setComboCount(0);
     setProblemSolved(true);
   }, []);
 
@@ -236,7 +254,7 @@ export default function BattlePage() {
     [currentProblem, currentIndex, langKey, blankAnswers, selectedOption],
   );
 
-  const showBuildPanel = currentCaps.showCodePanel;
+  const showBuildPanel = currentCaps.showCodePanel && isCodeBlankBuildProblem(currentProblem);
   const buildsAllowed = BATTLE_BUILD_LIMIT + (buildBonusByProblem[currentIndex] || 0);
   const buildsUsed = buildsUsedByProblem[currentIndex] || 0;
   const currentBuildCode = buildCodeByProblem[currentIndex] ?? '';
@@ -390,35 +408,6 @@ export default function BattlePage() {
     finalizedProblemResults,
   ]);
 
-  const rankedUsers = useMemo(
-    () =>
-      [...roomUsers].sort((a, b) =>
-        comparePlayersByRank(
-          {
-            ingameScore: a.ingameScore || 0,
-            completionTime: a.completionTime ?? Number.POSITIVE_INFINITY,
-            totalSolveTime: a.totalSolveTime || 0,
-          },
-          {
-            ingameScore: b.ingameScore || 0,
-            completionTime: b.completionTime ?? Number.POSITIVE_INFINITY,
-            totalSolveTime: b.totalSolveTime || 0,
-          },
-        ),
-      ),
-    [roomUsers],
-  );
-
-  const userRankMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    rankedUsers.forEach((u, i) => {
-      map[u.id] = i + 1;
-    });
-    return map;
-  }, [rankedUsers]);
-
-  const myRank = userRankMap.me || '?';
-
   const doPersistSession = useCallback(
     async (nextAnswers: string[], shouldCommit = false) => {
       await persistBattleSession({
@@ -464,6 +453,8 @@ export default function BattlePage() {
         spectatorLocked,
         battleBots,
         selectedDemoBotCode,
+        blankAnswers,
+        selectedOptions: selectedOptionByProblem,
       });
     },
     [
@@ -486,6 +477,8 @@ export default function BattlePage() {
       spectatorLocked,
       battleBots,
       selectedDemoBotCode,
+      blankAnswers,
+      selectedOptionByProblem,
     ],
   );
 
@@ -835,7 +828,6 @@ export default function BattlePage() {
     setProblemSolved(false);
     setSelectedOption(null);
     setProblemStartTime(Date.now());
-    mistakeOnCurrentRef.current = false;
     setShowGameOver(false);
     setDemoSpectating(false);
     setSpectatorLocked(false);
@@ -864,6 +856,11 @@ export default function BattlePage() {
     markProblemSubmitted(sessionId, Array.from(new Set([...localSolvedProblems, currentIndex])).sort((a, b) => a - b));
     setDemoSpectating(true);
     setSpectatorLocked(true);
+    setRevealHint(null);
+    setSpectatorMyViewProblem(currentIndex);
+    if (selectedOption !== null) {
+      setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: selectedOption }));
+    }
     setSessionSavedSnapshot(answers.join('||'));
     setSaveStatus('saved');
     setShowClearFlash(true);
@@ -904,11 +901,7 @@ export default function BattlePage() {
     setProblemResults((prev) => ({ ...prev, [currentIndex]: isCorrect }));
 
     if (isCorrect) {
-      const hadMistake = mistakeOnCurrentRef.current;
-      const newCombo = hadMistake ? 1 : comboCount + 1;
-      const earnedScore = 1000 + (hadMistake ? 0 : 100 * (newCombo - 1));
-      setComboCount(newCombo);
-      setIngameScore((prev) => prev + earnedScore);
+      setIngameScore((prev) => prev + BATTLE_CORRECT_SCORE);
       setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
       setLocalSolvedProblems((prev) => {
         const next = Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b);
@@ -916,16 +909,28 @@ export default function BattlePage() {
         return next;
       });
       setFinishedAtElapsedSec(battleElapsed);
-    } else {
-      setComboCount(0);
-      mistakeOnCurrentRef.current = true;
     }
 
     setProblemSolved(true);
   };
 
   const handleSubmit = () => {
+    if (demoSpectating || spectatorLocked || problemSolved) return;
+    if (!hasCurrentAnswerAttempted()) {
+      setShowAnswerRequiredModal(true);
+      return;
+    }
     submitCurrentProblem();
+
+    if (currentIndex >= problems.length - 1) {
+      lockAndSpectate();
+      return;
+    }
+
+    setCurrentIndex((prev) => prev + 1);
+    setProblemSolved(false);
+    setSelectedOption(null);
+    setProblemStartTime(Date.now());
   };
 
   const handleAdvance = () => {
@@ -940,30 +945,39 @@ export default function BattlePage() {
     setProblemSolved(false);
     setSelectedOption(null);
     setProblemStartTime(Date.now());
-    mistakeOnCurrentRef.current = false;
   };
 
   const selectChoice = (idx: number) => {
     if (problemSolved) return;
     setSelectedOption(idx);
+    setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: idx }));
   };
 
   const handleUseSelfItem = (type: keyof ItemInventory) => {
+    if (demoSpectating || spectatorLocked) return;
     if (!isItemMode || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
     if (!canUseItem(currentCaps, type)) return;
-    const correct = currentProblem.answer?.[langKey] || [];
+    const correct = resolveProblemAnswersWithFallback(currentProblem, langKey);
     if (type === 'revealLength') {
+      if (correct.length === 0) {
+        setRevealHint('(정보 없음)');
+        return;
+      }
       const idx = Math.floor(Math.random() * correct.length);
       setRevealHint(correct[idx] ? `[${correct[idx].length}자]` : '(정보 없음)');
     } else if (type === 'revealPrev') {
+      if (correct.length === 0) {
+        setRevealHint('(정보 없음)');
+        return;
+      }
       const idx = Math.floor(Math.random() * correct.length);
       setRevealHint(correct[idx] ? `[앞글자: ${correct[idx][0] || '?'}]` : '(정보 없음)');
     } else if (type === 'blankBreak') {
       applyBlankBreak(correct);
       return;
     } else if (type === 'buildCharge') {
-      if (!currentCaps.canUseBuildBonus) return;
+      if (!currentCaps.canUseBuildBonus || !isCodeBlankBuildProblem(currentProblem)) return;
       setBuildBonusByProblem((prev) => ({
         ...prev,
         [currentIndex]: (prev[currentIndex] || 0) + BATTLE_BUILD_ITEM_BONUS,
@@ -976,6 +990,10 @@ export default function BattlePage() {
   };
 
   const applyBlankBreak = (correct: string[]) => {
+    if (correct.length === 0) {
+      setRevealHint('(정보 없음)');
+      return;
+    }
     const partial = currentProblem.question || '';
     if (currentCaps.showShortAnswerPanel) {
       setBreakingBlanks((prev) => ({ ...prev, [`${currentIndex}_0`]: true }));
@@ -1026,12 +1044,14 @@ export default function BattlePage() {
   const canUseAttackItems = isItemMode && selectedAttackItems.length > 0 && !showGameOver;
 
   const applyAttackPanelEffect = (botId: string, type: 'paint' | 'lightning' | 'scribble') => {
+    const bot = currentBotViews.find((entry) => entry.id === botId);
+    const problemIndex = bot?.currentProblem ?? currentIndex;
     setOpponentEffects((prev) => ({
       ...prev,
       [botId]: {
         ...(prev[botId] || {}),
-        [currentIndex]: {
-          ...(prev[botId]?.[currentIndex] || {}),
+        [problemIndex]: {
+          ...(prev[botId]?.[problemIndex] || {}),
           panelEffect: { type, expiresAt: Date.now() + ITEM_PANEL_EFFECT_MS },
         },
       },
@@ -1039,14 +1059,18 @@ export default function BattlePage() {
   };
 
   const runPanelCanvasEffect = (botId: string, type: 'paint' | 'scribble') => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const panelEl = document.querySelector('.opponent-code-panel-mini.expanded .mini-code-lines');
-        if (!panelEl) return;
+    const tryRun = (attempts = 0) => {
+      const panelEl = document.querySelector(
+        `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] .mini-code-lines`,
+      );
+      if (panelEl) {
         if (type === 'paint') startPaintCanvas(panelEl as HTMLElement, botId);
         else startScribbleCanvas(panelEl as HTMLElement, botId, ITEM_PANEL_EFFECT_MS);
-      });
-    });
+        return;
+      }
+      if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+    };
+    tryRun();
   };
 
   const handleOpenItemModal = (botId: string) => {
@@ -1064,7 +1088,7 @@ export default function BattlePage() {
   const handleSelectItemType = (type: keyof ItemInventory) => {
     if (!canUseAttackItems || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
-    if (!canUseItem(currentCaps, type)) return;
+    if (!ATTACK_ITEM_KEYS.includes(type) && !canUseItem(currentCaps, type)) return;
     const botId = itemTargetBotIdRef.current || expandedOpponentId;
     if (!botId) return;
 
@@ -1107,8 +1131,7 @@ export default function BattlePage() {
     if (!demoSpectating || !chatMsg.trim()) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const modeLabel = chatMode === 'ALL' ? '[전체]' : '[친구]';
-    setChatMessages((prev) => [...prev, { sender: getCurrentUserName(), text: chatMsg, mode: modeLabel, time: timeStr }]);
+    setChatMessages((prev) => [...prev, { sender: getCurrentUserName(), text: chatMsg, time: timeStr }]);
     setChatMsg('');
   };
 
@@ -1119,12 +1142,13 @@ export default function BattlePage() {
 
   const renderMiniStatus = (bot: BotView) => {
     const solvedCount = Math.min(bot.solvedProblems?.length || 0, totalProblems);
-    const n = solvedCount;
-    const botScore = n > 0 ? n * 1000 + 50 * n * (n - 1) : 0;
+    const viewProblemIndex = demoSpectating
+      ? resolveSpectatorViewProblemIndex(bot.id, bot.currentProblem, spectatorViewProblemByBot)
+      : bot.currentProblem;
+
     return (
       <div className="mini-status-row">
         <div className="mini-status-top">
-          <span style={{ color: 'var(--px-success)' }}>{botScore.toLocaleString()} PTS</span>
           <span>
             {solvedCount}/{totalProblems}
           </span>
@@ -1133,13 +1157,23 @@ export default function BattlePage() {
         <div className="mini-status-checks">
           {Array.from({ length: totalProblems }).map((_, idx) => {
             const checked = bot.solvedProblems?.includes(idx);
+            const isActive = demoSpectating && viewProblemIndex === idx;
             return (
               <span
                 key={`${bot.id}-mini-${idx}`}
-                className={`mini-problem-check ${checked ? 'filled' : ''}`}
+                role={demoSpectating ? 'button' : undefined}
+                className={`mini-problem-check${checked ? ' filled' : ''}${isActive ? ' active' : ''}${demoSpectating ? ' clickable' : ''}`}
                 title={`${idx + 1}번 문제`}
+                onClick={
+                  demoSpectating
+                    ? (e) => {
+                        e.stopPropagation();
+                        setSpectatorViewProblemByBot((prev) => ({ ...prev, [bot.id]: idx }));
+                      }
+                    : undefined
+                }
               >
-                {checked ? '✓' : ''}
+                {checked ? '✓' : demoSpectating ? idx + 1 : ''}
               </span>
             );
           })}
@@ -1156,12 +1190,87 @@ export default function BattlePage() {
 
   const isLocked = demoSpectating || spectatorLocked || problemSolved;
 
-  return (
-    <div className="page-container battle-page">
-      <div className="battle-layout">
-        <div className="battle-workspace">
-          <div className="battle-main-column">
-            <div className={`pixel-card code-card${itemCastState ? ' casting-item' : ''}`} style={{ position: 'relative' }}>
+  const myViewProblemIndex = demoSpectating ? (spectatorMyViewProblem ?? currentIndex) : currentIndex;
+  const displayedProblem = useMemo(
+    () => normalizeBattleProblem(problems[myViewProblemIndex] || ({} as BattleProblem)),
+    [problems, myViewProblemIndex],
+  );
+  const displayedCaps = useMemo(
+    () =>
+      resolveProblemCapabilities(displayedProblem, {
+        gameMode: isItemMode ? 'item' : 'normal',
+      }),
+    [displayedProblem, isItemMode],
+  );
+  const displayedShouldRenderVisual = displayedCaps.hasVisual || displayedCaps.hasImage;
+  const displayedSelectedOption = demoSpectating
+    ? (selectedOptionByProblem[myViewProblemIndex] ?? (myViewProblemIndex === currentIndex ? selectedOption : null))
+    : selectedOption;
+  const renderMySpectatorProblemTabs = () => (
+    <div className="battle-my-problem-tabs">
+      {Array.from({ length: totalProblems }).map((_, idx) => {
+        const checked = localSolvedProblems.includes(idx);
+        const isActive = myViewProblemIndex === idx;
+        return (
+          <span
+            key={`me-problem-${idx}`}
+            role="button"
+            className={`mini-problem-check${checked ? ' filled' : ''}${isActive ? ' active' : ''} clickable`}
+            title={`${idx + 1}번 문제`}
+            onClick={() => setSpectatorMyViewProblem(idx)}
+          >
+            {checked ? '✓' : idx + 1}
+          </span>
+        );
+      })}
+    </div>
+  );
+
+  const activeProblem = demoSpectating ? displayedProblem : currentProblem;
+  const activeCaps = demoSpectating ? displayedCaps : currentCaps;
+  const activeProblemIndex = demoSpectating ? myViewProblemIndex : currentIndex;
+  const activeSelectedOption = demoSpectating ? displayedSelectedOption : selectedOption;
+  const activeLocked = demoSpectating || isLocked;
+  const activeShouldRenderVisual = demoSpectating ? displayedShouldRenderVisual : shouldRenderProblemVisual;
+
+  const battleActionBar = (
+    <div className="battle-action-bar">
+      {!problemSolved ? (
+        <button
+          type="button"
+          className="pixel-btn pixel-btn-success"
+          onClick={handleSubmit}
+          style={{ padding: '4px 10px', fontSize: '14px' }}
+          disabled={demoSpectating || spectatorLocked}
+        >
+          {demoSpectating || spectatorLocked ? 'LOCKED' : '제출'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="pixel-btn pixel-btn-success"
+          onClick={handleAdvance}
+          style={{ padding: '4px 10px', fontSize: '14px' }}
+          disabled={
+            (demoSpectating || spectatorLocked) && currentIndex >= problems.length - 1
+          }
+        >
+          {currentIndex >= problems.length - 1
+            ? demoSpectating || spectatorLocked
+              ? '제출 완료'
+              : '최종 제출'
+            : '다음 문제'}
+        </button>
+      )}
+      <button type="button" className="pixel-btn pixel-btn-danger" onClick={leaveBattle} style={{ padding: '4px 10px', fontSize: '14px' }}>
+        나가기
+      </button>
+    </div>
+  );
+
+  const mainColumn = (
+    <div className={`battle-main-column${demoSpectating ? ' is-spectator-my' : ''}`}>
+      <div className={`pixel-card code-card${itemCastState ? ' casting-item' : ''}`} style={{ position: 'relative' }}>
               <div className="pixel-card-header code-card-header-centered">
                 <div className="code-card-header-center">
                   <span style={{ color: 'var(--px-primary)' }}>MY CODE</span>
@@ -1169,35 +1278,16 @@ export default function BattlePage() {
                   <div className="progress-track">
                     <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
                   </div>
-                  <span className="code-card-progress-text">{problemProgressText}</span>
+                  <span className="code-card-progress-text">
+                    {demoSpectating ? `${myViewProblemIndex + 1}/${totalProblems}` : problemProgressText}
+                  </span>
                 </div>
               </div>
-              <div
-                style={{
-                  padding: '4px 12px 3px',
-                  fontSize: '17px',
-                  display: 'flex',
-                  gap: '8px',
-                  alignItems: 'center',
-                  background: 'rgba(0,0,0,0.15)',
-                  borderBottom: '2px solid var(--px-border)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <span>
-                  내 등수: <span style={{ color: 'var(--px-warning)' }}>#{myRank}</span>
-                </span>
-                {comboCount > 0 && (
-                  <span style={{ color: '#ff6b35', fontSize: '15px', textShadow: '1px 1px 0 #000' }}>
-                    🔥 {comboCount} COMBO
-                  </span>
-                )}
-                <span>
-                  점수: <span style={{ color: 'var(--px-success)' }}>{(ingameScore || 0).toLocaleString()} PTS</span>
-                </span>
-                {isItemMode && selectedSelfItems.length > 0 && (
-                  <>
-                    <span style={{ color: '#aaa', marginLeft: 'auto' }}>내 아이템:</span>
+              {demoSpectating && renderMySpectatorProblemTabs()}
+              {isItemMode && selectedSelfItems.length > 0 && !demoSpectating && (
+              <div className="battle-status-bar">
+                <div className="battle-self-items-row">
+                    <span className="battle-self-items-label">내 아이템:</span>
                     {selectedSelfItems.map((type) => {
                       const meta = SELF_ITEM_META[type] || { icon: '?', name: type };
                       const disabled = !canUseItem(currentCaps, type) || itemInventory[type] <= 0;
@@ -1205,75 +1295,52 @@ export default function BattlePage() {
                         <button
                           key={type}
                           type="button"
+                          className={`battle-self-item-btn${itemInventory[type] <= 0 ? ' is-zero' : ''}`}
                           onClick={() => handleUseSelfItem(type)}
                           disabled={disabled}
-                          style={{
-                            background: '#1a1e21',
-                            border: '2px solid var(--px-border)',
-                            color: disabled ? '#555' : 'var(--px-success)',
-                            fontFamily: 'var(--font-pixel)',
-                            fontSize: '17px',
-                            padding: '1px 6px',
-                            filter: itemInventory[type] <= 0 ? 'grayscale(1)' : undefined,
-                          }}
                         >
                           {meta.icon} {meta.name} ({itemInventory[type]})
                         </button>
                       );
                     })}
-                  </>
-                )}
+                </div>
               </div>
-              {revealHint && (
-                <div
-                  style={{
-                    padding: '4px 12px',
-                    fontSize: '21px',
-                    background: 'rgba(247,213,29,0.15)',
-                    borderBottom: '2px solid var(--px-warning)',
-                    color: 'var(--px-warning)',
-                    textAlign: 'center',
-                  }}
-                >
+              )}
+              {revealHint && !demoSpectating && (
+                <div className="battle-item-hint-banner">
                   💡 힌트: {revealHint}
                 </div>
               )}
-              <div key="problem-summary" className="code-problem-summary" style={{ height: problemCollapsed ? 105 : 180 }}>
-                <div className="code-problem-head">
-                  <div className="code-problem-copy">
-                    <div className="code-problem-kicker">PROBLEM</div>
-                    <div className="code-problem-title">{currentProblem.title || 'Loading...'}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="panel-toggle-btn"
-                    onClick={() => setProblemCollapsed(!problemCollapsed)}
-                    style={{ flexShrink: 0 }}
-                  >
-                    {problemCollapsed ? '▼' : '▲'}
-                  </button>
-                </div>
-                <div className="code-problem-body">
-                  <div>{currentProblem.explanation || ''}</div>
+              <div key={`problem-summary-${activeProblemIndex}`} className="code-problem-summary">
+                <div className="code-problem-copy">
+                  <div className="code-problem-kicker">PROBLEM</div>
+                  <div className="code-problem-title">{activeProblem.title || 'Loading...'}</div>
+                  {!demoSpectating && !activeCaps.showCodePanel && (
+                    <div className="code-problem-question">{activeProblem.question || ''}</div>
+                  )}
+                  {!demoSpectating && activeShouldRenderVisual && !activeCaps.showCodePanel && (
+                    <ProblemVisualPreview visual={activeProblem.visual} compact />
+                  )}
                 </div>
               </div>
-              {currentCaps.showCodePanel && (
+              {activeCaps.showCodePanel && (
                 <>
                   <div className="fill-blank-area">
-                    {shouldRenderProblemVisual && (
-                      <ProblemVisualPreview visual={currentProblem.visual} />
+                    {activeShouldRenderVisual && (
+                      <ProblemVisualPreview visual={activeProblem.visual} />
                     )}
                     <div className="fill-blank-code">
                       <FillBlankRenderer
-                        code={currentProblem.question || ''}
-                        answers={blankAnswers[currentIndex] || []}
-                        problemIndex={currentIndex}
+                        code={activeProblem.question || ''}
+                        answers={blankAnswers[activeProblemIndex] || []}
+                        problemIndex={activeProblemIndex}
                         breakingBlanks={breakingBlanks}
-                        isLocked={isLocked}
-                        onUpdate={(i, v) => updateBlankAnswer(currentIndex, i, v)}
+                        isLocked={activeLocked}
+                        onUpdate={demoSpectating ? undefined : (i, v) => updateBlankAnswer(activeProblemIndex, i, v)}
                       />
                     </div>
                   </div>
+                  {!demoSpectating && showBuildPanel && (
                   <BattleBuildPanel
                     code={currentBuildCode}
                     lang={langKey}
@@ -1288,26 +1355,34 @@ export default function BattlePage() {
                     onBuild={handleBattleBuild}
                     onToggleCollapse={() => setBuildPanelCollapsed((v) => !v)}
                   />
+                  )}
                 </>
               )}
-              {currentCaps.showMultipleChoicePanel && (
-                <div className="fill-blank-area">
-                  {shouldRenderProblemVisual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
-                  <div className="fill-blank-question">{currentProblem.question}</div>
-                  {(currentProblem.options || []).map((opt, i) => {
-                    const isSelected = selectedOption === i;
+              {activeCaps.showMultipleChoicePanel && (
+                <div className="fill-blank-area fill-blank-area-answers">
+                  {demoSpectating && (
+                    <>
+                      <div className="code-problem-question">{activeProblem.question || ''}</div>
+                      {activeShouldRenderVisual && (
+                        <ProblemVisualPreview
+                          visual={activeProblem.visual}
+                          compact
+                          suppressCaption={Boolean(activeProblem.question)}
+                        />
+                      )}
+                    </>
+                  )}
+                  {(activeProblem.options || []).map((opt, i) => {
+                    const isSelected = activeSelectedOption === i;
                     return (
                       <button
                         key={i}
                         type="button"
-                        className={`pixel-btn battle-choice-btn${problemSolved ? ' is-locked' : ''}`}
+                        className={`pixel-btn battle-choice-btn${activeLocked ? ' is-locked' : ''}${isSelected ? ' is-selected' : ''}`}
                         onClick={() => selectChoice(i)}
-                        disabled={problemSolved}
+                        disabled={activeLocked}
                         style={{
-                          background: isSelected ? 'rgba(52,152,219,0.25)' : '#2c3e50',
-                          borderColor: isSelected ? '#3498db' : 'var(--px-primary)',
-                          color: '#e0e0e0',
-                          opacity: problemSolved && !isSelected ? 0.55 : 1,
+                          opacity: activeLocked && !isSelected ? 0.55 : 1,
                         }}
                       >
                         {String.fromCharCode(65 + i)}. {opt}
@@ -1316,32 +1391,46 @@ export default function BattlePage() {
                   })}
                 </div>
               )}
-              {currentCaps.showShortAnswerPanel && (
-                <div className="fill-blank-area">
-                  {shouldRenderProblemVisual && <ProblemVisualPreview visual={currentProblem.visual} compact />}
-                  <div className="fill-blank-question">{currentProblem.question}</div>
+              {activeCaps.showShortAnswerPanel && (
+                <div className="fill-blank-area fill-blank-area-answers">
+                  {demoSpectating && (
+                    <>
+                      <div className="code-problem-question">{activeProblem.question || ''}</div>
+                      {activeShouldRenderVisual && (
+                        <ProblemVisualPreview
+                          visual={activeProblem.visual}
+                          compact
+                          suppressCaption={Boolean(activeProblem.question)}
+                        />
+                      )}
+                    </>
+                  )}
                   <input
                     className="blank-input battle-short-input"
-                    value={blankAnswers[currentIndex]?.[0] || ''}
-                    onChange={(e) => updateBlankAnswer(currentIndex, 0, e.target.value)}
-                    disabled={problemSolved}
+                    value={blankAnswers[activeProblemIndex]?.[0] || ''}
+                    onChange={(e) => updateBlankAnswer(activeProblemIndex, 0, e.target.value)}
+                    disabled={activeLocked}
+                    readOnly={demoSpectating}
                   />
                 </div>
               )}
             </div>
             {demoSpectating && !showSaveModal && !showClearFlash && !showGameOver && (
-              <BattleChatPanel
-                messages={chatMessages}
-                chatMsg={chatMsg}
-                chatMode={chatMode}
-                onMsgChange={setChatMsg}
-                onModeChange={setChatMode}
-                onSend={handleSendChat}
-              />
+              <div className="battle-spectator-footer">
+                <BattleChatPanel
+                  messages={chatMessages}
+                  chatMsg={chatMsg}
+                  onMsgChange={setChatMsg}
+                  onSend={handleSendChat}
+                />
+                {battleActionBar}
+              </div>
             )}
-          </div>
+    </div>
+  );
 
-          <div className="battle-opponent-column">
+  const opponentColumn = (
+    <div className={`battle-opponent-column${demoSpectating ? ' is-spectator-side' : ''}`}>
             <div className="opponent-timer-strip" style={{ height: 119, flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
@@ -1362,11 +1451,12 @@ export default function BattlePage() {
                 setExpandedOpponentId={setExpandedOpponentId}
                 demoIsVersusMany={demoIsVersusMany}
                 demoSpectating={demoSpectating}
-                currentProblemLocked={currentProblemLocked}
                 currentIndex={currentIndex}
                 problems={problems}
                 currentProblem={currentProblem}
-                userRankMap={userRankMap}
+                isItemMode={isItemMode}
+                langKey={langKey}
+                spectatorViewProblemByBot={spectatorViewProblemByBot}
                 opponentEffects={opponentEffects}
                 panelHit={panelHit}
                 onOpenItemModal={handleOpenItemModal}
@@ -1374,32 +1464,25 @@ export default function BattlePage() {
                 renderMiniStatus={renderMiniStatus}
               />
             </div>
-            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', padding: '0 4px 2px', flexShrink: 0, marginTop: '6px' }}>
-              {!problemSolved ? (
-                <button
-                  type="button"
-                  className="pixel-btn pixel-btn-success"
-                  onClick={handleSubmit}
-                  style={{ padding: '4px 10px', fontSize: '14px' }}
-                  disabled={demoSpectating || spectatorLocked || !hasCurrentAnswerAttempted()}
-                >
-                  {demoSpectating || spectatorLocked ? 'LOCKED' : '제출'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="pixel-btn pixel-btn-success"
-                  onClick={handleAdvance}
-                  style={{ padding: '4px 10px', fontSize: '14px' }}
-                >
-                  {currentIndex >= problems.length - 1 ? '최종 제출' : '다음 문제'}
-                </button>
-              )}
-              <button type="button" className="pixel-btn pixel-btn-danger" onClick={leaveBattle} style={{ padding: '4px 10px', fontSize: '14px' }}>
-                나가기
-              </button>
-            </div>
-          </div>
+      {!demoSpectating && battleActionBar}
+    </div>
+  );
+
+  return (
+    <div className="page-container battle-page">
+      <div className="battle-layout">
+        <div className="battle-workspace">
+          {demoSpectating ? (
+            <>
+              {opponentColumn}
+              {mainColumn}
+            </>
+          ) : (
+            <>
+              {mainColumn}
+              {opponentColumn}
+            </>
+          )}
         </div>
       </div>
 
@@ -1450,6 +1533,12 @@ export default function BattlePage() {
           onClose={handleCloseItemModal}
         />
       )}
+
+      <RoomAlertModal
+        open={showAnswerRequiredModal}
+        message="문제를 풀어주세요."
+        onClose={() => setShowAnswerRequiredModal(false)}
+      />
     </div>
   );
 }

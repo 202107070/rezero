@@ -12,6 +12,10 @@ body,
   cursor: var(--game-cursor-default);
 }
 
+#root * {
+  cursor: inherit;
+}
+
 #root button:not(:disabled),
 #root a,
 #root label[for],
@@ -19,17 +23,20 @@ body,
 #root [role='button']:not([aria-disabled='true']),
 #root .pixel-btn:not(:disabled),
 #root .profile-btn:not(:disabled),
-#root .tab-btn,
+#root .login-tab,
 #root .room-slot:not(.full):not(.started):not(.empty),
 #root .room-filter-option,
 #root .settings-mode-btn,
 #root .settings-audio-toggle,
 #root .item-btn:not(:disabled),
-#root .item-option:not(:disabled),
+#root .item-option:not(.is-empty):not(:disabled),
+#root .battle-self-item-btn:not(:disabled),
 #root .sub-item-btn,
 #root .symbol-btn,
 #root .panel-toggle-btn,
-#root .battle-choice-btn:not(.is-locked),
+#root .battle-choice-btn:not(.is-locked):not(:disabled),
+#root .mini-problem-check.clickable,
+#root .problem-dot.clickable,
 #root .practice-page .user-item,
 #root .user-item.clickable,
 #root .opponent-code-panel-mini:not(.expanded),
@@ -43,14 +50,25 @@ body,
 #root .player-slot.invite,
 #root .duel-side.occupied,
 #root .duel-side.invite,
+#root .player-row.invite-selectable,
+#root .ranking-panel .player-row.invite-selectable,
+#root .btn-code-view,
+#root .battle-spectator-chat-toggle,
+#root .battle-spectator-chat-close,
+#root .mini-back-btn,
+#root .review-layout-toggle,
+#root .room-friend-summon-btn:not(:disabled),
+#root .room-friend-messenger-toggle,
+#root .room-friend-messenger-close,
 #root select:not(:disabled),
 #root input[type='button']:not(:disabled),
 #root input[type='submit']:not(:disabled),
 #root input[type='reset']:not(:disabled),
 #root input[type='checkbox'],
 #root input[type='radio'],
-#root .cursor-pointer {
-  cursor: var(--game-cursor-pointer);
+#root .cursor-pointer,
+#root [class*='cursor-pointer'] {
+  cursor: var(--game-cursor-pointer) !important;
 }
 
 #root :disabled,
@@ -61,21 +79,33 @@ body,
 #root .profile-btn:disabled,
 #root .item-btn:disabled,
 #root .item-option:disabled,
+#root .item-option.is-empty,
 #root .page-arrow.disabled,
 #root .room-slot.full,
 #root .room-slot.started,
 #root .room-slot.empty,
-#root .practice-page .pixel-btn:disabled {
-  cursor: var(--game-cursor-not-allowed);
+#root .practice-page .pixel-btn:disabled,
+#root .battle-self-item-btn.is-zero,
+#root .battle-choice-btn.is-locked,
+#root .battle-choice-btn:disabled {
+  cursor: var(--game-cursor-not-allowed) !important;
 }
 
 #root input:not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not(:disabled),
 #root textarea:not(:disabled),
-#root [contenteditable='true'] {
-  cursor: var(--game-cursor-text);
+#root [contenteditable='true'],
+#root .blank-input:not(:disabled) {
+  cursor: var(--game-cursor-text) !important;
 }
 
 #root canvas.cursor-crosshair,
 #root .cursor-crosshair {
-  cursor: var(--game-cursor-crosshair);
+  cursor: var(--game-cursor-crosshair) !important;
+}
+
+#root .opponent-code-panel-mini.expanded,
+#root .practice-page .blank-input:disabled,
+#root input:disabled,
+#root textarea:disabled {
+  cursor: var(--game-cursor-default) !important;
 }

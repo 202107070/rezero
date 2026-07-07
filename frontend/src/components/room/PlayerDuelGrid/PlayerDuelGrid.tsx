@@ -1,5 +1,7 @@
-import { CHARACTERS, LANGUAGES } from '../../../constants/roomConstants';
+import type { MouseEvent } from 'react';
+import { CHARACTERS } from '../../../constants/roomConstants';
 import type { RoomPlayer } from '../../../types/room';
+import { getTierByUserName, getTierIconByTier } from '../../../utils/tierUtils';
 
 interface DuelSideProps {
   player: RoomPlayer | null;
@@ -9,17 +11,30 @@ interface DuelSideProps {
   canInvite: boolean;
   onPlayerClick?: () => void;
   onInvite?: () => void;
+  onPlayerContextMenu?: (event: MouseEvent, player: RoomPlayer) => void;
 }
 
-function DuelSide({ player, isHostSide, myCharacter, myLanguage, canInvite, onPlayerClick, onInvite }: DuelSideProps) {
+function DuelSide({
+  player,
+  isHostSide,
+  myCharacter,
+  myLanguage: _myLanguage,
+  canInvite,
+  onPlayerClick,
+  onInvite,
+  onPlayerContextMenu,
+}: DuelSideProps) {
   const myCharIcon = CHARACTERS.find((c) => c.id === myCharacter)?.icon;
-  const myLangIcon = LANGUAGES.find((l) => l.id === myLanguage)?.icon;
   const clickable = player ? onPlayerClick : canInvite ? onInvite : undefined;
 
   return (
     <div
       className={`duel-side ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''} ${!player && canInvite ? 'invite' : ''}`}
       onClick={clickable}
+      onContextMenu={(event) => {
+        if (!player || !onPlayerContextMenu) return;
+        onPlayerContextMenu(event, player);
+      }}
     >
       <div className="duel-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
         {player ? (isHostSide ? myCharIcon : player.character) : <span className="duel-empty-mark">?</span>}
@@ -27,7 +42,7 @@ function DuelSide({ player, isHostSide, myCharacter, myLanguage, canInvite, onPl
       <div className="duel-name">
         {player ? (
           <>
-            <span className="duel-lang">{isHostSide ? myLangIcon : player.language}</span>
+            <span className="duel-rank">{getTierIconByTier(player.rank || getTierByUserName(player.name))}</span>
             {player.name}
           </>
         ) : canInvite ? (
@@ -62,6 +77,7 @@ interface PlayerDuelGridProps {
   onHostClick: () => void;
   onOpponentClick: () => void;
   onInviteOpponent: () => void;
+  onPlayerContextMenu?: (event: MouseEvent, player: RoomPlayer) => void;
 }
 
 export function PlayerDuelGrid({
@@ -73,6 +89,7 @@ export function PlayerDuelGrid({
   onHostClick,
   onOpponentClick,
   onInviteOpponent,
+  onPlayerContextMenu,
 }: PlayerDuelGridProps) {
   return (
     <div className="player-duel-grid">
@@ -83,6 +100,7 @@ export function PlayerDuelGrid({
         myLanguage={myLanguage}
         canInvite={false}
         onPlayerClick={onHostClick}
+        onPlayerContextMenu={onPlayerContextMenu}
       />
       <div className="duel-vs">VS</div>
       <DuelSide
@@ -93,6 +111,7 @@ export function PlayerDuelGrid({
         canInvite={canInviteOpponent}
         onPlayerClick={onOpponentClick}
         onInvite={onInviteOpponent}
+        onPlayerContextMenu={onPlayerContextMenu}
       />
     </div>
   );

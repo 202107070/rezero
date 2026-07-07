@@ -56,17 +56,21 @@ export default function BattleBuildPanel({
           <span className="code-card-lang-badge">{langLabel}</span>
         </div>
         <div className="battle-build-meta">
-          <span className={buildsRemaining <= 0 ? 'pixel-text-danger' : 'pixel-text-warning'}>
-            빌드 {buildsRemaining}/{buildsAllowed}
-          </span>
-          <button
-            type="button"
-            className="pixel-btn pixel-btn-primary battle-build-btn"
-            onClick={onBuild}
-            disabled={!canBuild}
-          >
-            {isBuilding ? '빌드 중...' : '빌드'}
-          </button>
+          {!collapsed && (
+            <>
+              <span className={buildsRemaining <= 0 ? 'pixel-text-danger' : 'pixel-text-warning'}>
+                빌드 {buildsRemaining}/{buildsAllowed}
+              </span>
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-primary battle-build-btn"
+                onClick={onBuild}
+                disabled={!canBuild}
+              >
+                {isBuilding ? '빌드 중...' : '빌드'}
+              </button>
+            </>
+          )}
           <button type="button" className="panel-toggle-btn" onClick={onToggleCollapse}>
             {collapsed ? '▲' : '▼'}
           </button>

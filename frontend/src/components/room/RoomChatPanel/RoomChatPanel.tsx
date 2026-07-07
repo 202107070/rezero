@@ -5,6 +5,7 @@ interface RoomChatPanelProps {
   messages: RoomChatMessage[];
   chatMsg: string;
   chatMode: string;
+  whisperTarget?: string | null;
   onChatMsgChange: (value: string) => void;
   onChatModeChange: (value: string) => void;
   onSend: () => void;
@@ -14,6 +15,7 @@ export function RoomChatPanel({
   messages,
   chatMsg,
   chatMode,
+  whisperTarget,
   onChatMsgChange,
   onChatModeChange,
   onSend,
@@ -34,6 +36,7 @@ export function RoomChatPanel({
                 <div className="msg-sys">{m.text}</div>
               ) : (
                 <div>
+                  {m.mode ? <span className="msg-mode">{m.mode}</span> : null}
                   <span className="msg-user">[{m.name}]</span> <span className="msg-text">{m.text}</span>
                 </div>
               )}
@@ -46,11 +49,12 @@ export function RoomChatPanel({
         <select className="room-chat-mode-btn" value={chatMode} onChange={(e) => onChatModeChange(e.target.value)}>
           <option value="ALL">모두에게</option>
           <option value="FRIEND">친구에게</option>
+          {whisperTarget && <option value="WHISPER">{`귓속말: ${whisperTarget}`}</option>}
         </select>
         <input
           type="text"
           className="room-chat-input"
-          placeholder="Enter Chat (Enter)"
+          placeholder={whisperTarget && chatMode === 'WHISPER' ? `${whisperTarget}에게 귓속말...` : 'Enter Chat (Enter)'}
           value={chatMsg}
           onChange={(e) => onChatMsgChange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onSend()}

@@ -23,8 +23,8 @@ export function KickModal({ open, targetName, onConfirm, onCancel }: KickModalPr
         <div className="d-flex justify-content-center gap-3">
           <button
             type="button"
-            className="pixel-btn pixel-btn-primary"
-            style={{ minWidth: '100px', background: 'var(--px-danger)' }}
+            className="pixel-btn pixel-btn-danger room-kick-btn"
+            style={{ minWidth: '100px' }}
             onClick={onConfirm}
           >
             강퇴

@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import type { ResultPlayer } from '../../../utils/resultUtils';
 
 interface ResultPlayerRowProps {
@@ -8,10 +9,12 @@ interface ResultPlayerRowProps {
   reviewSelectMode?: boolean;
   selectedReviewProblems?: Set<number>;
   onToggleReviewProblem?: (index: number) => void;
+  onOpenProblemDetail?: (index: number) => void;
   isReviewSelectable?: boolean;
   inviteSelectable?: boolean;
   inviteSelected?: boolean;
   onInviteSelect?: () => void;
+  onNicknameContextMenu?: (event: MouseEvent, player: ResultPlayer) => void;
 }
 
 export function ResultPlayerRow({
@@ -22,19 +25,35 @@ export function ResultPlayerRow({
   reviewSelectMode = false,
   selectedReviewProblems,
   onToggleReviewProblem,
+  onOpenProblemDetail,
   isReviewSelectable = false,
   inviteSelectable = false,
   inviteSelected = false,
   onInviteSelect,
+  onNicknameContextMenu,
 }: ResultPlayerRowProps) {
   const canSelectDots = reviewSelectMode && isReviewSelectable;
+  const canOpenDetail = !reviewSelectMode && !!onOpenProblemDetail;
+
+  const ratingDeltaLabel =
+    player.delta > 0 ? ` +${player.delta}` : player.delta < 0 ? ` ${player.delta}` : '';
+  const solveTimeLabel =
+    player.totalSolveTime > 0 ? `${player.totalSolveTime.toFixed(1)}s` : '—';
 
   const rowContent = (
     <>
       {showRank && <div className={`rank-number${player.rank <= 3 ? ` rank-${player.rank}` : ''}`}>{player.rank}</div>}
       <div className="player-avatar">{player.avatar}</div>
       <div className="player-info-col">
-        <div className="player-nickname">{player.name}</div>
+        <div
+          className="player-nickname"
+          onContextMenu={(event) => {
+            if (!onNicknameContextMenu) return;
+            onNicknameContextMenu(event, player);
+          }}
+        >
+          {player.name}
+        </div>
         {player.problemResults.length > 0 && (
           <div className="player-problem-dots">
             {player.problemResults.map((correct, index) => {
@@ -47,6 +66,19 @@ export function ResultPlayerRow({
                     className={`problem-dot ${correct ? 'correct' : 'wrong'} selectable${selected ? ' selected' : ''}`}
                     title={`문제 ${index + 1}: ${correct ? '정답' : '오답'}`}
                     onClick={() => onToggleReviewProblem?.(index)}
+                  >
+                    {index + 1}
+                  </button>
+                );
+              }
+              if (canOpenDetail) {
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    className={`problem-dot ${correct ? 'correct' : 'wrong'} clickable`}
+                    title={`문제 ${index + 1} 보기 (${correct ? '정답' : '오답'})`}
+                    onClick={() => onOpenProblemDetail(index)}
                   >
                     {index + 1}
                   </button>
@@ -66,13 +98,11 @@ export function ResultPlayerRow({
         )}
       </div>
       <div className="player-score-info">
-        <span style={{ fontSize: '14px', color: '#aaa' }}>
-          {player.totalSolveTime > 0 ? `${player.totalSolveTime.toFixed(1)}s` : ''}
-        </span>
-        <span className="score-val">{player.ingameScore.toLocaleString()} PTS</span>
-        <span style={{ fontSize: '12px', color: 'var(--px-text-muted)' }}>
-          레이팅 {player.ratingScore}
-          {player.delta > 0 ? ` +${player.delta}` : ''}
+        <span className="player-solve-time">총 풀이 시간: {solveTimeLabel}</span>
+        <span className="score-val">배틀 인게임 점수: {player.ingameScore.toLocaleString()}</span>
+        <span className="player-rating-info">
+          레이팅: {player.ratingScore}
+          {ratingDeltaLabel}
         </span>
       </div>
     </>

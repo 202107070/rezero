@@ -139,12 +139,17 @@ html.display-fullscreen #root .room-page-container {
   color: #fff;
   border: 4px solid var(--px-border);
   outline: none;
-  cursor: pointer;
+  cursor: var(--game-cursor-pointer);
   padding: 8px 14px;
   position: relative;
   user-select: none;
   box-shadow: var(--px-shadow-hard);
   transition: transform 0.06s, box-shadow 0.06s;
+}
+
+.pixel-btn:hover:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #000;
 }
 
 .pixel-btn:active {
@@ -267,9 +272,14 @@ html.display-fullscreen #root .room-page-container {
   box-shadow: 3px 3px 0px #000;
   background: var(--px-surface-light);
   color: var(--px-text);
-  cursor: pointer;
-  transition: transform 0.06s, box-shadow 0.06s;
+  cursor: var(--game-cursor-pointer);
+  transition: transform 0.06s, box-shadow 0.06s, border-color 0.1s, background 0.1s;
   font-family: var(--font-pixel);
+}
+
+.profile-btn:hover:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #000;
 }
 
 .profile-btn:active {

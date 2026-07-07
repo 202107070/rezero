@@ -74,6 +74,20 @@ function readBattleRoundSeconds(problemCount: number, demoState: DemoStateLike |
   }
 }
 
+function computeRatingDelta(ingameScore: number, isWinner: boolean): number {
+  const magnitude = Math.max(10, Math.floor(ingameScore / 10));
+  return isWinner ? magnitude : -magnitude;
+}
+
+export function applyRatingDeltas(players: ResultPlayer[]): void {
+  if (players.length === 0) return;
+  const winCount = Math.max(1, Math.ceil(players.length / 2));
+  players.forEach((player) => {
+    const isWinner = player.rank <= winCount;
+    player.delta = computeRatingDelta(player.ingameScore, isWinner);
+  });
+}
+
 function parseScore(scoreStr: string | number | undefined): number {
   const num = parseInt(String(scoreStr).replace(/[^0-9]/g, ''), 10);
   return Number.isFinite(num) ? num : 0;
@@ -88,7 +102,9 @@ export function buildResultPlayers(params: {
   demoState: DemoStateLike | null;
 }): ResultPlayer[] {
   if (params.rankingSnapshot?.players?.length) {
-    return rankingSnapshotToResultPlayers(params.rankingSnapshot);
+    const players = rankingSnapshotToResultPlayers(params.rankingSnapshot);
+    applyRatingDeltas(players);
+    return players;
   }
   return rebuildResultPlayers(params);
 }
@@ -179,7 +195,7 @@ function rebuildResultPlayers(params: {
       totalSolveTime: metrics.totalSolveTime,
       completionTime: metrics.completionTime,
       problemResults,
-      delta: Math.floor(ingameScore / 10),
+      delta: 0,
       rank: 0,
     });
   });
@@ -199,7 +215,7 @@ function rebuildResultPlayers(params: {
       totalSolveTime: botMetrics.totalSolveTime,
       completionTime: botMetrics.completionTime,
       problemResults: buildBotProblemResults(solved, totalProblems),
-      delta: Math.floor(botScore / 10),
+      delta: 0,
       rank: 0,
     });
   });
@@ -225,6 +241,7 @@ function rebuildResultPlayers(params: {
   list.forEach((p, i) => {
     p.rank = i + 1;
   });
+  applyRatingDeltas(list);
   return list;
 }
 

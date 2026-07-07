@@ -1,7 +1,15 @@
 import type { ReactNode } from 'react';
+import ProblemVisualPreview from './ProblemVisualPreview';
 import type { BattleProblem } from '../../types/battle';
-import type { DemoBot } from '../../utils/battle/demoBots';
+import {
+  getBotSpectatorAnswers,
+  getBotSpectatorMcIndex,
+  resolveSpectatorViewProblemIndex,
+  type DemoBot,
+} from '../../utils/battle/demoBots';
+import { resolveProblemCapabilities } from '../../utils/problemCapabilities';
 import FillBlankRenderer from './FillBlankRenderer';
+import { getTierIconByUserName } from '../../utils/tierUtils';
 
 export interface BotView extends DemoBot {
   status: string;
@@ -23,11 +31,12 @@ interface OpponentPanelsProps {
   setExpandedOpponentId: (id: string | null) => void;
   demoIsVersusMany: boolean;
   demoSpectating: boolean;
-  currentProblemLocked: boolean;
   currentIndex: number;
   problems: BattleProblem[];
   currentProblem: BattleProblem;
-  userRankMap: Record<string, number>;
+  isItemMode: boolean;
+  langKey: string;
+  spectatorViewProblemByBot: Record<string, number>;
   opponentEffects: Record<string, Record<number, { panelEffect?: PanelEffect }>>;
   panelHit: Record<string, boolean>;
   onOpenItemModal: (botId: string) => void;
@@ -46,17 +55,139 @@ function effectIcons(
   return icons;
 }
 
+function getViewProblemIndex(
+  bot: BotView,
+  demoSpectating: boolean,
+  spectatorViewProblemByBot: Record<string, number>,
+): number {
+  if (!demoSpectating) return bot.currentProblem;
+  return resolveSpectatorViewProblemIndex(bot.id, bot.currentProblem, spectatorViewProblemByBot);
+}
+
+function OpponentProblemBody({
+  problem,
+  bot,
+  viewProblemIndex,
+  isItemMode,
+  langKey,
+  compact,
+  showAnswers,
+}: {
+  problem: BattleProblem;
+  bot: BotView;
+  viewProblemIndex: number;
+  isItemMode: boolean;
+  langKey: string;
+  compact?: boolean;
+  showAnswers: boolean;
+}) {
+  const caps = resolveProblemCapabilities(problem, { gameMode: isItemMode ? 'item' : 'normal' });
+  const shouldRenderVisual = caps.hasVisual || caps.hasImage;
+  const displayAnswers = showAnswers
+    ? getBotSpectatorAnswers(bot, viewProblemIndex, problem, langKey)
+    : [];
+  const mcIndex = showAnswers ? getBotSpectatorMcIndex(bot, problem, viewProblemIndex) : null;
+  const promptText = problem.question || '';
+  const blankMarkerCount = (problem.question || '').match(/_____/g)?.length || 0;
+  const answerMaskClass = showAnswers ? '' : ' opponent-answers-masked';
+
+  return (
+    <>
+      {!compact && (
+        <div className="spectator-problem-head">
+          <div className="code-problem-kicker">PROBLEM</div>
+          <div className="code-problem-title">{problem.title || `Problem ${viewProblemIndex + 1}`}</div>
+        </div>
+      )}
+      {caps.showCodePanel && (
+        <div className="fill-blank-area spectator-opponent-fill">
+          {shouldRenderVisual && <ProblemVisualPreview visual={problem.visual} compact={compact} />}
+          {blankMarkerCount > 0 ? (
+            <div className={`fill-blank-code${answerMaskClass}`}>
+              <FillBlankRenderer
+                code={problem.question || ''}
+                answers={displayAnswers}
+                problemIndex={viewProblemIndex}
+                breakingBlanks={{}}
+                isLocked
+                isBotView={!showAnswers}
+              />
+            </div>
+          ) : (
+            <>
+              {promptText && <div className="code-problem-question">{promptText}</div>}
+              {(showAnswers ? displayAnswers.length > 0 : true) && (
+                <div className={answerMaskClass || undefined}>
+                  <input
+                    className="blank-input battle-short-input"
+                    value={showAnswers ? displayAnswers.join(', ') : ''}
+                    placeholder={showAnswers ? undefined : '???'}
+                    readOnly
+                    disabled
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {caps.showMultipleChoicePanel && (
+        <div className="fill-blank-area fill-blank-area-answers spectator-opponent-fill">
+          {promptText && <div className="code-problem-question">{promptText}</div>}
+          {shouldRenderVisual && (
+            <ProblemVisualPreview visual={problem.visual} compact={compact} suppressCaption={Boolean(promptText)} />
+          )}
+          <div className={answerMaskClass || undefined}>
+            {(problem.options || []).map((opt, i) => {
+              const isSelected = mcIndex === i;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`pixel-btn battle-choice-btn is-locked${isSelected ? ' is-selected' : ''}`}
+                  disabled
+                  style={{ opacity: mcIndex !== null && !isSelected ? 0.55 : 1 }}
+                >
+                  {String.fromCharCode(65 + i)}. {opt}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {caps.showShortAnswerPanel && (
+        <div className="fill-blank-area fill-blank-area-answers spectator-opponent-fill">
+          {promptText && <div className="code-problem-question">{promptText}</div>}
+          {shouldRenderVisual && (
+            <ProblemVisualPreview visual={problem.visual} compact={compact} suppressCaption={Boolean(promptText)} />
+          )}
+          <div className={answerMaskClass || undefined}>
+            <input
+              className="blank-input battle-short-input"
+              value={showAnswers ? displayAnswers[0] || '' : ''}
+              placeholder={showAnswers ? undefined : '???'}
+              readOnly
+              disabled
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function OpponentPanels({
   battleBots,
   expandedOpponentId,
   setExpandedOpponentId,
   demoIsVersusMany,
   demoSpectating,
-  currentProblemLocked,
   currentIndex,
   problems,
   currentProblem,
-  userRankMap,
+  isItemMode,
+  langKey,
+  spectatorViewProblemByBot,
   opponentEffects,
   panelHit,
   onOpenItemModal,
@@ -66,32 +197,26 @@ export default function OpponentPanels({
   const now = Date.now();
 
   const renderMini = (bot: BotView) => {
-    const panelEff = opponentEffects[bot.id]?.[currentIndex]?.panelEffect;
+    const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
+    const panelEff = opponentEffects[bot.id]?.[viewProblemIndex]?.panelEffect;
     const hasPaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
     const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
     const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
-    const revealed = demoSpectating || currentProblemLocked || hasPaint || hasLightning || hasScribble;
     const effIcon = effectIcons(panelEff, now);
+    const botProb = problems[viewProblemIndex] || currentProblem;
 
     return (
       <div
         key={bot.id}
-        className={`opponent-code-panel-mini ${revealed ? 'revealed' : 'hidden'}`}
+        className={`opponent-code-panel-mini ${demoSpectating ? 'revealed' : 'problem-preview'}`}
         onClick={() => setExpandedOpponentId(bot.id)}
       >
         <div className="mini-header">
           <span>
-            {bot.avatar}{' '}
-            <span style={{ color: 'var(--px-warning)', fontSize: '15px' }}>#{userRankMap[bot.id] || '?'}</span>{' '}
-            {bot.name}
-            {bot.solvedProblems?.length > 0 && (
-              <span style={{ color: '#ff6b35', fontSize: '13px', marginLeft: '4px', textShadow: '1px 1px 0 #000' }}>
-                🔥{bot.solvedProblems.length}
-              </span>
-            )}
+            {bot.avatar} <span className="mini-tier">{getTierIconByUserName(bot.name)}</span> {bot.name}
+            <span className="mini-view-problem-label"> · Q{viewProblemIndex + 1}</span>
           </span>
           <span>
-            {bot.status === 'solved' ? '✓' : '...'}
             {effIcon}
             {showItemButton && (
               <button
@@ -112,19 +237,16 @@ export default function OpponentPanels({
         <div
           className={`mini-code-area${hasPaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}`}
         >
-          <div className="mini-code-textarea" style={{ whiteSpace: 'pre-wrap', overflow: 'auto' }}>
-            <FillBlankRenderer
-              code={(problems[bot.currentProblem] || currentProblem).question || ''}
-              answers={[]}
-              problemIndex={-1}
-              breakingBlanks={{}}
-              isLocked
-              isBotView
+          <div className="mini-code-textarea spectator-opponent-mini-body" style={{ whiteSpace: 'pre-wrap', overflow: 'auto' }}>
+            <OpponentProblemBody
+              problem={botProb}
+              bot={bot}
+              viewProblemIndex={viewProblemIndex}
+              isItemMode={isItemMode}
+              langKey={langKey}
+              compact
+              showAnswers={demoSpectating}
             />
-          </div>
-          <div className="mini-overlay">
-            {bot.avatar} CODE
-            <small>클릭하여 확대</small>
           </div>
         </div>
       </div>
@@ -135,21 +257,18 @@ export default function OpponentPanels({
     const bot = battleBots.find((b) => b.id === expandedOpponentId);
     if (!bot) return null;
 
-    const panelEff = opponentEffects[bot.id]?.[currentIndex]?.panelEffect;
+    const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
+    const panelEff = opponentEffects[bot.id]?.[viewProblemIndex]?.panelEffect;
     const hasActivePaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
     const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
     const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
-    const isRevealed = demoSpectating || currentProblemLocked || hasActivePaint || hasLightning || hasScribble;
-    const botProb = problems[bot.currentProblem] || currentProblem;
-    const partialCode = botProb.question || '';
-    const codeLines = partialCode.split('\n');
-    const edAnswers = isRevealed ? bot.currentBlankAnswers : [];
-
-    let gIdx = 0;
+    const isRevealed = demoSpectating;
+    const botProb = problems[viewProblemIndex] || currentProblem;
 
     return (
       <div
-        className={`opponent-code-panel-mini expanded ${isRevealed ? 'revealed' : 'hidden'}${panelHit[bot.id] ? ' panel-hit' : ''}`}
+        data-opponent-id={bot.id}
+        className={`opponent-code-panel-mini expanded ${isRevealed ? 'revealed' : 'problem-preview'}${panelHit[bot.id] ? ' panel-hit' : ''}`}
       >
         <div className="mini-header">
           <span>
@@ -165,17 +284,10 @@ export default function OpponentPanels({
                 ◀ BACK
               </button>
             )}
-            {bot.avatar}{' '}
-            <span style={{ color: 'var(--px-warning)', fontSize: '16px' }}>#{userRankMap[bot.id] || '?'}</span>{' '}
-            {bot.name}
-            {bot.solvedProblems?.length > 0 && (
-              <span style={{ color: '#ff6b35', fontSize: '15px', marginLeft: '6px', textShadow: '1px 1px 0 #000' }}>
-                🔥 {bot.solvedProblems.length}
-              </span>
-            )}
+            {bot.avatar} <span className="mini-tier">{getTierIconByUserName(bot.name)}</span> {bot.name}
+            <span className="mini-view-problem-label"> · Q{viewProblemIndex + 1}</span>
           </span>
           <span>
-            {bot.status === 'solved' ? '✓' : '...'}
             {effectIcons(panelEff, now)}
             {showItemButton && (
               <button
@@ -197,56 +309,16 @@ export default function OpponentPanels({
           className={`mini-code-area${hasActivePaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}`}
           style={{ position: 'relative' }}
         >
-          <div
-            className="mini-code-lines"
-            style={{
-              width: '100%',
-              height: '100%',
-              overflow: 'auto',
-              background: '#1a1e21',
-              padding: '4px 6px',
-              fontFamily: 'var(--font-pixel)',
-              fontSize: '14px',
-              lineHeight: '1.5',
-              color: 'var(--px-text)',
-              position: 'relative',
-            }}
-          >
-            <div style={{ whiteSpace: 'pre-wrap' }}>
-              {codeLines.map((line, lineIdx) => {
-                const parts = line.split('_____');
-                const lineResult = (
-                  <div key={lineIdx} style={{ padding: '1px 4px', minHeight: '1.5em', whiteSpace: 'pre-wrap' }}>
-                    {parts.map((part, partIdx) => {
-                      const blankIdx = gIdx + partIdx;
-                      return (
-                        <span key={partIdx} style={{ whiteSpace: 'pre-wrap' }}>
-                          {part}
-                          {partIdx < parts.length - 1 && (
-                            <input
-                              className="blank-input"
-                              value={edAnswers[blankIdx] || ''}
-                              readOnly
-                              disabled
-                              style={{ width: '80px', display: 'inline-block', pointerEvents: 'none' }}
-                            />
-                          )}
-                        </span>
-                      );
-                    })}
-                  </div>
-                );
-                gIdx += parts.length - 1;
-                return lineResult;
-              })}
-            </div>
+          <div className="mini-code-lines spectator-opponent-expanded-body">
+            <OpponentProblemBody
+              problem={botProb}
+              bot={bot}
+              viewProblemIndex={viewProblemIndex}
+              isItemMode={isItemMode}
+              langKey={langKey}
+              showAnswers={demoSpectating}
+            />
           </div>
-          {!isRevealed && (
-            <div className="mini-overlay">
-              {bot.avatar} CODE
-              <small>제출 후 확인 가능</small>
-            </div>
-          )}
         </div>
       </div>
     );

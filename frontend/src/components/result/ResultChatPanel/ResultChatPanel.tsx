@@ -12,6 +12,7 @@ interface ResultChatPanelProps {
   messages: ResultChatMessage[];
   chatInput: string;
   chatMode: string;
+  whisperTarget?: string | null;
   myUserId: string;
   onChatInputChange: (value: string) => void;
   onChatModeChange: (value: string) => void;
@@ -22,6 +23,7 @@ export function ResultChatPanel({
   messages,
   chatInput,
   chatMode,
+  whisperTarget,
   myUserId,
   onChatInputChange,
   onChatModeChange,
@@ -62,11 +64,12 @@ export function ResultChatPanel({
         <select className="chat-mode-select" value={chatMode} onChange={(e) => onChatModeChange(e.target.value)}>
           <option value="ALL">모두에게</option>
           <option value="FRIEND">친구에게</option>
+          {whisperTarget && <option value="WHISPER">{`귓속말: ${whisperTarget}`}</option>}
         </select>
         <input
           type="text"
           className="chat-input"
-          placeholder="메시지 입력..."
+          placeholder={whisperTarget && chatMode === 'WHISPER' ? `${whisperTarget}에게 귓속말...` : '메시지 입력...'}
           value={chatInput}
           onChange={(e) => onChatInputChange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onSend()}

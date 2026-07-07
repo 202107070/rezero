@@ -1,4 +1,5 @@
 import type { RoomUser } from '../../types/battle';
+import { BATTLE_CORRECT_SCORE } from '../../constants/battleConstants';
 import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
 import type { DemoBot } from './demoBots';
 import { getBotSolveDelay } from './demoBots';
@@ -18,7 +19,7 @@ export function comparePlayersByRank(a: RankablePlayer, b: RankablePlayer): numb
 /** 봇 순위 점수 — 푼 문제 수 기준 (콤보 없음) */
 export function computeBotRankScore(solvedCount: number): number {
   if (solvedCount <= 0) return 0;
-  return solvedCount * 1000 + 50 * solvedCount * (solvedCount - 1);
+  return solvedCount * BATTLE_CORRECT_SCORE;
 }
 
 export function normalizeBattlePlayerId(id: string, name?: string): string {
@@ -150,7 +151,7 @@ export function rankingSnapshotToResultPlayers(
     totalSolveTime: p.totalSolveTime,
     completionTime: p.completionTime,
     problemResults: p.problemResults,
-    delta: Math.floor(p.ingameScore / 10),
+    delta: 0,
     rank: p.rank,
   }));
 }

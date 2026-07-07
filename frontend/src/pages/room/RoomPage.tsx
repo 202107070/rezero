@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type MouseEvent, useState } from 'react';
 import { getCurrentUserName } from '../../services/authService';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BattleSettingsPanel } from '../../components/room/BattleSettingsPanel/BattleSettingsPanel';
@@ -36,7 +36,20 @@ import {
   updateRoomPlayerCount,
 } from '../../services/battlePrepService';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
+import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
+import {
+  addFriend,
+  getFollowRoomPath,
+  getUserPresence,
+  isFriend,
+  removeFriend,
+  setUserPresence,
+} from '../../services/friendStore';
 import { getStartBlockReason } from '../../utils/room/roomStartValidation';
+import {
+  UserListContextMenu,
+  type UserListMenuAction,
+} from '../../components/lobby/UserListContextMenu/UserListContextMenu';
 import './room.css';
 
 export default function RoomPage() {
@@ -124,9 +137,99 @@ export default function RoomPage() {
   };
   const [chatMsg, setChatMsg] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
+  const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
   const [messages, setMessages] = useState<RoomChatMessage[]>(() =>
     buildInitialMessages(roomMode, parsedMaxPlayers, initialPlayers),
   );
+  const [contextMenu, setContextMenu] = useState<{
+    open: boolean;
+    x: number;
+    y: number;
+    userName: string;
+  } | null>(null);
+
+  const roomQuery = searchParams.toString();
+
+  useEffect(() => {
+    const me = getCurrentUserName();
+    setUserPresence(me, {
+      status: 'room',
+      roomId,
+      roomTitle: roomTitleFromUrl,
+      roomQuery,
+    });
+    return () => {
+      setUserPresence(me, { status: 'lobby' });
+    };
+  }, [roomId, roomTitleFromUrl, roomQuery]);
+
+  const appendSystemMessage = (text: string) => {
+    setMessages((prev) => [...prev, { type: 'sys', text: `>> ${text}` }]);
+  };
+
+  const handleSummonSuccess = (friendName: string) => {
+    appendSystemMessage(`[${friendName}] 님을 소환했습니다.`);
+  };
+
+  const handleSummonFail = (friendName: string, reason: string) => {
+    appendSystemMessage(`${friendName} 님 소환 실패: ${reason}`);
+  };
+
+  const openUserContextMenu = (event: MouseEvent, userName: string) => {
+    const myUserName = getCurrentUserName();
+    if (!userName || userName === myUserName) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      open: true,
+      x: event.clientX,
+      y: event.clientY,
+      userName,
+    });
+  };
+
+  const closeUserContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  const handleUserMenuAction = (action: UserListMenuAction, userName: string) => {
+    switch (action) {
+      case 'match-story':
+        appendSystemMessage('매치 스토리는 로비에서만 열 수 있습니다.');
+        break;
+      case 'add-friend':
+        if (isFriend(userName)) {
+          removeFriend(userName);
+          appendSystemMessage(`${userName} 님을 친구 목록에서 삭제했습니다.`);
+        } else {
+          const added = addFriend(userName);
+          appendSystemMessage(
+            added ? `${userName} 님을 친구 목록에 추가했습니다.` : `${userName} 님은 이미 친구 목록에 있습니다.`,
+          );
+        }
+        break;
+      case 'whisper':
+        setWhisperTarget(userName);
+        setChatMode('WHISPER');
+        appendSystemMessage(`${userName} 님에게 귓속말 모드가 설정되었습니다.`);
+        break;
+      case 'follow': {
+        const roomPath = getFollowRoomPath(userName);
+        if (!roomPath) {
+          appendSystemMessage(`${userName} 님은 현재 따라갈 수 있는 방에 없습니다.`);
+          break;
+        }
+        appendSystemMessage(`${userName} 님이 있는 방으로 이동합니다.`);
+        navigate(roomPath);
+        break;
+      }
+      case 'summon':
+        appendSystemMessage('소환하기는 친구 메신저에서 사용 가능합니다.');
+        break;
+      default:
+        break;
+    }
+  };
 
   const host = players[0];
   const myIsReady = isReady;
@@ -137,7 +240,13 @@ export default function RoomPage() {
 
   const handleSendChat = () => {
     if (!chatMsg.trim()) return;
-    setMessages((prev) => [...prev, { type: 'user', name: getCurrentUserName(), text: chatMsg }]);
+    const modeLabel =
+      chatMode === 'WHISPER' && whisperTarget
+        ? `[귓속말:${whisperTarget}]`
+        : chatMode === 'ALL'
+          ? '[전체]'
+          : '[친구]';
+    setMessages((prev) => [...prev, { type: 'user', name: getCurrentUserName(), text: chatMsg, mode: modeLabel }]);
     setChatMsg('');
   };
 
@@ -248,6 +357,7 @@ export default function RoomPage() {
         next[slotIndex] = {
           id: newBotId,
           name: bot.name,
+          rank: bot.rank,
           isHost: false,
           isReady: false,
           language: bot.language,
@@ -285,6 +395,7 @@ export default function RoomPage() {
                     canInviteMore={canInviteMore}
                     onPlayerClick={openProfile}
                     onInviteBot={handleInviteBot}
+                    onPlayerContextMenu={(event, player) => openUserContextMenu(event, player.name)}
                   />
                 </div>
                 <div className="room-chat-section">
@@ -292,8 +403,12 @@ export default function RoomPage() {
                     messages={messages}
                     chatMsg={chatMsg}
                     chatMode={chatMode}
+                    whisperTarget={whisperTarget}
                     onChatMsgChange={setChatMsg}
-                    onChatModeChange={setChatMode}
+                    onChatModeChange={(mode) => {
+                      setChatMode(mode);
+                      if (mode !== 'WHISPER') setWhisperTarget(null);
+                    }}
                     onSend={handleSendChat}
                   />
                 </div>
@@ -313,6 +428,14 @@ export default function RoomPage() {
                 />
               )}
               <div className="room-side-bottom">
+                <RoomFriendMessenger
+                  roomId={roomId}
+                  roomTitle={roomTitleFromUrl}
+                  roomQuery={roomQuery}
+                  onSummonSuccess={handleSummonSuccess}
+                  onSummonFail={handleSummonFail}
+                  onFriendContextMenu={openUserContextMenu}
+                />
                 <RoomActionBar
                   isHost={Boolean(host?.isHost)}
                   myIsReady={myIsReady}
@@ -358,6 +481,26 @@ export default function RoomPage() {
           setShowKickModal(true);
         }}
       />
+
+      {contextMenu && (
+        <UserListContextMenu
+          open={contextMenu.open}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          userName={contextMenu.userName}
+          actionLabels={{
+            'add-friend': isFriend(contextMenu.userName) ? '친구삭제' : '친구추가',
+          }}
+          hiddenActions={['summon']}
+          disabledActions={(() => {
+            const presence = getUserPresence(contextMenu.userName);
+            const canFollow = isFriend(contextMenu.userName) && presence?.status === 'room';
+            return canFollow ? [] : (['follow'] as UserListMenuAction[]);
+          })()}
+          onSelect={handleUserMenuAction}
+          onClose={closeUserContextMenu}
+        />
+      )}
     </>
   );
 }

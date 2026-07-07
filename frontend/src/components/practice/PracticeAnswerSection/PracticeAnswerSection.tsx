@@ -1,33 +1,65 @@
+import { useMemo } from 'react';
+import FillBlankRenderer from '../../../components/battle/FillBlankRenderer';
+import ProblemVisualPreview from '../../../components/battle/ProblemVisualPreview';
+import { resolveProblemCapabilities } from '../../../utils/problemCapabilities';
 import type { PracticeExercise } from '../../../utils/practiceUtils';
 import { isBlankBasedType } from '../../../utils/problemTypeUtils';
 
 interface PracticeAnswerSectionProps {
   exercise: PracticeExercise;
+  currentIndex: number;
   isChecked: boolean;
   isCorrect: boolean;
   selectedOption: number;
   shortAnswer: string;
+  blankAnswers: string[];
   correctAnswers: string[];
   canCheck: boolean;
   onSelect: (idx: number) => void;
   onShortAnswerChange: (value: string) => void;
+  onBlankChange: (blankIdx: number, value: string) => void;
   onCheck: () => void;
 }
 
 export function PracticeAnswerSection({
   exercise,
+  currentIndex,
   isChecked,
   isCorrect,
   selectedOption,
   shortAnswer,
+  blankAnswers,
   correctAnswers,
   canCheck,
   onSelect,
   onShortAnswerChange,
+  onBlankChange,
   onCheck,
 }: PracticeAnswerSectionProps) {
+  const caps = useMemo(
+    () => resolveProblemCapabilities(exercise, { gameMode: 'normal' }),
+    [exercise],
+  );
+  const shouldRenderVisual = caps.hasVisual || caps.hasImage;
+
   return (
-    <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+    <div className="practice-answer-box">
+      {caps.showCodePanel && (
+        <div className="practice-code-answer">
+          {shouldRenderVisual && <ProblemVisualPreview visual={exercise.visual} compact />}
+          <div className="practice-code-blanks">
+            <FillBlankRenderer
+              code={exercise.question || ''}
+              answers={blankAnswers}
+              problemIndex={currentIndex}
+              breakingBlanks={{}}
+              isLocked={isChecked}
+              onUpdate={onBlankChange}
+            />
+          </div>
+        </div>
+      )}
+
       {exercise.type === 'multiple_choice' && (
         <div className="options-grid">
           {(exercise.options || []).map((opt, idx) => {

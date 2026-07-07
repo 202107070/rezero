@@ -36,19 +36,13 @@ export default function ItemSelectModal({ inventory, onSelect, onClose, allowedT
         {visibleItems.map((item) => (
           <div
             key={item.type}
-            className="item-option"
+            className={`item-option${item.rare ? ' is-rare' : ''}${inventory[item.type] <= 0 ? ' is-empty' : ''}`}
             onClick={() => {
               if (inventory[item.type] > 0) {
                 onSelect(item.type);
                 return;
               }
               triggerShake();
-            }}
-            style={{
-              opacity: inventory[item.type] <= 0 ? 0.4 : 1,
-              filter: inventory[item.type] <= 0 ? 'grayscale(1)' : undefined,
-              background: item.rare ? 'linear-gradient(135deg, rgba(247,213,29,0.12), rgba(231,110,85,0.08))' : '',
-              borderColor: item.rare ? 'var(--px-warning)' : '',
             }}
           >
             <div className="item-icon">{item.icon}</div>

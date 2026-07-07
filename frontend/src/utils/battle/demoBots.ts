@@ -1,3 +1,6 @@
+import { resolveProblemStyle } from '../problemCapabilities';
+import { getProblemAnswersForLang } from '../problemTypeUtils';
+
 export interface DemoBot {
   id: string;
   name: string;
@@ -97,7 +100,15 @@ export function createDemoOpponentRoster(
   return [];
 }
 
-type ProblemLike = { title?: string; question?: string; answer?: Record<string, string[]>; difficulty?: string };
+type ProblemLike = {
+  title?: string;
+  question?: string;
+  type?: string;
+  answer?: Record<string, string[]>;
+  options?: string[] | null;
+  correctIndex?: number | null;
+  difficulty?: string;
+};
 
 export function buildDemoCode(langKey: string, problem: ProblemLike, bot: { name: string; style: string; tag: string }, problemIndex: number): string {
   const title = problem?.title || `Problem ${problemIndex + 1}`;
@@ -112,19 +123,37 @@ export function buildDemoCode(langKey: string, problem: ProblemLike, bot: { name
   return `${header}\n${hint}\nimport java.util.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        // demo answer\n    }\n}\n`;
 }
 
-export function generateBotBlankAnswers(problem: ProblemLike, bot: { skill?: number }, langKey: string): string[] {
+export function generateBotBlankAnswers(problem: ProblemLike, _bot: { skill?: number }, langKey: string): string[] {
   const partial = problem?.question || '';
-  const blankCount = (partial.match(/_____/g) || []).length;
-  const allCorrect = problem?.answer?.[langKey] || [];
-  const correctAnswers = allCorrect.slice(0, blankCount);
-  const skill = bot.skill || 0.6;
-  const diff = problem?.difficulty || 'medium';
-  const mistakeRate = diff === 'easy' ? 0.1 : diff === 'medium' ? 0.25 : 0.4;
-  const wrongOptions = ['???', 'err', 'x', 'null', 'undefined'];
-  return correctAnswers.map((ans) => {
-    if (Math.random() < skill * (1 - mistakeRate)) return ans;
-    return wrongOptions[Math.floor(Math.random() * wrongOptions.length)];
-  });
+  const allCorrect = getProblemAnswersForLang(problem?.answer, langKey);
+  const blankCount = Math.max((partial.match(/_____/g) || []).length, allCorrect.length);
+  const correctAnswers = allCorrect.slice(0, blankCount || allCorrect.length);
+  if (!correctAnswers.length) return [];
+  return [...correctAnswers];
+}
+
+export function generateBotProblemAnswers(
+  problem: ProblemLike,
+  _bot: { skill?: number },
+  langKey: string,
+  _rng: () => number = Math.random,
+): string[] {
+  const style = resolveProblemStyle(problem.type);
+
+  if (style === 'multiple_choice') {
+    const options = problem.options || [];
+    if (!options.length) return [];
+    const correct = problem.correctIndex ?? 0;
+    return [String(correct)];
+  }
+
+  if (style === 'short_answer') {
+    const answers = getProblemAnswersForLang(problem.answer, langKey);
+    const ans = answers[0] || '';
+    return ans ? [ans] : [''];
+  }
+
+  return generateBotBlankAnswers(problem, _bot, langKey);
 }
 
 export function buildDemoRoundPlan(params: {
@@ -158,7 +187,7 @@ export function buildDemoRoundPlan(params: {
         solved: false,
         solvedAt: null,
         code: buildDemoCode(params.langKey, params.problem, bot, params.problemIndex),
-        blankAnswers: generateBotBlankAnswers(params.problem, bot, params.langKey),
+        blankAnswers: generateBotProblemAnswers(params.problem, bot, params.langKey, rng),
         scoreBonus: 60 + Math.floor((bot.skill || 0.6) * 100),
       };
     }),
@@ -302,5 +331,45 @@ export function areAllBotsSolvedOnPlayerProblem(
     bots.length > 0 &&
     bots.every((bot) => isBotProblemSolvedByElapsed(bot, problemIndex, elapsedSec, roundSeconds))
   );
+}
+
+export function getBotSpectatorAnswers(
+  bot: Pick<DemoBot, 'blankAnswersByProblem'>,
+  problemIndex: number,
+  problem?: ProblemLike,
+  langKey?: string,
+): string[] {
+  const stored = bot.blankAnswersByProblem?.[problemIndex] || [];
+  const hasStored = stored.some((value) => String(value || '').trim() !== '');
+  if (hasStored) return stored;
+  if (problem && langKey) {
+    return getProblemAnswersForLang(problem.answer, langKey);
+  }
+  return stored;
+}
+
+export function getBotSpectatorMcIndex(
+  bot: Pick<DemoBot, 'blankAnswersByProblem'>,
+  problem: { options?: string[] | null; correctIndex?: number | null },
+  problemIndex: number,
+): number | null {
+  if (!problem.options?.length) return null;
+  const raw = bot.blankAnswersByProblem?.[problemIndex]?.[0];
+  if (raw !== undefined && raw !== '') {
+    const idx = Number.parseInt(raw, 10);
+    if (!Number.isNaN(idx) && idx >= 0 && idx < problem.options.length) return idx;
+  }
+  const fallback = problem.correctIndex;
+  if (fallback != null && fallback >= 0 && fallback < problem.options.length) return fallback;
+  return null;
+}
+
+export function resolveSpectatorViewProblemIndex(
+  botId: string,
+  workingProblemIndex: number,
+  spectatorViewByBot: Record<string, number>,
+): number {
+  const selected = spectatorViewByBot[botId];
+  return selected === undefined ? workingProblemIndex : selected;
 }
 

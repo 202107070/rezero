@@ -1,6 +1,7 @@
 export interface RoomPlayer {
   id: number;
   name: string;
+  rank?: string;
   isHost: boolean;
   isReady: boolean;
   language: string;
@@ -12,6 +13,7 @@ export interface RoomChatMessage {
   type: 'sys' | 'user';
   text: string;
   name?: string;
+  mode?: string;
 }
 
 export interface RoomSettings {

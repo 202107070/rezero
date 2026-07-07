@@ -51,6 +51,19 @@
   바깥(overlay) 클릭 → 흔들림만, 닫히지 않음
   modal-content 클릭 → stopPropagation
   폼 오류 → modal-shake-error 클래스
+  useModalShake 훅 (hooks/useModalShake.ts) — shaking state + triggerShake()
+
+[픽셀 UI·커서]
+  styles/cursors.css — public/cursors/*.svg 픽셀 커서 (default·pointer·text·crosshair·not-allowed)
+  global.css 에서 import, #root 전역 적용
+  주요 버튼(.pixel-btn 등): hover 시 배경색 변경 없이 translate+box-shadow 로 눌림 느낌만
+    (로비 탭·방 필터·배틀 아이템 버튼 등 동일 패턴)
+
+[Electron 데스크톱]
+  electron/main.ts — BrowserWindow, display_mode IPC
+  electron/preload.cjs — windowBridge API 노출 (quitApp, setDisplayMode 등)
+  src/utils/windowBridge.ts — 렌더러에서 display_mode·종료 호출
+  src/types/electron.d.ts — DisplayMode 타입
 
 [데이터 저장 — DB 연동 준비 중]
 
@@ -412,15 +425,18 @@
 
 ── RankingBoard ──────────────────────────────────────────────────────────────
   경로: RankingBoard/RankingBoard.tsx
-  역할: 로비 접속 유저 목록 (현재 mock — 본인만)
+  역할: 로비 유저 목록 + 친구/랭킹 탭 + 우클릭 컨텍스트 메뉴
 
   탭:
     일반 … getCurrentUserName() 를 목록 최상단으로
+    친구 … friendNames 기준 필터 (없으면 빈 상태 안내 문구)
     랭킹 … TIER_ORDER(마스터>…>브론즈) 내림차순
 
   myUserName = getCurrentUserName()
   titleData.equipped 를 내 행에, 다른 유저는 LobbyUser.title 로 칭호 표시
-  현재 users prop: 로그인 유저 1명 (rank: '-')
+  닉네임 우클릭 → UserListContextMenu (친구추가/삭제, 귓속말, 따라가기)
+  follow 는 friendStore.presence 가 room 상태일 때만 활성
+  현재 users 초기값: 본인 + 테스트유저1(골드) + 테스트유저2(실버)
 
 
 ── RouletteWheel ─────────────────────────────────────────────────────────────
@@ -588,6 +604,7 @@ SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START �
       PlayerDuelGrid/PlayerDuelGrid.tsx
       PlayerSlot/PlayerSlot.tsx
       RoomChatPanel/RoomChatPanel.tsx
+      RoomFriendMessenger/RoomFriendMessenger.tsx
       CharacterSelect/CharacterSelect.tsx
       BattleSettingsPanel/BattleSettingsPanel.tsx
       RoomItemLoadout/RoomItemLoadout.tsx
@@ -601,6 +618,7 @@ SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START �
   연관
     src/services/battlePrepService.ts   … prepareBattleStart, clearRoomSession
     src/services/roomStore.ts           … 강퇴 카운트, 방 상태 STARTED
+    src/services/friendStore.ts         … 친구 목록·presence·follow/summon 판정
     src/constants/roomConstants.ts      … 초기 플레이어, 언어/난이도 매핑
     src/utils/room/roomStartValidation.ts … 시작 조건 (solo bypass)
     src/constants/itemTypes.ts          … loadItemInventory, defaultSelectedItemKeys
@@ -638,7 +656,9 @@ SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START �
               ├── CharacterSelect
               ├── BattleSettingsPanel
               ├── RoomItemLoadout (gameMode === 'item' 일 때만)
-              └── room-side-bottom → RoomActionBar
+              └── room-side-bottom
+                  ├── RoomFriendMessenger (친구 메신저 토글 + 친구 우클릭 메뉴 진입점)
+                  └── RoomActionBar
 
   모달: StartGameOverlay, RoomAlertModal, KickModal, RoomProfileModal
 
@@ -677,6 +697,14 @@ SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START �
   DEV_TEST_USER_LOADOUT.autoSelectAllItemsInRoom 시 defaultSelectedItemKeys() 로 전부 선택
   item 모드에서만 RoomItemLoadout 표시, 시작 시 selectedItems 전달
 
+[친구 상태·메신저]
+  진입 시 setUserPresence(me, { status:'room', roomId, roomTitle, roomQuery })
+  이탈 시 setUserPresence(me, { status:'lobby' })
+  RoomFriendMessenger 는 getFriendPresences() 를 2초 간격 polling 해 목록 갱신
+  친구 닉네임 우클릭 시 UserListContextMenu (친구추가/삭제, 귓속말, 따라가기)
+  follow 활성 조건: 친구 + presence.status === 'room'
+  summon 액션은 컨텍스트 메뉴에서 숨김 (메신저 UX 중심)
+
 
 --------------------------------------------------------------------------------
  2.6 components/room — 컴포넌트 상세
@@ -695,6 +723,12 @@ SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START �
 
 ── RoomChatPanel ─────────────────────────────────────────────────────────────
   LobbyChatPanel 과 유사. messages: sys | user, sender getCurrentUserName()
+  chatMode: ALL / FRIEND / WHISPER (귓속말 라벨: [귓속말:{대상}])
+
+── RoomFriendMessenger ───────────────────────────────────────────────────────
+  friendStore.getFriendPresences() 기반 친구 목록 표시 (티어 아이콘 포함)
+  open 상태일 때만 패널 표시, 2초 polling 으로 presence 갱신
+  닉네임 셀 우클릭 → RoomPage.openUserContextMenu 로 컨텍스트 메뉴 연결
 
 ── CharacterSelect ───────────────────────────────────────────────────────────
   CHARACTERS 4종 (검사·마법사·닌자·로봇), myCharacter state
@@ -704,6 +738,8 @@ SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START �
 
 ── RoomItemLoadout ───────────────────────────────────────────────────────────
   BATTLE_ITEM_DEFS 기준 그리드, 보유 수량·선택(✓) 표시
+  room-item-icon 을 translateY(-3px) + margin-bottom 으로 상향해
+  아이콘/텍스트 겹침 방지 (대기방 아이템 선택 가독성 보정)
 
 ── RoomActionBar ─────────────────────────────────────────────────────────────
   호스트: [START] [로비]
@@ -770,7 +806,8 @@ SOLO_START_BYPASS = false 이므로 인원·READY 조건을 만족해야 START �
   1. sessionStore 에서 문제·설정 로드 (없으면 fallback 1문제)
   2. resolveProblemCapabilities() 로 문제별 UI·아이템 정책 결정
   3. 문제 유형별 UI: fill_blank / multiple_choice / short_answer (+ visual)
-  4. 정답 제출 → 점수·콤보 → 관전 모드 또는 다음 문제
+  4. 정답 [제출] → 정답 시 +100점, 마지막 문제가 아니면 즉시 다음 문제로 이동
+     마지막 문제 제출 → 관전 모드(입력 잠금) 진입
   5. 시간 종료 또는 마지막 문제 처리 → 3초 후 결과 화면
 
 gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기 버프 사용 가능.
@@ -804,8 +841,11 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
     src/utils/battle/rankUtils.ts
     src/utils/battle/canvasEffects.ts    … paint/scribble 아이템
     src/utils/build/buildSimulator.ts
-    src/utils/problemTypeUtils.ts
-    src/constants/problemCapabilityPolicy.ts   … STYLE_ITEM_POLICY
+    src/utils/problemTypeUtils.ts            … isCodeBlankBuildProblem, getProblemAnswersForLang
+    src/constants/battleConstants.ts         … BATTLE_CORRECT_SCORE (=100)
+    src/constants/problemCapabilityPolicy.ts … STYLE_ITEM_POLICY
+    src/utils/resultAnswerUtils.ts           … formatCorrectAnswer, getResultPlayerAnswer
+    src/styles/cursors.css                   … 게임 픽셀 커서 (전역)
     src/utils/problemCapabilities.ts           … resolveProblemCapabilities
     src/utils/problemVisualUtils.ts            … hasVisual, hasImage
     src/constants/problemImages.ts             … 이미지 자산 경로
@@ -833,18 +873,20 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
       ├── battle-workspace
       │   └── battle-main-column
       │       └── pixel-card code-card
-      │           ├── 헤더: MY CODE, 언어, 진행률, 등수·콤보·점수
+      │           ├── 헤더: MY CODE, 언어, 진행률, 문제 번호
+      │           │   ※ 인게임 점수·레이팅은 배틀 중 UI에 표시하지 않음 (결과 화면만)
       │           ├── (item) 자기 아이템 버튼
       │           ├── 문제 요약 (접기/펼치기)
-      │           ├── fill_blank → FillBlankRenderer + BattleBuildPanel
+      │           ├── fill_blank → FillBlankRenderer + (조건부) BattleBuildPanel
       │           ├── multiple_choice → 선택지 버튼
       │           └── short_answer → 입력 필드
       │           └── (관전 시) BattleChatPanel
       └── battle-opponent-column
           ├── 타이머 (TIME LEFT)
-          └── OpponentPanels (상대별 진행·코드 미리보기)
+          └── OpponentPanels (상대별 진행·문제 미리보기·관전 시 답안)
 
-  오버레이: 저장 모달, 클리어 플래시, 게임오버, ItemSelectModal
+  관전 모드(demoSpectating): 그리드 1.7fr|1fr, 상대 열(왼쪽)·내 코드+채팅(오른쪽)
+  오버레이: 저장 모달, 클리어 플래시, 게임오버, ItemSelectModal, RoomAlertModal(미입력 제출)
 
 
 --------------------------------------------------------------------------------
@@ -861,16 +903,18 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   battleDiff + 문제 수 → getTotalBattleSeconds() 로 전체 제한 시간
   30초 이하 시 BattleBGM urgent 모드
 
-[문제 풀이 submitCurrentProblem]
-  정답: 콤보·ingameScore 가산, solveTimes 기록
-  오답: 콤보 리셋, problemResults[currentIndex] = false
-  fill_blank 정답 시 lockAndSpectate → finalizeSaveAndSpectate
-    → demoSpectating=true (입력 잠금, 상대 관전)
+[문제 풀이 — handleSubmit / submitCurrentProblem]
+  미입력 제출 → RoomAlertModal "문제를 풀어주세요."
+  정답: ingameScore += BATTLE_CORRECT_SCORE(100), solveTimes 기록
+  오답: problemResults[currentIndex] = false
+  중간 문제: 제출 직후 currentIndex++ (별도 [다음 문제] 클릭 불필요)
+  마지막 문제: 제출 후 lockAndSpectate → finalizeSaveAndSpectate
+    → demoSpectating=true (내 입력 잠금, 상대·내 과거 문제 관전)
 
 [문제 진행 queueAdvanceProblem]
   조건: 시간 종료 OR (현재 문제 제출 완료 AND 모든 봇 해당 문제 풀이)
   마지막 문제 → showGameOver → 3초 후 /result
-  중간 문제 → currentIndex++, 관전 상태 해제
+  중간 문제(타임업·봇 전원 클리어) → currentIndex++, 관전 상태 해제
 
 [봇 시뮬레이션]
   createDemoBattleRoster(): roomRoster 상대 → DemoBot[]
@@ -896,8 +940,13 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   breakingBlanks (blankBreak 아이템), isLocked
 
 ── BattleBuildPanel ──────────────────────────────────────────────────────────
-  fill_blank 전용. Monaco 스타일 코드 편집 + runBuildSimulation
+  실제 코드 블록 완성 문제만 표시 (isCodeBlankBuildProblem).
+    - visual_fill_blank 는 항상 대상
+    - fill_blank 는 question 에 코드 문법(;, {}, for, int, HTML 태그 등) 또는
+      멀티라인 코드가 있을 때만 대상 (문장형 단답 빈칸은 제외)
+  Monaco 스타일 코드 편집 + runBuildSimulation
   buildsUsed / buildsAllowed (기본 3 + buildCharge 보너스)
+  showBuildPanel = currentCaps.showCodePanel && isCodeBlankBuildProblem(currentProblem)
 
 ── ProblemVisualPreview ──────────────────────────────────────────────────────
   문제 visual 필드 표시 (kind별 분기)
@@ -908,14 +957,21 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
      (향후 problem-visuals/ 디렉터리 분리 예정)
 
 ── OpponentPanels ────────────────────────────────────────────────────────────
+  OpponentProblemBody (showAnswers 플래그):
+    - 게임 중(problem-preview): 상대가 푸는 문제 지문·선택지·코드 골격은 표시,
+      빈칸 입력·객관식 버튼·주관식 입력만 opponent-answers-masked 로 블러 (답 비공개)
+      헤더에 · Q{n} (현재 풀이 중 문제 번호)
+    - 관전(demoSpectating): spectatorViewProblemByBot 으로 문제 탭 전환, 답안 전체 표시
   BotView[]: thinking / solved / observing 상태
-  펼치기/접기, paint·scribble 등 패널 이펙트
+  펼치기/접기, paint·lightning·scribble 패널 이펙트 (게임 중 답 공개 없음)
+  공격 아이템 효과는 bot.currentProblem 인덱스에 저장 (플레이어 currentIndex 와 분리)
 
 ── ItemSelectModal ───────────────────────────────────────────────────────────
-  공격 아이템(paint, lightning, …) 사용 시 대상 봇 선택
+  공격 아이템(paint, lightning, timeReduce, scribble) 사용 시 대상 봇 선택
+  공격 아이템은 플레이어 문제 유형과 무관하게 사용 가능 (allowedAttackItems)
 
 ── BattleChatPanel ───────────────────────────────────────────────────────────
-  demoSpectating 일 때만 표시
+  demoSpectating 일 때만 표시 (메신저 스타일 토글, 고정 높이)
 
 
 --------------------------------------------------------------------------------
@@ -981,8 +1037,9 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
     paint, lightning, timeReduce, scribble
   사용 시 userService itemInventory 차감·persist
 
-  lightning/timeReduce: 상대 solveSchedule 지연
-  paint/scribble: OpponentPanels 캔버스 오버레이 (ITEM_PANEL_EFFECT_MS)
+  lightning/timeReduce/scribble/paint: 상대 패널 시각 이펙트 (ITEM_PANEL_EFFECT_MS)
+  paint/scribble: 대상 봇 expanded 패널에 canvas 오버레이 (data-opponent-id)
+  ※ 게임 중 공격 아이템으로 상대 답안은 공개되지 않음 (이펙트만)
 
 
 --------------------------------------------------------------------------------
@@ -1039,7 +1096,9 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 플레이어가 여기서:
 
   - 순위·팀 승패(1/1) 또는 전체 랭킹(1/N) 확인
-  - 획득 골드 (+점수/10), 칭호 해금 팝업
+  - 획득 골드 (= 배틀 인게임 점수와 1:1), 칭호 해금 팝업
+  - 플레이어 행: 총 풀이 시간 / 배틀 인게임 점수 / 레이팅 변동(±)
+  - 문제 번호 dot 클릭 → ResultProblemModal (문제·내 답·실제 정답)
   - 코드 히스토리 자동 저장 (매치 스토리)
   - 결과 채팅, AI 리뷰어 패널 (mock)
   - 오답 복습(Review): 문제 선택 → 상대 초대 → 문제별 코드·정답 비교
@@ -1071,6 +1130,7 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
       AiReviewerPanel/AiReviewerPanel.tsx
       PlayerCodesPanel/PlayerCodesPanel.tsx
       ResultCodeModal/ResultCodeModal.tsx
+      ResultProblemModal/ResultProblemModal.tsx
 
   연관
     src/services/sessionStore.ts
@@ -1079,6 +1139,7 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
     src/services/reviewSessionService.ts
     src/services/reviewInviteStore.ts
     src/utils/resultUtils.ts
+    src/utils/resultAnswerUtils.ts
     src/utils/codeHistoryUtils.ts
     src/constants/resultConstants.ts
 
@@ -1119,7 +1180,7 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   buildResultPlayers()      … 위 데이터 통합 → ResultPlayer[]
 
 [마운트 시]
-  addGold(floor(myScore/10))
+  addGold(myScore)   … ingameScore 와 동일 (÷10 없음)
   칭호 stats 갱신 (승/패, 연승, langWins, perfectGame) → checkNewTitles
   ResultPopup (순위·정답 수·신규 칭호)
   submission → codeHistory 저장 (연습 제외, 최대 50건)
@@ -1127,6 +1188,8 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 [Review 흐름]
   idle → [복습 시작] → selecting (문제 체크)
   → [복습 요청] → ReviewInviteModal → 상대 선택 → invite
+  1/N: ResultRankingPanel 에서 invite-selectable 행 다중 선택 (inviteTargetIds: Set)
+    → reviewPartnerIds: string[] 로 복수 상대 초대·표시 (이름 콤마 연결)
   → shouldAutoAcceptReviewInvite (비본인) → 10초 후 자동 수락
   → reviewing → ReviewProblemView
 
@@ -1144,6 +1207,16 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 
 ── ResultTeamPanel ───────────────────────────────────────────────────────────
   1/1: winners / losers 팀 분할 (상위 50% vs 하위)
+  푸터: WIN + {레이팅합} / LOSE - {레이팅합}
+
+── ResultPlayerRow ───────────────────────────────────────────────────────────
+  총 풀이 시간: {n}s (없으면 —)
+  배틀 인게임 점수: {ingameScore}
+  레이팅: {ratingScore} {±delta}  … applyRatingDeltas() 로 승패 부호 결정
+
+── ResultProblemModal ──────────────────────────────────────────────────────────
+  문제 dot 클릭 시: 좌 문제 본문 / 우 상단 플레이어 답안 / 우 하단 실제 정답
+  formatCorrectAnswer() — 언어 fallback(JAVA·PYTHON·CPP·HTML·CSS)·problems.js 재조회
 
 ── ResultReviewFooter ────────────────────────────────────────────────────────
   1/1 전용: 복습 시작·취소·요청 버튼
@@ -1152,7 +1225,8 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   선택 문제: 내 코드 vs 정답, 해설, partnerName
 
 ── ReviewInviteModal ─────────────────────────────────────────────────────────
-  복습 상대 플레이어 선택, waiting 중 닫기 불가
+  복습 상대 플레이어 선택 (1/N 다중 선택 가능), waiting 중 닫기 불가
+  selectedTargetIds={inviteTargetIds} — 확인 시 reviewPartnerIds 에 반영
 
 ── ResultPopup ─────────────────────────────────────────────────────────────────
   순위 메시지, detailLines, 신규 칭호 배지
@@ -1170,6 +1244,12 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
 
 [resultUtils.buildResultPlayers]
   rankingSnapshot 우선, 없으면 roomUsers + demoBots + submission 재구성
+  applyRatingDeltas(): 상위 ceil(n/2) 승리 → delta 양수, 하위 패배 → delta 음수
+    magnitude = max(10, floor(ingameScore/10))
+
+[resultAnswerUtils]
+  formatCorrectAnswer, formatSubmittedAnswer, getResultPlayerAnswer
+  getProblemAnswersForLang (problemTypeUtils) 로 정답 조회
 
 [reviewSessionService]
   persistReviewInvite, shouldAutoAcceptReviewInvite, scheduleReviewInviteResponse
@@ -1195,7 +1275,22 @@ gameMode === 'item' 이면 대기실에서 고른 아이템으로 공격·자기
   - AI 리뷰어: 로컬 state, 백엔드 없음
   - 리뷰 초대: reviewInviteStore (메모리), 봇 자동 수락
   - 초기 채팅 메시지 mock (알고리즘깎는노인 등)
-  - 골드는 마운트 시 1회 지급 (earnedGold 의존)
+  - 골드는 마운트 시 1회 지급 (earnedGold = my ingameScore)
+
+
+================================================================================
+ 문서 갱신 (2026-07-04)
+================================================================================
+
+  배틀: 콤보 제거, 정답당 +100점(BATTLE_CORRECT_SCORE), 제출 후 자동 다음 문제
+  배틀 UI: 인게임 점수·레이팅 미표시 (결과 화면에서만)
+  빌드 패널: isCodeBlankBuildProblem 조건 강화
+  상대 패널: 게임 중 문제만 공개·답 블러, 관전 시 답안 표시, 공격 아이템 답 비공개
+  결과: ResultProblemModal, 정답 fallback, 플레이어 행 라벨, LOSE 레이팅 음수 표시
+  결과 복습: 1/N 다중 상대 초대 (inviteTargetIds / reviewPartnerIds)
+  골드: 인게임 점수와 1:1
+  공통: 픽셀 커서(cursors.css), useModalShake, 버튼 hover=눌림 효과(색상 변경 최소화)
+  Electron: preload.cjs·windowBridge·SettingsModal·ExitConfirmModal
 
 
 ================================================================================

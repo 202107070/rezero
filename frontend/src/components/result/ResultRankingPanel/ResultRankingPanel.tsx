@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import type { ResultPlayer } from '../../../utils/resultUtils';
 import { ResultPlayerRow } from '../ResultPlayerRow/ResultPlayerRow';
 import { ResultReviewFooter } from '../ResultReviewFooter/ResultReviewFooter';
@@ -11,6 +12,8 @@ interface ResultRankingPanelProps {
   reviewSelectMode: boolean;
   selectedReviewProblems: Set<number>;
   onToggleReviewProblem: (index: number) => void;
+  onOpenProblemDetail?: (player: ResultPlayer, problemIndex: number) => void;
+  onNicknameContextMenu?: (event: MouseEvent, player: ResultPlayer) => void;
   onStartReview: () => void;
   onCancelReview: () => void;
   onRequestReview: () => void;
@@ -25,6 +28,8 @@ export function ResultRankingPanel({
   reviewSelectMode,
   selectedReviewProblems,
   onToggleReviewProblem,
+  onOpenProblemDetail,
+  onNicknameContextMenu,
   onStartReview,
   onCancelReview,
   onRequestReview,
@@ -43,7 +48,11 @@ export function ResultRankingPanel({
             reviewSelectMode={reviewSelectMode}
             selectedReviewProblems={selectedReviewProblems}
             onToggleReviewProblem={onToggleReviewProblem}
+            onOpenProblemDetail={
+              onOpenProblemDetail ? (index) => onOpenProblemDetail(p, index) : undefined
+            }
             isReviewSelectable={p.id === myUserId}
+            onNicknameContextMenu={onNicknameContextMenu}
           />
         ))}
       </div>

@@ -87,6 +87,10 @@
 
 .practice-page .problem-title { color: var(--px-warning); font-size: 26px; text-shadow: 2px 2px 0 #000; margin-bottom: 10px; }
 .practice-page .problem-question { font-size: 22px; line-height: 1.75; color: #eee; white-space: pre-wrap; word-break: break-word; }
+.practice-prompt-box { padding: 16px 16px 0; display: flex; flex-direction: column; gap: 14px; border-bottom: 3px solid var(--px-border); margin-bottom: 0; }
+.practice-answer-box { padding: 16px; display: flex; flex-direction: column; gap: 14px; background: #1a1e21; }
+.practice-code-answer { display: flex; flex-direction: column; gap: 12px; }
+.practice-code-blanks { font-family: var(--font-pixel); font-size: 22px; line-height: 1.75; color: #eee; white-space: pre-wrap; word-break: break-word; }
 .practice-page .options-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .practice-page .option-btn {
   background: #1a1e21;

@@ -5,6 +5,7 @@ interface LobbyChatPanelProps {
   messages: ChatMessage[];
   chatMsg: string;
   chatMode: string;
+  whisperTarget?: string | null;
   onChatMsgChange: (value: string) => void;
   onChatModeChange: (value: string) => void;
   onSend: () => void;
@@ -14,6 +15,7 @@ export function LobbyChatPanel({
   messages,
   chatMsg,
   chatMode,
+  whisperTarget,
   onChatMsgChange,
   onChatModeChange,
   onSend,
@@ -50,13 +52,14 @@ export function LobbyChatPanel({
         <select className="chat-mode-select" value={chatMode} onChange={(e) => onChatModeChange(e.target.value)}>
           <option value="ALL">모두에게</option>
           <option value="FRIEND">친구에게</option>
+          {whisperTarget && <option value="WHISPER">{`귓속말: ${whisperTarget}`}</option>}
         </select>
         <input
           type="text"
           className="chat-input"
           value={chatMsg}
           onChange={(e) => onChatMsgChange(e.target.value)}
-          placeholder="메시지 입력..."
+          placeholder={whisperTarget && chatMode === 'WHISPER' ? `${whisperTarget}에게 귓속말...` : '메시지 입력...'}
           onKeyDown={(e) => e.key === 'Enter' && onSend()}
         />
         <button type="button" className="chat-send-btn" onClick={onSend}>

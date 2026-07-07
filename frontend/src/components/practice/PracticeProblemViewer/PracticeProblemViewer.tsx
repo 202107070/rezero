@@ -7,61 +7,14 @@ interface PracticeProblemViewerProps {
   exercise: PracticeExercise;
   currentIndex: number;
   totalCount: number;
-  isChecked: boolean;
-  blankAnswers: string[];
-  correctAnswers: string[];
-  onBlankChange: (blankIdx: number, value: string) => void;
 }
 
-export function PracticeProblemViewer({
-  exercise,
-  currentIndex,
-  totalCount,
-  isChecked,
-  blankAnswers,
-  correctAnswers,
-  onBlankChange,
-}: PracticeProblemViewerProps) {
+export function PracticeProblemViewer({ exercise, currentIndex, totalCount }: PracticeProblemViewerProps) {
   const caps = useMemo(
     () => resolveProblemCapabilities(exercise, { gameMode: 'normal' }),
     [exercise],
   );
   const shouldRenderVisual = caps.hasVisual || caps.hasImage;
-
-  const renderQuestion = () => {
-    if (!exercise.question) return null;
-    if (caps.showCodePanel) {
-      const parts = exercise.question.split('_____');
-      const blanks = blankAnswers;
-      return (
-        <div className="problem-question">
-          {shouldRenderVisual && <ProblemVisualPreview visual={exercise.visual} compact />}
-          {parts.map((part, i) => (
-            <span key={i}>
-              <span style={{ whiteSpace: 'pre-wrap' }}>{part}</span>
-              {i < parts.length - 1 && (
-                <input
-                  type="text"
-                  className={`blank-input ${
-                    isChecked
-                      ? blanks[i]?.trim().toLowerCase() === (correctAnswers[i] || '').trim().toLowerCase()
-                        ? 'correct hidden'
-                        : 'wrong'
-                      : ''
-                  }`}
-                  value={blanks[i] || ''}
-                  onChange={(e) => onBlankChange(i, e.target.value)}
-                  disabled={isChecked}
-                  style={{ width: `${Math.max(40, ((correctAnswers[i] || '').length + 1) * 14)}px` }}
-                />
-              )}
-            </span>
-          ))}
-        </div>
-      );
-    }
-    return <div className="problem-question">{exercise.question}</div>;
-  };
 
   return (
     <>
@@ -71,11 +24,13 @@ export function PracticeProblemViewer({
         </span>
         <span style={{ fontSize: '16px', color: '#aaa' }}>{exercise.title || 'Loading...'}</span>
       </div>
-      <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div className="practice-prompt-box">
+        {!caps.showCodePanel && (
+          <div className="problem-question">{exercise.question || ''}</div>
+        )}
         {shouldRenderVisual && !caps.showCodePanel && (
           <ProblemVisualPreview visual={exercise.visual} compact />
         )}
-        {renderQuestion()}
       </div>
     </>
   );

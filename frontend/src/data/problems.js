@@ -168,7 +168,10 @@ boolean isPrime = true;
 for (int i = 2; i < n; i++) {
     if (n % i == _____) { isPrime = _____; break; }
 }`,
-    explanation:`배열을 순회할 때는 length(Java), len()(Python), size()(C++)를 사용합니다.` },
+    answer:{ JAVA:["0", "false"], PYTHON:["0", "False"], CPP:["0", "false"] },
+    visual:{ kind:`ascii`, content:`n = 11\n→ 나누어 떨어지면?\n→ isPrime = ?`, caption:`11은 소수입니다. 나누어 떨어질 때 isPrime은?` },
+    options:null, correctIndex:null,
+    explanation:`2부터 n-1까지 나누어 떨어지면(나머지 0) 소수가 아닙니다.` },
   { id:`M02`, type:`fill_blank`, difficulty:`medium`, title:`소수 판별`,
     question:`어떤 수 n이 소수인지 판별하려고 합니다. 2부터 n-1까지 나누었을 때,
 나머지가 _____ 이면 소수가 아닙니다. 그리고 이때 판별 변수의 값은 _____ 로 바뀝니다. (순서대로 입력)`,

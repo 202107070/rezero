@@ -17,6 +17,14 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
 
+  const switchMode = (next: AuthMode) => {
+    setMode(next);
+    setUsername('');
+    setPassword('');
+    setDisplayName('');
+    setError('');
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError('');
@@ -46,20 +54,14 @@ export default function LoginPage() {
             <button
               type="button"
               className={`login-tab ${mode === 'login' ? 'active' : ''}`}
-              onClick={() => {
-                setMode('login');
-                setError('');
-              }}
+              onClick={() => switchMode('login')}
             >
               로그인
             </button>
             <button
               type="button"
               className={`login-tab ${mode === 'signup' ? 'active' : ''}`}
-              onClick={() => {
-                setMode('signup');
-                setError('');
-              }}
+              onClick={() => switchMode('signup')}
             >
               회원가입
             </button>

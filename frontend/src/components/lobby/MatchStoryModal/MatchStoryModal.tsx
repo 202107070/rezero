@@ -40,11 +40,11 @@ export function MatchStoryModal({
     <div className="modal-overlay" onClick={triggerShake}>
       <div className={`modal-content match-story-modal${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '6px', fontSize: '22px' }}>
-          MY CODE HISTORY
+          MATCH HISTORY
         </h3>
         {codeHistory.length === 0 ? (
           <div className="pixel-card" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
-            저장된 코드가 없습니다.
+            저장된 문제가 없습니다.
           </div>
         ) : (
           <div className="match-story-layout">

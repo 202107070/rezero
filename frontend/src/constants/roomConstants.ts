@@ -1,6 +1,7 @@
 import { getCurrentUserName } from '../services/authService';
 import type { RoomPlayer, CharacterOption, LanguageOption } from '../types/room';
 import { getKickedCount } from '../services/roomStore';
+import { getTierByUserName } from '../utils/tierUtils';
 
 export const LANGUAGES: LanguageOption[] = [
   { id: 'java', icon: '☕', label: 'Java' },
@@ -17,13 +18,13 @@ export const CHARACTERS: CharacterOption[] = [
   { id: 'char4', icon: '🤖', label: '로봇' },
 ];
 
-export const DEMO_BOT_POOL: Array<{ name: string; language: string; character: string }> = [
-  { name: '알고리즘깎는노인', language: '☕', character: '🧙' },
-  { name: '코딩마스터', language: '🐍', character: '🤖' },
-  { name: '빈칸헌터', language: '⚡', character: '🥷' },
-  { name: '자바의달인', language: '☕', character: '🤺' },
-  { name: '프론트요정', language: '🌐', character: '🧙' },
-  { name: '스타일리스트', language: '🎨', character: '🤖' },
+export const DEMO_BOT_POOL: Array<{ name: string; rank: string; language: string; character: string }> = [
+  { name: '알고리즘깎는노인', rank: '다이아', language: '☕', character: '🧙' },
+  { name: '코딩마스터', rank: '플래티넘', language: '🐍', character: '🤖' },
+  { name: '빈칸헌터', rank: '골드', language: '⚡', character: '🥷' },
+  { name: '자바의달인', rank: '플래티넘', language: '☕', character: '🤺' },
+  { name: '프론트요정', rank: '실버', language: '🌐', character: '🧙' },
+  { name: '스타일리스트', rank: '브론즈', language: '🎨', character: '🤖' },
 ];
 
 /** 봇 입장 후 READY 전환 대기 (ms) — 멀티 연동 전 로컬 봇용 */
@@ -50,7 +51,16 @@ export function getKickedCountForRoom(roomId: string): number {
 export function buildInitialPlayers(): (RoomPlayer | null)[] {
   const playerName = getCurrentUserName();
   const base: (RoomPlayer | null)[] = [
-    { id: 1, name: playerName, isHost: true, isReady: false, language: '☕', character: '🤺', status: 'HOST' },
+    {
+      id: 1,
+      name: playerName,
+      rank: getTierByUserName(playerName),
+      isHost: true,
+      isReady: false,
+      language: '☕',
+      character: '🤺',
+      status: 'HOST',
+    },
   ];
 
   while (base.length < 8) {

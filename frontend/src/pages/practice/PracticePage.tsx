@@ -196,21 +196,20 @@ export default function PracticePage() {
               exercise={currentEx}
               currentIndex={currentIndex}
               totalCount={exercises.length}
-              isChecked={isChecked}
-              blankAnswers={blankAnswers[currentIndex] || []}
-              correctAnswers={correctAnswers}
-              onBlankChange={handleBlankChange}
             />
             <PracticeAnswerSection
               exercise={currentEx}
+              currentIndex={currentIndex}
               isChecked={isChecked}
               isCorrect={isCorrect}
               selectedOption={selectedOption}
               shortAnswer={blankAnswers[currentIndex]?.[0] || ''}
+              blankAnswers={blankAnswers[currentIndex] || []}
               correctAnswers={correctAnswers}
               canCheck={canCheck()}
               onSelect={handleSelect}
               onShortAnswerChange={handleShortAnswerChange}
+              onBlankChange={handleBlankChange}
               onCheck={handleCheck}
             />
           </div>

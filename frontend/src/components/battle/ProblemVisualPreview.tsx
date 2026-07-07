@@ -5,9 +5,14 @@ import './ProblemVisualPreview.css';
 interface ProblemVisualPreviewProps {
   visual?: ProblemVisual | null;
   compact?: boolean;
+  suppressCaption?: boolean;
 }
 
-export default function ProblemVisualPreview({ visual, compact = false }: ProblemVisualPreviewProps) {
+export default function ProblemVisualPreview({
+  visual,
+  compact = false,
+  suppressCaption = false,
+}: ProblemVisualPreviewProps) {
   if (!hasRenderableVisual(visual)) return null;
 
   const { kind, content, previewHtml, previewCss, caption, imageFile } = visual!;
@@ -15,7 +20,7 @@ export default function ProblemVisualPreview({ visual, compact = false }: Proble
 
   return (
     <div className={`problem-visual ${compact ? 'compact' : ''}`}>
-      {caption && <div className="problem-visual-caption">{caption}</div>}
+      {caption && !suppressCaption && <div className="problem-visual-caption">{caption}</div>}
       {kind === 'ascii' && content && (
         <pre className="problem-visual-ascii" aria-label="목표 출력 모양">
           {content}

@@ -3,6 +3,7 @@ import { ROULETTE_COST, type ItemInventory } from '../../../constants/itemTypes'
 interface InventoryPanelProps {
   gold: number;
   items: ItemInventory;
+  onOpenItems: () => void;
   onOpenRoulette: () => void;
 }
 
@@ -17,7 +18,15 @@ const ITEM_ROWS: Array<{ key: keyof ItemInventory; icon: string; name: string; r
   { key: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
 ];
 
-function ItemListContent({ items, suffix }: { items: ItemInventory; suffix: string }) {
+function ItemListContent({
+  items,
+  suffix,
+  showCount = true,
+}: {
+  items: ItemInventory;
+  suffix: string;
+  showCount?: boolean;
+}) {
   return (
     <>
       {ITEM_ROWS.map((row) => (
@@ -26,14 +35,14 @@ function ItemListContent({ items, suffix }: { items: ItemInventory; suffix: stri
             {row.rare ? '⭐ ' : ''}
             {row.icon} {row.name}
           </span>
-          <span className="item-count">{items[row.key]}개</span>
+          {showCount && <span className="item-count">{items[row.key]}개</span>}
         </div>
       ))}
     </>
   );
 }
 
-export function InventoryPanel({ gold, items, onOpenRoulette }: InventoryPanelProps) {
+export function InventoryPanel({ gold, items, onOpenItems, onOpenRoulette }: InventoryPanelProps) {
   return (
     <div className="inventory-panel">
       <div style={{ flexShrink: 0 }}>
@@ -46,18 +55,23 @@ export function InventoryPanel({ gold, items, onOpenRoulette }: InventoryPanelPr
       <div className="inventory-scroll">
         <div className="inventory-marquee-track">
           <div className="inventory-marquee-set">
-            <ItemListContent items={items} suffix="a" />
+            <ItemListContent items={items} suffix="a" showCount={false} />
           </div>
           <div className="inventory-marquee-set" aria-hidden="true">
-            <ItemListContent items={items} suffix="b" />
+            <ItemListContent items={items} suffix="b" showCount={false} />
           </div>
         </div>
       </div>
       <div className="inventory-roulette-footer">
         <div className="item-hint">1회 {ROULETTE_COST.toLocaleString()}G / ⭐레어 낮은 확률</div>
-        <button type="button" className="inventory-roulette-btn" onClick={onOpenRoulette}>
-          🎰 룰렛 ({ROULETTE_COST.toLocaleString()}G)
-        </button>
+        <div className="inventory-footer-actions">
+          <button type="button" className="inventory-items-btn" onClick={onOpenItems}>
+            🎒 내 아이템
+          </button>
+          <button type="button" className="inventory-roulette-btn" onClick={onOpenRoulette}>
+            🎰 룰렛 ({ROULETTE_COST.toLocaleString()}G)
+          </button>
+        </div>
       </div>
     </div>
   );

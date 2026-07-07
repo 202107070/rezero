@@ -1,9 +1,14 @@
 import type { CodeHistoryEntry } from '../types/lobby';
 import { persistUserCodeHistory, readUserCodeHistory } from '../services/userService';
 import problems from '../data/problems.js';
+import { getLangKey } from './battle/codeUtils';
+import { getProblemAnswersForLang } from './problemTypeUtils';
 
 type ProblemRecord = {
+  id?: string;
   title?: string;
+  question?: string;
+  lang?: string;
   answer?: Record<string, string[]>;
 };
 
@@ -40,11 +45,24 @@ export function persistCodeHistory(nextHistory: CodeHistoryEntry[]): void {
 }
 
 export function getSolution(problem: CodeHistoryEntry['problems'][0] | null | undefined): string {
-  if (!problem?.title) return '// 정답이 준비되지 않았습니다.';
-  const lang = problem.lang || 'JAVA';
-  const answer = problem.answer?.[lang];
-  if (answer && Array.isArray(answer)) return answer.join('\n');
-  const match = (problems as ProblemRecord[]).find((p) => p.title === problem.title);
-  if (match?.answer?.[lang]) return match.answer[lang].join('\n');
+  if (!problem) return '// 정답이 준비되지 않았습니다.';
+  const lang = getLangKey(problem.lang || 'JAVA');
+
+  const fromProblem = getProblemAnswersForLang(problem.answer, lang);
+  if (fromProblem.length > 0) return fromProblem.join('\n');
+
+  const bank = problems as ProblemRecord[];
+  const match =
+    (problem.id ? bank.find((entry) => entry.id === problem.id) : undefined) ||
+    bank.find(
+      (entry) =>
+        entry.title === problem.title &&
+        String(entry.question || '').trim() === String(problem.question || '').trim(),
+    ) ||
+    bank.find((entry) => entry.title === problem.title);
+
+  const fromBank = getProblemAnswersForLang(match?.answer, lang);
+  if (fromBank.length > 0) return fromBank.join('\n');
+
   return '// 정답이 준비되지 않았습니다.';
 }

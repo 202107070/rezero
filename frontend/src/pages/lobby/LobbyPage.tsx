@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InventoryPanel } from '../../components/lobby/InventoryPanel/InventoryPanel';
+import { InventoryItemsModal } from '../../components/lobby/InventoryItemsModal/InventoryItemsModal';
 import { LobbyChatPanel } from '../../components/lobby/LobbyChatPanel/LobbyChatPanel';
 import { MatchStoryModal } from '../../components/lobby/MatchStoryModal/MatchStoryModal';
 import { RoomFilterModal } from '../../components/lobby/RoomFilterModal/RoomFilterModal';
 import { PracticeModal } from '../../components/lobby/PracticeModal/PracticeModal';
 import { ProfilePanel } from '../../components/lobby/ProfilePanel/ProfilePanel';
 import { RankingBoard } from '../../components/lobby/RankingBoard/RankingBoard';
+import type { UserListMenuAction } from '../../components/lobby/UserListContextMenu/UserListContextMenu';
 import { RoomCreateModal } from '../../components/lobby/RoomCreateModal/RoomCreateModal';
 import { RoomList } from '../../components/lobby/RoomList/RoomList';
 import { RouletteWheel } from '../../components/lobby/RouletteWheel/RouletteWheel';
@@ -19,6 +21,15 @@ import { useAuthUser } from '../../contexts/AuthContext';
 import { loadTitles, type TitleData } from '../../constants/titleTypes';
 import { buildRoomSearchParams, createRoom } from '../../services/roomService';
 import { getCurrentUserName } from '../../services/authService';
+import {
+  addFriend,
+  getFollowRoomPath,
+  getFriendNames,
+  isFriend,
+  removeFriend,
+  seedDemoFriendPresence,
+  setUserPresence,
+} from '../../services/friendStore';
 import {
   getEquippedTitleId,
   getGold,
@@ -42,7 +53,18 @@ import './lobby.css';
 const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
 
 function loadInitialUsers(): LobbyUser[] {
-  return [{ name: getCurrentUserName(), rank: '-', title: getEquippedTitleId() }];
+  const me = getCurrentUserName();
+  const online: LobbyUser[] = [
+    { name: me, rank: '-', title: getEquippedTitleId() },
+    { name: '테스트유저1', rank: '골드', title: null },
+    { name: '테스트유저2', rank: '실버', title: null },
+  ];
+  const seen = new Set<string>();
+  return online.filter((user) => {
+    if (seen.has(user.name)) return false;
+    seen.add(user.name);
+    return true;
+  });
 }
 
 export default function LobbyPage() {
@@ -65,6 +87,7 @@ export default function LobbyPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatMsg, setChatMsg] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
+  const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
   const [practiceLang, setPracticeLang] = useState('JAVA');
   const [practiceDiff, setPracticeDiff] = useState('보통');
   const [practiceCount, setPracticeCount] = useState('5');
@@ -80,7 +103,9 @@ export default function LobbyPage() {
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
   const [users] = useState<LobbyUser[]>(loadInitialUsers);
+  const [friendNames, setFriendNames] = useState<string[]>(() => getFriendNames());
   const [showRoulette, setShowRoulette] = useState(false);
+  const [showInventoryItemsModal, setShowInventoryItemsModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [displayMode, setDisplayMode] = useState<DisplayMode>(loadDisplayMode);
@@ -107,6 +132,15 @@ export default function LobbyPage() {
   }, [audioSettings.lobbyMusic]);
 
   useEffect(() => {
+    seedDemoFriendPresence();
+    const me = getCurrentUserName();
+    setUserPresence(me, { status: 'lobby' });
+    return () => {
+      setUserPresence(me, { status: 'lobby' });
+    };
+  }, []);
+
+  useEffect(() => {
     window.addEventListener('pageshow', refreshRooms);
     return () => {
       window.removeEventListener('pageshow', refreshRooms);
@@ -119,13 +153,72 @@ export default function LobbyPage() {
   const validHistoryIds = new Set(codeHistory.map((entry) => entry.historyId));
   const safeSelectedHistoryIds = selectedHistoryIds.filter((id) => validHistoryIds.has(id));
 
+  const appendSystemChat = (text: string) => {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text, time: timeStr, mode: '[안내]' }]);
+  };
+
   const handleSendChat = () => {
     if (!chatMsg.trim()) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const modeLabel = chatMode === 'ALL' ? '[전체]' : '[친구]';
+    const modeLabel =
+      chatMode === 'WHISPER' && whisperTarget
+        ? `[귓속말:${whisperTarget}]`
+        : chatMode === 'ALL'
+          ? '[전체]'
+          : '[친구]';
     setChatMessages((prev) => [...prev, { sender: authUser.username, text: chatMsg, time: timeStr, mode: modeLabel }]);
     setChatMsg('');
+  };
+
+  const handleUserMenuAction = (action: UserListMenuAction, user: LobbyUser) => {
+    switch (action) {
+      case 'match-story':
+        setSelectedHistoryIndex(0);
+        setSelectedHistoryProblemIndex(0);
+        setSelectedHistoryIds([]);
+        setShowCodeModal(true);
+        appendSystemChat(`${user.name} 님의 매치 스토리를 열었습니다.`);
+        break;
+      case 'add-friend': {
+        if (isFriend(user.name)) {
+          removeFriend(user.name);
+          setFriendNames(getFriendNames());
+          appendSystemChat(`${user.name} 님을 친구 목록에서 삭제했습니다.`);
+        } else {
+          const added = addFriend(user.name);
+          if (added) {
+            setFriendNames(getFriendNames());
+            appendSystemChat(`${user.name} 님을 친구 목록에 추가했습니다.`);
+          } else {
+            appendSystemChat(`${user.name} 님은 이미 친구 목록에 있습니다.`);
+          }
+        }
+        break;
+      }
+      case 'whisper':
+        setChatMode('WHISPER');
+        setWhisperTarget(user.name);
+        appendSystemChat(`${user.name} 님에게 귓속말 모드가 설정되었습니다.`);
+        break;
+      case 'follow': {
+        const roomPath = getFollowRoomPath(user.name);
+        if (!roomPath) {
+          appendSystemChat(`${user.name} 님은 현재 따라갈 수 있는 방에 없습니다.`);
+          break;
+        }
+        appendSystemChat(`${user.name} 님이 있는 방으로 이동합니다.`);
+        navigate(roomPath);
+        break;
+      }
+      case 'summon':
+        appendSystemChat('소환하기는 대기방에서만 사용할 수 있습니다.');
+        break;
+      default:
+        break;
+    }
   };
 
   const resetCreateForm = () => {
@@ -281,8 +374,12 @@ export default function LobbyPage() {
                 messages={chatMessages}
                 chatMsg={chatMsg}
                 chatMode={chatMode}
+                whisperTarget={whisperTarget}
                 onChatMsgChange={setChatMsg}
-                onChatModeChange={setChatMode}
+                onChatModeChange={(mode) => {
+                  setChatMode(mode);
+                  if (mode !== 'WHISPER') setWhisperTarget(null);
+                }}
                 onSend={handleSendChat}
               />
             </div>
@@ -301,8 +398,20 @@ export default function LobbyPage() {
               }}
               onOpenTitles={() => setShowTitleModal(true)}
             />
-            <InventoryPanel gold={gold} items={itemInventory} onOpenRoulette={() => setShowRoulette(true)} />
-            <RankingBoard users={users} activeTab={activeTab} titleData={titleData} onTabChange={setActiveTab} />
+            <InventoryPanel
+              gold={gold}
+              items={itemInventory}
+              onOpenItems={() => setShowInventoryItemsModal(true)}
+              onOpenRoulette={() => setShowRoulette(true)}
+            />
+            <RankingBoard
+              users={users}
+              friendNames={friendNames}
+              activeTab={activeTab}
+              titleData={titleData}
+              onTabChange={setActiveTab}
+              onUserMenuAction={handleUserMenuAction}
+            />
           </aside>
         </div>
 
@@ -382,6 +491,12 @@ export default function LobbyPage() {
           setRouletteResult(null);
         }}
         onSpin={spinRoulette}
+      />
+
+      <InventoryItemsModal
+        open={showInventoryItemsModal}
+        items={itemInventory}
+        onClose={() => setShowInventoryItemsModal(false)}
       />
 
       <SettingsModal

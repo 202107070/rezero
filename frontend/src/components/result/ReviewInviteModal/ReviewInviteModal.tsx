@@ -8,10 +8,11 @@ interface ReviewInviteModalProps {
   rankBorderColor: string;
   rankGlow: string;
   departedUserIds?: Set<string>;
-  selectedTargetId: string | null;
+  selectedTargetIds: Set<string>;
+  allowMultiple?: boolean;
   waiting: boolean;
-  inviteTargetName?: string;
-  onSelectTarget: (playerId: string) => void;
+  inviteTargetLabel?: string;
+  onToggleTarget: (playerId: string) => void;
   onInvite: () => void;
   onClose: () => void;
 }
@@ -23,14 +24,17 @@ export function ReviewInviteModal({
   rankBorderColor,
   rankGlow,
   departedUserIds,
-  selectedTargetId,
+  selectedTargetIds,
+  allowMultiple = false,
   waiting,
-  inviteTargetName,
-  onSelectTarget,
+  inviteTargetLabel,
+  onToggleTarget,
   onInvite,
   onClose,
 }: ReviewInviteModalProps) {
   if (!show) return null;
+
+  const selectedCount = selectedTargetIds.size;
 
   return (
     <div className="review-modal-overlay">
@@ -47,8 +51,8 @@ export function ReviewInviteModal({
                 panelClass={`rank-${p.rank <= 3 ? p.rank : ''}`}
                 departed={departedUserIds?.has(p.id) ?? false}
                 inviteSelectable={!isSelf && !waiting}
-                inviteSelected={selectedTargetId === p.id}
-                onInviteSelect={!isSelf && !waiting ? () => onSelectTarget(p.id) : undefined}
+                inviteSelected={selectedTargetIds.has(p.id)}
+                onInviteSelect={!isSelf && !waiting ? () => onToggleTarget(p.id) : undefined}
               />
             );
           })}
@@ -56,17 +60,19 @@ export function ReviewInviteModal({
         <div className="ranking-footer ranking-footer-with-review">
           <span className="ranking-footer-text">
             {waiting
-              ? `${inviteTargetName || '상대방'}님의 응답을 기다리는 중...`
-              : `총 ${players.length}명 참가`}
+              ? `${inviteTargetLabel || '상대방'}님의 응답을 기다리는 중...`
+              : allowMultiple
+                ? `${selectedCount}명 선택 · 총 ${players.length}명 참가`
+                : `총 ${players.length}명 참가`}
           </span>
           <div className="ranking-footer-actions">
             <button
               type="button"
               className="pixel-btn pixel-btn-primary review-footer-btn"
               onClick={onInvite}
-              disabled={waiting || !selectedTargetId}
+              disabled={waiting || selectedCount === 0}
             >
-              초대하기
+              {allowMultiple && selectedCount > 1 ? `${selectedCount}명 초대` : '초대하기'}
             </button>
             <button
               type="button"

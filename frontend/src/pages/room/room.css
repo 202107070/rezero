@@ -101,8 +101,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
-  padding: 8px 4px 6px;
+  gap: 1px;
+  padding: 4px 4px 4px;
   position: relative;
   transition: 0.08s;
   text-align: center;
@@ -136,10 +136,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 8px 8px 10px;
   text-align: center;
+  transition: border-color 0.1s, background 0.1s, transform 0.08s, box-shadow 0.08s;
 }
 
 .duel-side.occupied {
@@ -167,6 +168,22 @@
   background: rgba(146, 204, 65, 0.08);
 }
 
+.duel-side.occupied {
+  cursor: pointer;
+}
+
+.duel-side.occupied:hover {
+  border-color: var(--px-primary);
+  background: rgba(32, 156, 238, 0.12);
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+.duel-side.occupied.host:hover {
+  border-color: var(--px-warning);
+  background: rgba(247, 213, 29, 0.14);
+}
+
 .duel-vs {
   flex: 0 0 64px;
   display: flex;
@@ -180,13 +197,15 @@
 }
 
 .duel-avatar {
-  font-size: 5.5rem;
+  font-size: 11.2rem;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 6rem;
+  height: 11.5rem;
   flex-shrink: 0;
+  margin-top: 12px;
+  margin-bottom: 2px;
 }
 
 .duel-empty-mark {
@@ -208,27 +227,33 @@
 }
 
 .duel-name {
-  font-size: 18px;
+  font-size: 25px;
   color: #ddd;
   width: 100%;
-  line-height: 1.35;
+  line-height: 1.2;
   white-space: normal;
   word-break: keep-all;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  margin-top: 60px;
+  margin-bottom: 8px;
 }
 
-.duel-lang {
-  margin-right: 6px;
+.duel-rank {
+  margin-right: 7px;
+  color: var(--px-warning);
+  font-size: 1.22em;
 }
 
 .duel-status {
-  font-size: 18px;
-  padding: 3px 12px;
+  font-size: 25px;
+  padding: 3px 14px;
   border: 3px solid;
   min-width: 96px;
+  margin-top: 43px;
+  margin-bottom: 14px;
 }
 
 .player-slot.occupied {
@@ -256,41 +281,69 @@
   background: rgba(146, 204, 65, 0.08);
 }
 
+.player-slot.occupied {
+  cursor: pointer;
+}
+
+.player-slot.occupied:hover {
+  border-color: var(--px-primary);
+  background: rgba(32, 156, 238, 0.12);
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+.player-slot.occupied.host:hover {
+  border-color: var(--px-warning);
+  background: rgba(247, 213, 29, 0.14);
+}
+
 .slot-avatar {
-  font-size: 3rem;
+  font-size: 5.5rem;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 3.4rem;
+  height: 5.7rem;
   flex-shrink: 0;
+  margin-top: 4px;
+  margin-bottom: 2px;
 }
 
 .slot-name {
-  font-size: 14px;
+  font-size: 17px;
   color: #ddd;
   width: 100%;
   padding: 0 2px;
-  line-height: 1.3;
+  line-height: 1.15;
   white-space: normal;
   word-break: keep-all;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  min-height: 2.6em;
-  flex: 1;
+  min-height: 2.2em;
+  flex: 0 0 auto;
   min-width: 0;
+  margin-top: 28px;
+  margin-bottom: 0;
+}
+
+.slot-rank {
+  margin-right: 4px;
+  color: var(--px-warning);
+  font-size: 1.05em;
 }
 
 .slot-status {
-  font-size: 15px;
-  padding: 2px 8px;
+  font-size: 17px;
+  padding: 2px 9px;
   border: 3px solid;
   width: auto;
   min-width: 78px;
   text-align: center;
   flex-shrink: 0;
+  margin-top: 3px;
+  margin-bottom: 10px;
 }
 
 .status-ready {
@@ -384,6 +437,11 @@
   color: var(--px-success);
 }
 
+.msg-mode {
+  color: var(--px-warning);
+  margin-right: 6px;
+}
+
 .msg-text {
   color: #ccc;
 }
@@ -416,6 +474,12 @@
   font-family: var(--font-pixel);
   font-size: 16px;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.room-chat-btn:hover {
+  background: var(--px-primary);
+  color: #000;
 }
 
 .room-chat-mode-btn {
@@ -429,6 +493,12 @@
   cursor: pointer;
   appearance: none;
   text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.room-chat-mode-btn:hover {
+  background: var(--px-primary);
+  color: #000;
 }
 
 .section-title {
@@ -549,6 +619,19 @@
   justify-content: center;
 }
 
+.btn-ready.start:hover:not(:disabled) {
+  background: #b0e05d;
+  color: #000;
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+.btn-ready.start:active:not(:disabled) {
+  top: 4px;
+  transform: none;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.6);
+}
+
 .auto-ready-toggle {
   display: flex;
   align-items: center;
@@ -564,6 +647,21 @@
   height: 18px;
   accent-color: var(--px-primary);
   cursor: pointer;
+}
+
+.room-kick-btn {
+  transition: background 0.12s, transform 0.08s, box-shadow 0.08s;
+}
+
+.room-kick-btn:hover:not(:disabled) {
+  background: #ee8c78;
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+.room-kick-btn:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.6);
 }
 
 .problem-modal-overlay {
@@ -768,6 +866,7 @@
   flex-direction: column;
   min-width: 0;
   padding: 8px !important;
+  position: relative;
 }
 
 .room-side-card > .panel-section {
@@ -845,6 +944,8 @@
   flex-direction: column;
   padding-left: 4px;
   padding-right: 4px;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .room-item-loadout-title {
@@ -863,11 +964,13 @@
 .room-item-grid {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   padding: 2px;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 
 .room-item-slot {
@@ -892,6 +995,11 @@
   background: rgba(32, 156, 238, 0.12);
 }
 
+.room-item-slot.rare:hover:not(:disabled) {
+  border-color: var(--px-primary);
+  background: rgba(32, 156, 238, 0.12);
+}
+
 .room-item-slot.selected {
   border-color: var(--px-success);
   background: rgba(146, 204, 65, 0.15);
@@ -904,6 +1012,13 @@
   box-shadow: 0 0 0 2px rgba(247, 213, 29, 0.2), var(--px-shadow-hard);
 }
 
+.room-item-slot.selected:hover:not(:disabled),
+.room-item-slot.rare.selected:hover:not(:disabled) {
+  border-color: var(--px-primary);
+  background: rgba(32, 156, 238, 0.12);
+  box-shadow: var(--px-shadow-hard);
+}
+
 .room-item-slot.empty {
   filter: grayscale(1);
   opacity: 0.45;
@@ -913,6 +1028,8 @@
 .room-item-icon {
   font-size: 1.6rem;
   line-height: 1;
+  transform: translateY(-3px);
+  margin-bottom: 4px;
 }
 
 .room-item-label {
@@ -942,6 +1059,7 @@
 .room-side-bottom {
   margin-top: auto;
   flex-shrink: 0;
+  position: relative;
 }
 
 .room-action-bar {
@@ -1002,3 +1120,115 @@
   min-width: 0;
   overflow: hidden;
 }
+
+.room-friend-messenger {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 100%;
+  margin-bottom: 4px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.room-friend-messenger > * {
+  pointer-events: auto;
+}
+
+.room-friend-messenger-panel {
+  width: min(360px, 100%);
+  max-height: min(340px, 48vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--px-surface);
+  border: 4px solid var(--px-border);
+  box-shadow: var(--px-shadow-hard);
+}
+
+.room-friend-messenger-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 3px solid var(--px-border);
+  font-size: 13px;
+  color: var(--px-primary);
+}
+
+.room-friend-messenger-close {
+  background: transparent;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+.room-friend-messenger-close:hover {
+  color: #fff;
+}
+
+.room-friend-messenger-body {
+  overflow-y: auto;
+  padding: 8px 8px 10px;
+}
+
+.room-friend-messenger-empty {
+  color: #aaa;
+  font-size: 13px;
+  text-align: center;
+  padding: 16px 8px;
+}
+
+.room-friend-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  text-align: center;
+}
+
+.room-friend-table th,
+.room-friend-table td {
+  border: 2px solid var(--px-border);
+  padding: 6px 4px;
+  background: #1a1e21;
+}
+
+.room-friend-table th {
+  color: var(--px-warning);
+  background: #232a33;
+  font-size: 12px;
+}
+
+.room-friend-tier-cell {
+  width: 34%;
+  color: #ddd;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.room-friend-name-cell {
+  width: 66%;
+  text-align: left;
+  padding-left: 8px !important;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-friend-messenger-toggle {
+  min-width: 96px;
+  font-size: 13px;
+}
+
+.room-friend-messenger-toggle.is-active {
+  background: var(--px-surface-light);
+  color: #fff;
+}
+

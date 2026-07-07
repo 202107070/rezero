@@ -46,7 +46,17 @@ export const ROULETTE_ITEMS: RouletteItem[] = [
 ];
 
 export const ROULETTE_COST = 1000;
-export const ROULETTE_SEG_COLORS = ['#2d1f3d', '#1a2d3d', '#2d3d1f', '#3d1a1a', '#1a3d3d', '#3d2d1a', '#2d1a3d', '#1a3d2d'];
+export const ROULETTE_SEG_COLORS = [
+  '#2d1f3d', // paint
+  '#1a2d3d', // lightning
+  '#2d3d1f', // timeReduce
+  '#3d1a1a', // revealLength
+  '#1a3d3d', // revealPrev
+  '#3d2d1a', // miss
+  '#2d1a3d', // scribble
+  '#6b2a1a', // blankBreak (warm brick)
+  '#174a6b', // buildCharge (cool blue)
+];
 
 export type ItemKey = keyof ItemInventory;
 

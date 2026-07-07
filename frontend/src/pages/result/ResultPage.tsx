@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AiReviewerPanel, type AiMessage } from '../../components/result/AiReviewerPanel/AiReviewerPanel';
 import { ResultActionBar } from '../../components/result/ResultActionBar/ResultActionBar';
 import { ResultChatPanel } from '../../components/result/ResultChatPanel/ResultChatPanel';
 import { ResultPopup } from '../../components/result/ResultPopup/ResultPopup';
+import { ResultProblemModal } from '../../components/result/ResultProblemModal/ResultProblemModal';
 import { ResultRankingPanel } from '../../components/result/ResultRankingPanel/ResultRankingPanel';
 import { ResultReviewFooter } from '../../components/result/ResultReviewFooter/ResultReviewFooter';
 import { ResultTeamPanel } from '../../components/result/ResultTeamPanel/ResultTeamPanel';
 import { ReviewInviteModal } from '../../components/result/ReviewInviteModal/ReviewInviteModal';
 import { ReviewProblemView } from '../../components/result/ReviewProblemView/ReviewProblemView';
+import {
+  UserListContextMenu,
+  type UserListMenuAction,
+} from '../../components/lobby/UserListContextMenu/UserListContextMenu';
 import { checkNewTitles, type TitleDef } from '../../constants/titleTypes';
 import { ROUTES } from '../../constants/routes';
 import { ENABLE_RESULT_BOT_DEPARTURE, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
@@ -22,6 +27,13 @@ import {
 } from '../../services/sessionStore';
 import { addGold, getGold, saveTitles, setNewTitleIds, getTitles } from '../../services/userService';
 import {
+  addFriend,
+  getFollowRoomPath,
+  getUserPresence,
+  isFriend,
+  removeFriend,
+} from '../../services/friendStore';
+import {
   clearReviewInvite,
   createReviewInviteId,
   persistReviewInvite,
@@ -30,7 +42,10 @@ import {
 } from '../../services/reviewSessionService';
 import type { DemoBot } from '../../utils/battle/demoBots';
 import { normalizeCodeHistoryEntry, persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtils';
-import { buildResultPlayers } from '../../utils/resultUtils';
+import type { BattleProblem } from '../../types/battle';
+import { getLangKey } from '../../utils/battle/codeUtils';
+import { buildResultPlayers, type ResultPlayer } from '../../utils/resultUtils';
+import { formatCorrectAnswer, getResultPlayerAnswer } from '../../utils/resultAnswerUtils';
 import './result.css';
 
 interface BattleSubmission {
@@ -53,6 +68,8 @@ interface BattleSubmission {
   historyId?: string;
   code?: string;
   problemResults?: boolean[];
+  blankAnswers?: string[][];
+  selectedOptions?: Record<number, number>;
 }
 
 interface DemoState {
@@ -65,6 +82,8 @@ interface DemoState {
   localSolvedProblems?: number[];
   finishedAtElapsedSec?: number;
   battleBots?: DemoBot[];
+  blankAnswers?: string[][];
+  selectedOptions?: Record<number, number>;
 }
 
 interface OnlineUser {
@@ -108,6 +127,7 @@ export default function ResultPage() {
   const roomMode = submission?.mode || demoState?.mode || '1/1';
   const isVersusMany = roomMode !== '1/1';
   const lang = submission.lang || demoState?.lang || 'JAVA';
+  const langKey = getLangKey(lang);
 
   const allPlayers = useMemo(
     () => buildResultPlayers({ rankingSnapshot, roomUsers, demoBots, submission, demoState }),
@@ -115,7 +135,7 @@ export default function ResultPage() {
   );
 
   const myScore = allPlayers.find((p) => p.id === myUserId)?.ingameScore || 0;
-  const earnedGold = Math.floor(myScore / 10);
+  const earnedGold = myScore;
   const myRank = allPlayers.findIndex((p) => p.id === myUserId) + 1;
   const rankBorderColor =
     myRank === 1 ? 'var(--px-warning)' : myRank === allPlayers.length ? 'var(--px-danger)' : 'var(--px-success)';
@@ -152,6 +172,7 @@ export default function ResultPage() {
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
+  const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
 
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([
     {
@@ -165,10 +186,20 @@ export default function ResultPage() {
   const [reviewPhase, setReviewPhase] = useState<ReviewPhase>('idle');
   const [selectedReviewProblems, setSelectedReviewProblems] = useState<Set<number>>(() => new Set());
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteTargetId, setInviteTargetId] = useState<string | null>(null);
+  const [inviteTargetIds, setInviteTargetIds] = useState<Set<string>>(() => new Set());
   const [inviteWaiting, setInviteWaiting] = useState(false);
-  const [reviewPartnerId, setReviewPartnerId] = useState<string | null>(null);
+  const [reviewPartnerIds, setReviewPartnerIds] = useState<string[]>([]);
   const [reviewExpanded, setReviewExpanded] = useState(false);
+  const [problemDetailModal, setProblemDetailModal] = useState<{
+    player: ResultPlayer;
+    problemIndex: number;
+  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    open: boolean;
+    x: number;
+    y: number;
+    player: ResultPlayer | null;
+  }>({ open: false, x: 0, y: 0, player: null });
   const botAcceptTimerRef = useRef<(() => void) | null>(null);
 
   const reviewSelectMode = reviewPhase === 'selecting';
@@ -178,6 +209,12 @@ export default function ResultPage() {
     : Array.isArray(submission.answers)
       ? submission.answers
       : [];
+  const resultProblems = useMemo(
+    () => (Array.isArray(submission.problems) ? (submission.problems as BattleProblem[]) : []),
+    [submission.problems],
+  );
+  const myBlankAnswers = submission.blankAnswers ?? demoState?.blankAnswers;
+  const mySelectedOptions = submission.selectedOptions ?? demoState?.selectedOptions;
   const winners = allPlayers.slice(0, Math.max(1, Math.ceil(allPlayers.length / 2)));
   const losers = allPlayers.slice(Math.ceil(allPlayers.length / 2));
 
@@ -304,27 +341,44 @@ export default function ResultPage() {
 
   const handleRequestReview = () => {
     if (selectedReviewProblems.size === 0) return;
-    setInviteTargetId(null);
+    setInviteTargetIds(new Set());
     setShowInviteModal(true);
   };
 
   const handleCloseInviteModal = () => {
     if (inviteWaiting) return;
     setShowInviteModal(false);
-    setInviteTargetId(null);
+    setInviteTargetIds(new Set());
+  };
+
+  const toggleInviteTarget = (playerId: string) => {
+    setInviteTargetIds((prev) => {
+      if (isVersusMany) {
+        const next = new Set(prev);
+        if (next.has(playerId)) next.delete(playerId);
+        else next.add(playerId);
+        return next;
+      }
+      return new Set([playerId]);
+    });
   };
 
   const handleInvite = () => {
-    if (!inviteTargetId || selectedReviewProblems.size === 0) return;
+    const targets = [...inviteTargetIds];
+    if (targets.length === 0 || selectedReviewProblems.size === 0) return;
 
-    const target = allPlayers.find((p) => p.id === inviteTargetId);
+    const targetNames = targets
+      .map((id) => allPlayers.find((p) => p.id === id)?.name || '')
+      .filter(Boolean);
+
     const invite = {
       id: createReviewInviteId(),
       sessionId,
       fromUserId: myUserId,
       fromUserName: myUserName,
-      toUserId: inviteTargetId,
-      toUserName: target?.name || '',
+      toUserId: targets[0],
+      toUserIds: targets,
+      toUserName: targetNames.join(', '),
       problemIndices: [...selectedReviewProblems].sort((a, b) => a - b),
       status: 'pending' as const,
       createdAt: Date.now(),
@@ -332,14 +386,14 @@ export default function ResultPage() {
     persistReviewInvite(invite);
     setInviteWaiting(true);
 
-    if (shouldAutoAcceptReviewInvite(inviteTargetId)) {
+    if (targets.every(shouldAutoAcceptReviewInvite)) {
       botAcceptTimerRef.current?.();
       botAcceptTimerRef.current = scheduleReviewInviteResponse(
         sessionId,
         () => {
           setInviteWaiting(false);
           setShowInviteModal(false);
-          setReviewPartnerId(inviteTargetId);
+          setReviewPartnerIds(targets);
           setReviewPhase('reviewing');
         },
         () => {
@@ -357,13 +411,49 @@ export default function ResultPage() {
     botAcceptTimerRef.current = null;
     setReviewPhase('idle');
     setSelectedReviewProblems(new Set());
-    setReviewPartnerId(null);
-    setInviteTargetId(null);
+    setReviewPartnerIds([]);
+    setInviteTargetIds(new Set());
     setInviteWaiting(false);
     setShowInviteModal(false);
     setReviewExpanded(false);
     clearReviewInvite(sessionId);
   };
+
+  const handleOpenProblemDetail = (player: ResultPlayer, problemIndex: number) => {
+    if (reviewPhase !== 'idle') return;
+    setProblemDetailModal({ player, problemIndex });
+  };
+
+  const handleCloseProblemDetail = () => {
+    setProblemDetailModal(null);
+  };
+
+  const problemDetailSubmittedAnswer = useMemo(() => {
+    if (!problemDetailModal || resultProblems.length === 0) return '';
+    const { player, problemIndex } = problemDetailModal;
+    const problem = resultProblems[problemIndex];
+    if (!problem) return '';
+    return getResultPlayerAnswer({
+      playerId: player.id,
+      problemIndex,
+      problem,
+      langKey: langKey,
+      myUserId,
+      mySubmissionCodes,
+      myBlankAnswers,
+      mySelectedOptions,
+      demoBots,
+    });
+  }, [
+    problemDetailModal,
+    resultProblems,
+    langKey,
+    myUserId,
+    mySubmissionCodes,
+    myBlankAnswers,
+    mySelectedOptions,
+    demoBots,
+  ]);
 
   const reviewProblems = useMemo(() => {
     if (reviewPhase !== 'reviewing') return [];
@@ -372,7 +462,7 @@ export default function ResultPage() {
 
     return [...selectedReviewProblems].sort((a, b) => a - b).map((index) => {
       const problem = problems[index];
-      const correctAnswer = problem?.answer?.[lang]?.[0] || problem?.answer?.JAVA?.[0] || '';
+      const correctAnswer = problem ? formatCorrectAnswer(problem as BattleProblem, langKey) : '';
       return {
         index,
         title: problem?.title || `문제 ${index + 1}`,
@@ -383,21 +473,89 @@ export default function ResultPage() {
         isCorrect: myResults[index] === true,
       };
     });
-  }, [reviewPhase, selectedReviewProblems, submission.problems, mySubmissionCodes, allPlayers, lang]);
+  }, [reviewPhase, selectedReviewProblems, submission.problems, mySubmissionCodes, allPlayers, langKey]);
 
-  const reviewPartnerName = allPlayers.find((p) => p.id === reviewPartnerId)?.name || '';
-  const inviteTargetName = allPlayers.find((p) => p.id === inviteTargetId)?.name || '';
+  const reviewPartnerName = reviewPartnerIds
+    .map((id) => allPlayers.find((p) => p.id === id)?.name || '')
+    .filter(Boolean)
+    .join(', ');
+  const inviteTargetLabel = [...inviteTargetIds]
+    .map((id) => allPlayers.find((p) => p.id === id)?.name || '')
+    .filter(Boolean)
+    .join(', ');
 
   const handleSendChat = () => {
     if (!chatInput.trim()) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const modeLabel = chatMode === 'ALL' ? '[전체]' : '[친구]';
+    const modeLabel =
+      chatMode === 'WHISPER' && whisperTarget
+        ? `[귓속말:${whisperTarget}]`
+        : chatMode === 'ALL'
+          ? '[전체]'
+          : '[친구]';
     setChatMessages((prev) => [
       ...prev,
       { sender: myUserName, text: chatInput, type: 'user', mode: modeLabel, time: timeStr },
     ]);
     setChatInput('');
+  };
+
+  const appendSystemChat = (text: string) => {
+    setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text, type: 'sys' as const }]);
+  };
+
+  const handleNicknameContextMenu = (event: MouseEvent, player: ResultPlayer) => {
+    if (player.id === myUserId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      open: true,
+      x: event.clientX,
+      y: event.clientY,
+      player,
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu((prev) => ({ ...prev, open: false, player: null }));
+  };
+
+  const handleUserMenuAction = (action: UserListMenuAction, userName: string) => {
+    switch (action) {
+      case 'match-story':
+        appendSystemChat(`${userName} 님의 매치 스토리는 로비에서 확인할 수 있습니다.`);
+        break;
+      case 'add-friend':
+        if (isFriend(userName)) {
+          removeFriend(userName);
+          appendSystemChat(`${userName} 님을 친구 목록에서 삭제했습니다.`);
+        } else {
+          const added = addFriend(userName);
+          appendSystemChat(added ? `${userName} 님을 친구 목록에 추가했습니다.` : `${userName} 님은 이미 친구입니다.`);
+        }
+        break;
+      case 'whisper':
+        setWhisperTarget(userName);
+        setChatMode('WHISPER');
+        appendSystemChat(`${userName} 님에게 귓속말 모드로 전환했습니다.`);
+        break;
+      case 'follow': {
+        const roomPath = getFollowRoomPath(userName);
+        if (!roomPath) {
+          appendSystemChat(`${userName} 님은 현재 따라갈 수 있는 방에 없습니다.`);
+          break;
+        }
+        appendSystemChat(`${userName} 님이 있는 방으로 이동합니다.`);
+        navigate(roomPath);
+        break;
+      }
+      case 'summon':
+        appendSystemChat('소환하기는 대기실에서만 사용할 수 있습니다.');
+        break;
+      default:
+        break;
+    }
   };
 
   const handleSendAiChat = () => {
@@ -447,6 +605,8 @@ export default function ResultPage() {
               reviewSelectMode={reviewSelectMode}
               selectedReviewProblems={selectedReviewProblems}
               onToggleReviewProblem={toggleReviewProblem}
+              onOpenProblemDetail={handleOpenProblemDetail}
+              onNicknameContextMenu={handleNicknameContextMenu}
               onStartReview={handleStartReview}
               onCancelReview={handleCancelReview}
               onRequestReview={handleRequestReview}
@@ -463,6 +623,8 @@ export default function ResultPage() {
                 reviewSelectMode={reviewSelectMode}
                 selectedReviewProblems={selectedReviewProblems}
                 onToggleReviewProblem={toggleReviewProblem}
+                onOpenProblemDetail={handleOpenProblemDetail}
+                onNicknameContextMenu={handleNicknameContextMenu}
               />
             </div>
             <div className="result-lose-slot">
@@ -474,6 +636,8 @@ export default function ResultPage() {
                 reviewSelectMode={reviewSelectMode}
                 selectedReviewProblems={selectedReviewProblems}
                 onToggleReviewProblem={toggleReviewProblem}
+                onOpenProblemDetail={handleOpenProblemDetail}
+                onNicknameContextMenu={handleNicknameContextMenu}
               />
             </div>
             <div className="result-duel-review-bar">
@@ -494,9 +658,13 @@ export default function ResultPage() {
             messages={chatMessages}
             chatInput={chatInput}
             chatMode={chatMode}
+            whisperTarget={whisperTarget}
             myUserId={myUserId}
             onChatInputChange={setChatInput}
-            onChatModeChange={setChatMode}
+            onChatModeChange={(mode) => {
+              setChatMode(mode);
+              if (mode !== 'WHISPER') setWhisperTarget(null);
+            }}
             onSend={handleSendChat}
           />
         </div>
@@ -523,10 +691,11 @@ export default function ResultPage() {
         rankBorderColor={rankBorderColor}
         rankGlow={rankGlow}
         departedUserIds={departedUserIds}
-        selectedTargetId={inviteTargetId}
+        selectedTargetIds={inviteTargetIds}
+        allowMultiple={isVersusMany}
         waiting={inviteWaiting}
-        inviteTargetName={inviteTargetName}
-        onSelectTarget={setInviteTargetId}
+        inviteTargetLabel={inviteTargetLabel}
+        onToggleTarget={toggleInviteTarget}
         onInvite={handleInvite}
         onClose={handleCloseInviteModal}
       />
@@ -539,6 +708,39 @@ export default function ResultPage() {
         rankBorderColor={rankBorderColor}
         onClose={() => setResultPopup((p) => ({ ...p, show: false }))}
       />
+
+      <ResultProblemModal
+        isOpen={!!problemDetailModal}
+        player={problemDetailModal?.player ?? null}
+        problems={resultProblems}
+        problemIndex={problemDetailModal?.problemIndex ?? 0}
+        langKey={langKey}
+        submittedAnswer={problemDetailSubmittedAnswer}
+        onClose={handleCloseProblemDetail}
+        onProblemIndexChange={(index) => {
+          setProblemDetailModal((prev) => (prev ? { ...prev, problemIndex: index } : null));
+        }}
+      />
+
+      {contextMenu.player && (
+        <UserListContextMenu
+          open={contextMenu.open}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          userName={contextMenu.player.name}
+          actionLabels={{
+            'add-friend': isFriend(contextMenu.player.name) ? '친구삭제' : '친구추가',
+          }}
+          hiddenActions={['summon']}
+          disabledActions={(() => {
+            const presence = getUserPresence(contextMenu.player!.name);
+            const canFollow = isFriend(contextMenu.player!.name) && presence?.status === 'room';
+            return canFollow ? [] : (['follow'] as UserListMenuAction[]);
+          })()}
+          onSelect={handleUserMenuAction}
+          onClose={closeContextMenu}
+        />
+      )}
 
     </div>
   );

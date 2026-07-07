@@ -23,11 +23,17 @@ export function RouletteWheel({ open, gold, spinning, result, wheelDeg, onClose,
 
   return (
     <div className="modal-overlay" onClick={triggerShake}>
-      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', padding: '24px' }}>
-        <h3 className="text-center pixel-text-primary" style={{ marginBottom: '8px', fontSize: '22px' }}>
+      <div
+        className={`modal-content roulette-modal${shaking ? ' modal-shake-error' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" className="roulette-close-x" onClick={handleClose} aria-label="닫기">
+          ×
+        </button>
+        <h3 className="text-center pixel-text-primary roulette-modal-title">
           🎰 아이템 룰렛
         </h3>
-        <div style={{ marginBottom: '8px', fontSize: '14px', color: 'var(--px-warning)', textAlign: 'center' }}>
+        <div className="roulette-modal-info">
           보유 골드: {gold.toLocaleString()} G | 1회: {ROULETTE_COST} G
         </div>
         <div className="roulette-wheel-wrap">
@@ -62,23 +68,13 @@ export function RouletteWheel({ open, gold, spinning, result, wheelDeg, onClose,
             <div className="roulette-center">🎰</div>
           </div>
         </div>
-        {result && (
-          <div
-            style={{
-              textAlign: 'center',
-              marginBottom: '10px',
-              color: result.includes('꽝') ? 'var(--px-danger)' : 'var(--px-success)',
-              fontSize: '18px',
-              textShadow: '2px 2px 0 #000',
-            }}
-          >
-            {result}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+        <div className={`roulette-result${result ? ` ${result.includes('꽝') ? 'is-fail' : 'is-win'}` : ''}`}>
+          {result ?? ''}
+        </div>
+        <div className="roulette-actions">
           <button
             type="button"
-            className="pixel-btn"
+            className="pixel-btn roulette-spin-btn"
             style={{ background: '#E67E22', color: '#000', textShadow: 'none', borderColor: '#D35400' }}
             onClick={() => {
               if (gold < ROULETTE_COST || spinning) {
@@ -90,9 +86,6 @@ export function RouletteWheel({ open, gold, spinning, result, wheelDeg, onClose,
             disabled={spinning}
           >
             {spinning ? '돌리는 중...' : `🎰 돌리기 (${ROULETTE_COST}G)`}
-          </button>
-          <button type="button" className="pixel-btn pixel-btn-secondary" onClick={handleClose}>
-            닫기
           </button>
         </div>
       </div>

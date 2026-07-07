@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import type { RoomPlayer } from '../../../types/room';
 import { PlayerDuelGrid } from '../PlayerDuelGrid/PlayerDuelGrid';
 import { PlayerSlot } from '../PlayerSlot/PlayerSlot';
@@ -10,6 +11,7 @@ interface PlayerGridProps {
   canInviteMore: boolean;
   onPlayerClick: (player: RoomPlayer, index: number) => void;
   onInviteBot: (index: number) => void;
+  onPlayerContextMenu?: (event: MouseEvent, player: RoomPlayer) => void;
 }
 
 export function PlayerGrid({
@@ -20,6 +22,7 @@ export function PlayerGrid({
   canInviteMore,
   onPlayerClick,
   onInviteBot,
+  onPlayerContextMenu,
 }: PlayerGridProps) {
   if (roomMode === '1/1') {
     const host = players[0];
@@ -39,6 +42,7 @@ export function PlayerGrid({
         onHostClick={() => host && onPlayerClick(host, 0)}
         onOpponentClick={() => opponent && onPlayerClick(opponent, opponentIndex)}
         onInviteOpponent={() => onInviteBot(1)}
+        onPlayerContextMenu={onPlayerContextMenu}
       />
     );
   }
@@ -55,6 +59,7 @@ export function PlayerGrid({
           canInvite={!p && canInviteMore}
           onClick={p ? () => onPlayerClick(p, idx) : undefined}
           onInvite={() => onInviteBot(idx)}
+          onContextMenu={onPlayerContextMenu}
         />
       ))}
     </div>

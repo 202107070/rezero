@@ -14,6 +14,7 @@ export interface ReviewInvitePayload {
   fromUserName: string;
   toUserId: string;
   toUserName: string;
+  toUserIds?: string[];
   problemIndices: number[];
   status: ReviewInviteStatus;
   createdAt: number;

@@ -41,8 +41,8 @@ export function RoomProfileModal({
           {isHost && !player.isHost && playerIndex !== null && (
             <button
               type="button"
-              className="pixel-btn pixel-btn-primary"
-              style={{ minWidth: '120px', background: 'var(--px-danger)', marginRight: '8px' }}
+              className="pixel-btn pixel-btn-danger room-kick-btn"
+              style={{ minWidth: '120px', marginRight: '8px' }}
               onClick={() => {
                 onClose();
                 onKick(playerIndex, player.name);

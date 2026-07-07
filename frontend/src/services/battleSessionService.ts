@@ -174,6 +174,8 @@ export function persistBattleSubmission(params: {
   roundSeconds: number;
   localSolvedProblems: number[];
   problemResults?: boolean[];
+  blankAnswers?: string[][];
+  selectedOptions?: Record<number, number>;
   finishedAtElapsedSec: number;
   demoSpectating: boolean;
   spectatorLocked: boolean;
@@ -196,6 +198,8 @@ export function persistBattleSubmission(params: {
     ingameScore: params.ingameScore,
     solveTimes: params.solveTimes,
     problemResults: params.problemResults,
+    blankAnswers: params.blankAnswers,
+    selectedOptions: params.selectedOptions,
     myRatingScore: params.myRatingScore,
   });
   setMyBattleCode(currentCode);
@@ -228,6 +232,8 @@ export function persistBattleSubmission(params: {
     solveTimes: params.solveTimes,
     problemResults: params.problemResults,
     myRatingScore: params.myRatingScore,
+    blankAnswers: params.blankAnswers,
+    selectedOptions: params.selectedOptions,
     updatedAt: new Date().toISOString(),
   });
 }

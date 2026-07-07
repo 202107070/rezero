@@ -142,7 +142,7 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   sender        string
   text          string
   time          string                    "HH:mm"
-  mode          string                    '[전체]' | '[친구]' 라벨
+  mode          string                    '[전체]' | '[친구]' | '[귓속말:{target}]' 라벨
 
 [B.4 CodeHistoryEntry]  types/lobby.ts — 매치 스토리
 
@@ -292,7 +292,9 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   ingameScore, ratingScore
   totalSolveTime, completionTime
   problemResults    boolean[]
-  delta             number                  floor(ingameScore/10) 골드 환산용
+  delta             number                  applyRatingDeltas() 결과
+                                      상위 ceil(n/2) 승: 양수, 하위 패: 음수
+                                      magnitude = max(10, floor(ingameScore/10))
   rank              number
 
 [B.19 FinalRankingSnapshot]  utils/battle/rankUtils.ts
@@ -340,6 +342,20 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
     showCodePanel         boolean     style === 'code'
     showMultipleChoicePanel boolean
     showShortAnswerPanel  boolean
+
+[B.24 FriendEntry / FriendPresence]  types/friend.ts, services/friendStore.ts
+
+  FriendEntry
+    name          string                    친구 닉네임
+    addedAt       number (ms)
+
+  FriendPresence
+    userName      string
+    status        'lobby' | 'room' | 'offline'
+    roomId        string?                   status='room' 일 때
+    roomTitle     string?
+    roomQuery     string?                   /room follow 이동용 query
+    updatedAt     number (ms)
 
 
 ================================================================================
@@ -426,6 +442,8 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   ingameScore       number
   solveTimes        Record<number, number>  문제index → 풀이 시간(초)
   problemResults    boolean[]?
+  blankAnswers      string[][]?             문제별 빈칸/단답 답안
+  selectedOptions   Record<number, number>? 문제별 객관식 index
   myRatingScore     number
 
 [D.3 setBattleDemoState] (sessionId 키) — ResultPage 도 읽음
@@ -436,6 +454,7 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   demoSpectating, spectatorLocked
   battleBots: DemoBot[]
   ingameScore, solveTimes, problemResults, myRatingScore
+  blankAnswers, selectedOptions
   updatedAt         ISO8601
 
 [D.4 setBattleDraft] (sessionId 키) — 배틀 중 이어하기
@@ -538,26 +557,30 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   remaining         number               UI      제한 시간(초)
   elapsedSec        number               UI
   localSolvedProblems number[]           UI
-  ingameScore       number               UI→submission
+  ingameScore       number               UI→submission   정답당 +BATTLE_CORRECT_SCORE(100)
   solveTimes        Record<number,number> UI
   problemResults    Record<number,bool>  UI
   finishedAtElapsedSec number            UI
-  comboCount        number               UI
   battleBots        DemoBot[]            UI→demoState
   itemInventory     ItemInventory        STORE+UI
   myRatingScore     number               STORE   읽기
 
-  [빌드 패널 — fill_blank]
+  [빌드 패널 — isCodeBlankBuildProblem 만]
+  showBuildPanel    boolean              derived currentCaps.showCodePanel &&
+                                      isCodeBlankBuildProblem(currentProblem)
   buildCodeByProblem, buildLogsByProblem
   buildsUsedByProblem, buildBonusByProblem, isBuilding
 
-  [UI 전용 —]
-  showGameOver, showSaveModal, showClearFlash, battleFinished
-  demoSpectating, spectatorLocked, problemCollapsed, problemSolved
-  selectedOption, revealHint, breakingBlanks, itemCastState, panelHit
-  showItemModal, expandedOpponentId, opponentEffects
+  [상대·관전]
+  spectatorViewProblemByBot  Record<botId, problemIndex>  UI  관전 시 상대 문제 탭
+  spectatorMyViewProblem     number | null                UI  관전 시 내 코드 문제 탭
+  opponentEffects            Record<botId, Record<problemIndex, panelEffect>>
+  panelHit, expandedOpponentId, showItemModal
   chatMessages, chatMsg, chatMode
   sessionSavedSnapshot, saveStatus
+  (+ UI 전용: showGameOver, showSaveModal, showClearFlash, battleFinished,
+     demoSpectating, spectatorLocked, problemCollapsed, problemSolved,
+     selectedOption, revealHint, breakingBlanks, itemCastState, showAnswerRequiredModal)
   (+ 다수 useRef: 타이머·debounce·플래그)
 
 ── E.4 ResultPage  src/pages/result/ResultPage.tsx ────────────────────────
@@ -574,7 +597,9 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   totalGold         number               STORE+UI  addGold 후
   reviewPhase       'idle'|'selecting'|'reviewing'
   selectedReviewProblems Set<number>
-  reviewPartnerId   string | null
+  reviewPartnerIds  string[]
+  inviteTargetIds   Set<string>           UI      복습 초대 모달 다중 선택
+  problemDetailModal { player, problemIndex } | null
 
   [UI 전용 —]
   resultPopup, isAiOpen, chatMessages, chatInput, chatMode
@@ -613,13 +638,18 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
 [F.1 사용자·세션 식별]
   getCurrentUserId() / getCurrentUserName()   authService (로그인 유저)
   getCurrentDisplayName()                     authService (닉네임)
+  FRIENDS_KEY                        'rezero_friends'   friendStore 친구 목록 localStorage 키
+  PRESENCE_KEY                       'rezero_presence'  friendStore 접속 상태 localStorage 키
   DEFAULT_ROOMS                       []        사전 등록 방 없음
   DEMO_BOT_POOL                       6명       roomConstants (수동 봇 초대용)
   BOT_READY_DELAY_MS                  3000      봇 입장 후 READY 대기
   SOLO_START_BYPASS                   false     인원·READY 규칙 적용
+  seedDemoFriendPresence()                     테스트유저1(room), 테스트유저2(lobby) 초기화
 
-[F.2 아이템]
+[F.2 아이템·배틀 점수]
   ROULETTE_COST                       1000 G
+  BATTLE_CORRECT_SCORE                100   constants/battleConstants.ts
+                                      정답 1문제당 인게임 점수 = 골드 보상 1:1
   BATTLE_BUILD_LIMIT                  3
   BATTLE_BUILD_ITEM_BONUS             3
   ItemKey                             paint | revealLength | revealPrev |
@@ -631,6 +661,10 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
                                       title, question, answer, options, …)
   problem type                        fill_blank | multiple_choice |
                                       short_answer | visual_fill_blank
+  isCodeBlankBuildProblem()           utils/problemTypeUtils.ts
+                                      실제 코드 작성 문제만 빌드 패널 대상
+  getProblemAnswersForLang()          utils/problemTypeUtils.ts
+                                      JAVA|PYTHON|CPP|HTML|CSS fallback
 
 [F.4 언어·난이도 매핑]  roomConstants.ts
   LANG_MAP        JAVA→java, PYTHON→python, C++→cpp, …
@@ -643,6 +677,9 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
 [F.6 결과·리뷰]
   ENABLE_RESULT_BOT_DEPARTURE          false
   REVIEW_BOT_ACCEPT_DELAY_MS          10000
+  applyRatingDeltas(players)          resultUtils — 상위 승 +delta, 하위 패 -delta
+  formatCorrectAnswer()               resultAnswerUtils — getProblemAnswersForLang fallback
+  getBotSpectatorAnswers()            demoBots — 관전 시 봇 답안 (문제 데이터 fallback)
 
 [F.7 인증]
   ROUTES.LOGIN                        '/login'
@@ -728,10 +765,15 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
 
   [관련 파일]
     constants/problemCapabilityPolicy.ts
+    constants/battleConstants.ts
     constants/problemImages.ts
     utils/problemCapabilities.ts
+    utils/problemTypeUtils.ts
     utils/problemVisualUtils.ts
+    utils/resultAnswerUtils.ts
     components/battle/ProblemVisualPreview.tsx
+    components/battle/OpponentPanels.tsx
+    components/result/ResultProblemModal/ResultProblemModal.tsx
 
 
 ================================================================================
@@ -762,3 +804,18 @@ UI·화면 흐름은 front.txt 를 본다. 이 문서는 백엔드·협업용으
   코드 기준: re:zero frontend (메모리 store 구조)
   companion: frontend/front.txt (화면·컴포넌트 가이드)
   타입 정의 변경 시 types/*.ts 와 이 파일을 함께 갱신할 것.
+
+  [2026-07-04]
+  - BATTLE_CORRECT_SCORE=100, 골드=ingameScore (÷10 제거)
+  - comboCount 제거, applyRatingDeltas (승 + / 패 -)
+  - isCodeBlankBuildProblem, getProblemAnswersForLang, formatCorrectAnswer
+  - OpponentPanels problem-preview / 관전 답안, opponentEffects 인덱스
+  - ResultProblemModal, ResultPlayerRow 라벨, reviewPartnerIds, inviteTargetIds
+  - 배틀 중 점수·레이팅 UI 미표시, 제출 후 자동 다음 문제
+  - cursors.css 픽셀 커서, useModalShake, Electron preload/windowBridge
+  - persistBattleSubmission: blankAnswers, selectedOptions 필드 추가
+
+  [2026-07-07]
+  - Lobby/Room friendStore 흐름 반영: FRIENDS_KEY, PRESENCE_KEY, FriendPresence 타입
+  - 채팅 mode 라벨에 '[귓속말:{target}]' 추가
+  - room.css 대기실 아이템 슬롯 아이콘 상향(translateY/margin)으로 라벨 겹침 완화
