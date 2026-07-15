@@ -1,90 +1,45 @@
 #!/usr/bin/env node
 
-/**
- * Module dependencies.
- */
+const http = require('http');
 
-var app = require('../app');
-var debug = require('debug')('rezero:server');
-var http = require('http');
+const app = require('../app');
+const { env } = require('../src/config/envConfig');
+const { pool, testDbConnection } = require('../src/config/dbConfig');
+const { redisClient, connectRedis } = require('../src/config/redisConfig');
 
-/**
- * Get port from environment and store in Express.
- */
+const server = http.createServer(app);
 
-var port = normalizePort(process.env.PORT || '3000');
-app.set('port', port);
+async function startServer() {
+  // DB와 Valkey가 둘 다 연결돼야 서버를 열 수 있습니다.
+  await testDbConnection();
+  await connectRedis();
 
-/**
- * Create HTTP server.
- */
-
-var server = http.createServer(app);
-
-/**
- * Listen on provided port, on all network interfaces.
- */
-
-server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
-
-/**
- * Normalize a port into a number, string, or false.
- */
-
-function normalizePort(val) {
-  var port = parseInt(val, 10);
-
-  if (isNaN(port)) {
-    // named pipe
-    return val;
-  }
-
-  if (port >= 0) {
-    // port number
-    return port;
-  }
-
-  return false;
+  server.listen(env.port, env.host, () => {
+    console.log(`Backend running on http://${env.host}:${env.port}`);
+  });
 }
 
-/**
- * Event listener for HTTP server "error" event.
- */
+async function stopServer(signal) {
+  console.log(`${signal} received. Backend is shutting down.`);
 
-function onError(error) {
-  if (error.syscall !== 'listen') {
-    throw error;
-  }
-
-  var bind = typeof port === 'string'
-    ? 'Pipe ' + port
-    : 'Port ' + port;
-
-  // handle specific listen errors with friendly messages
-  switch (error.code) {
-    case 'EACCES':
-      console.error(bind + ' requires elevated privileges');
-      process.exit(1);
-      break;
-    case 'EADDRINUSE':
-      console.error(bind + ' is already in use');
-      process.exit(1);
-      break;
-    default:
-      throw error;
-  }
+  server.close(async () => {
+    if (redisClient.isOpen) await redisClient.quit();
+    await pool.end();
+    process.exit(0);
+  });
 }
 
-/**
- * Event listener for HTTP server "listening" event.
- */
+server.on('error', (error) => {
+  console.error('Backend server error:', error.message);
+  process.exit(1);
+});
 
-function onListening() {
-  var addr = server.address();
-  var bind = typeof addr === 'string'
-    ? 'pipe ' + addr
-    : 'port ' + addr.port;
-  debug('Listening on ' + bind);
-}
+process.on('SIGINT', () => stopServer('SIGINT'));
+process.on('SIGTERM', () => stopServer('SIGTERM'));
+
+startServer().catch(async (error) => {
+  console.error('Backend startup failed:', error.message);
+  if (redisClient.isOpen) await redisClient.quit();
+  await pool.end();
+  process.exit(1);
+});

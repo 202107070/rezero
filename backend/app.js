@@ -1,41 +1,21 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
+const express = require('express');
+const logger = require('morgan');
 
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
+const healthRouter = require('./src/api/health/router');
+const { notFoundHandler, errorHandler } = require('./src/middleware/errorHandler');
 
-var app = express();
-
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
+const app = express();
 
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/', indexRouter);
-app.use('/users', usersRouter);
+// 서버 상태는 배포 확인용 주소와 API 주소에서 각각 확인하시면 됩니다.
+app.use('/health', healthRouter);
+app.use('/api/v1/health', healthRouter);
 
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
-});
-
-// error handler
-app.use(function(err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
-
-  // render the error page
-  res.status(err.status || 500);
-  res.render('error');
-});
+// 등록되지 않은 주소와 실행 중 발생한 오류는 아래 공통 처리 부분을 확인하시면 됩니다.
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 module.exports = app;
