@@ -1,6 +1,5 @@
-// mysql 패키지를 첫 줄에서 불러옴 (import/require)
-const mysql = require('mysql2/promise'); 
-require('dotenv').config(); // 환경변수 로드
+const mysql = require('mysql'); 
+require('dotenv').config();
 
 // MariaDB 연결 설정
 const pool = mysql.createPool({
@@ -9,19 +8,19 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'osDB',
     port: process.env.DB_PORT || 3306,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+    connectionLimit: 10
 });
 
-async function connectDB() {
-    try {
-        const connection = await pool.getConnection();
+// DB 연결 테스트 함수 (콜백 방식 적용)
+function connectDB() {
+    pool.getConnection((err, connection) => {
+        if (err) {
+            console.error('[MariaDB] Warning: Could not connect to DB, skipping...', err.message);
+            return;
+        }
         console.log('[MariaDB] connected successfully');
         connection.release();
-    } catch (error) {
-        console.error('[MariaDB] Warning: Could not connect to DB, skipping...', error.message);
-    }
+    });
 }
 
 module.exports = {
