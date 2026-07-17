@@ -23,5 +23,5 @@ async function connectRedis() {
 
 module.exports = {
   redisClient,
-  connectRedis,
+  connectRedis // connectValkey를 connectRedis로 변경
 };
