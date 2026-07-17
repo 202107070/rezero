@@ -1,27 +1,27 @@
-require('./envConfig');
+// ioredis 패키지를 첫 줄에서 불러옴
+const Redis = require('ioredis');
+require('dotenv').config();
 
-const { createClient } = require('redis');
-
-// Valkey는 Redis 규격을 지원하므로 Redis 클라이언트를 사용합니다.
-const redisClient = createClient({
-  socket: {
+// Valkey(Redis) 연결 설정
+const redisClient = new Redis({
     host: process.env.REDIS_HOST || '127.0.0.1',
     port: Number(process.env.REDIS_PORT || 6379),
-  },
-  password: process.env.REDIS_PASSWORD || undefined,
+    password: process.env.REDIS_PASSWORD || undefined,
 });
 
-redisClient.on('error', (error) => {
-  console.error('[Valkey] error:', error.message);
-});
+redisClient.on('error', (err) => console.error('[Valkey/Redis] Error:', err.message));
+redisClient.on('connect', () => console.log('[Valkey/Redis] connected successfully'));
 
 async function connectRedis() {
-  if (!redisClient.isOpen) await redisClient.connect();
-  await redisClient.ping();
-  console.log('[Valkey] connected');
+    try {
+        await redisClient.ping(); // 서버가 켜져 있는지 핑 테스트
+        console.log('[Valkey/Redis] Ping Test Success');
+    } catch (err) {
+        console.error('[Valkey/Redis] Warning: Server is not running, skipping...', err.message);
+    }
 }
 
 module.exports = {
-  redisClient,
-  connectRedis // connectValkey를 connectRedis로 변경
+    redisClient,
+    connectRedis
 };
