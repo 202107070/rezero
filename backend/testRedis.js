@@ -1,22 +1,23 @@
-// 1. 가져올 때 connectValkey 대신 connectRedis로 가져옴
-const { redisClient, connectRedis } = require('./src/config/redisConfig');
+const redis = require('redis');
 
-async function testRedis() {
-    try {
-        console.log('🔄 Valkey 연결 시도 중...');
-        
-        // 2. 호출할 때도 connectRedis()로 바꿈
-        await connectRedis(); 
-        
-        await redisClient.set('test_key', 'Hello Valkey!');
-        const value = await redisClient.get('test_key');
-        
-        console.log(`✅ Valkey 테스트 성공! 값: ${value}`);
-        
-        await redisClient.disconnect();
-    } catch (err) {
-        console.error('❌ Valkey 연결 테스트 실패:', err);
-    }
+async function runRedisTest() {
+    const client = redis.createClient({ url: 'redis://127.0.0.1:6379' });
+    await client.connect();
+
+    // 1. SET
+    await client.set('test_key', 'mintae_test');
+    console.log('✅ SET 성공');
+
+    // 2. GET
+    const val = await client.get('test_key');
+    console.log('✅ GET 결과:', val);
+
+    // 3. DEL
+    await client.del('test_key');
+    const check = await client.get('test_key');
+    console.log('✅ DEL 성공, 결과(null이어야 함):', check);
+
+    await client.disconnect();
 }
 
-testRedis();
+runRedisTest();
