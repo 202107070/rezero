@@ -1,23 +1,27 @@
-const redis = require('redis');
+const { redisClient, connectRedis } = require('./src/config/redisConfig');
 
-async function runRedisTest() {
-    const client = redis.createClient({ url: 'redis://127.0.0.1:6379' });
-    await client.connect();
+async function testValkey() {
+  const key = 'test:valkey-connection';
+  const value = 'connected';
 
-    // 1. SET
-    await client.set('test_key', 'mintae_test');
-    console.log('✅ SET 성공');
+  try {
+    await connectRedis();
+    await redisClient.set(key, value);
 
-    // 2. GET
-    const val = await client.get('test_key');
-    console.log('✅ GET 결과:', val);
+    const savedValue = await redisClient.get(key);
+    if (savedValue !== value) throw new Error('저장한 값을 읽지 못했습니다.');
 
-    // 3. DEL
-    await client.del('test_key');
-    const check = await client.get('test_key');
-    console.log('✅ DEL 성공, 결과(null이어야 함):', check);
+    await redisClient.del(key);
+    const deletedValue = await redisClient.get(key);
+    if (deletedValue !== null) throw new Error('테스트 값이 삭제되지 않았습니다.');
 
-    await client.disconnect();
+    console.log('Valkey SET, GET, DEL 테스트를 모두 확인했습니다.');
+  } catch (error) {
+    console.error('Valkey 확인에 실패했습니다:', error.message);
+    process.exitCode = 1;
+  } finally {
+    if (redisClient.isOpen) await redisClient.quit();
+  }
 }
 
-runRedisTest();
+testValkey();

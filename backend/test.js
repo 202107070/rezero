@@ -1,9 +1,19 @@
-// test.js
-const { connectDB } = require('./src/config/dbConfig');
-const { connectRedis } = require('./src/config/redisConfig');
+const { pool, testDbConnection } = require('./src/config/dbConfig');
+const { redisClient, connectRedis } = require('./src/config/redisConfig');
 
-console.log('데이터베이스 & 레디스 연결 테스트 시작...');
+async function testConnections() {
+  try {
+    // DB와 Valkey 연결 상태는 이 파일에서 함께 확인하시면 됩니다.
+    await testDbConnection();
+    await connectRedis();
+    console.log('MariaDB와 Valkey 연결을 모두 확인했습니다.');
+  } catch (error) {
+    console.error('연결 확인에 실패했습니다:', error.message);
+    process.exitCode = 1;
+  } finally {
+    if (redisClient.isOpen) await redisClient.quit();
+    await pool.end();
+  }
+}
 
-// DB 및 Redis 연결 함수 실행
-connectDB();
-connectRedis();
+testConnections();

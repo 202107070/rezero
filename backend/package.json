@@ -7,8 +7,5 @@
     "preinstall": "node ../scripts/guard-root-install.js",
     "start": "node bin/www",
     "dev": "nodemon bin/www"
-  },
-  "dependencies": {
-    "mysql": "^2.18.1"
   }
 }

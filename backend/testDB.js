@@ -1,30 +1,44 @@
-// 테스트 용 파일
-const mysql = require('mysql2/promise');
+const { pool, testDbConnection } = require('./src/config/dbConfig');
 
-async function initDB() {
-    const connection = await mysql.createConnection({
-        host: '127.0.0.1',
-        user: 'root',
-        password: '비밀번호', // 설정하신 비밀번호
-        database: 'osDB'
-    });
+const expectedTables = [
+  'users',
+  'user_items',
+  'user_titles',
+  'match_code_history',
+  'rooms',
+  'room_participants',
+  'problems',
+  'matches',
+  'match_problems',
+  'match_submissions',
+  'match_rankings',
+  'friends',
+  'review_invites',
+];
 
-    const tables = [
-        "users", "userItems", "userTitles", "matchCodeHistory", "rooms", 
-        "roomParticipants", "problems", "matches", "matchProbles", 
-        "matchSubmissions", "matchRankings", "friends", "reviewInvites"
-    ];
+async function testDatabase() {
+  let connection;
 
-    for (const table of tables) {
-        // 실제로는 osDB.txt 내용을 바탕으로 CREATE TABLE 구문을 각각 넣어야 함
-        // 여기서는 예시로 테이블 존재 여부와 생성 확인용 코드를 구성
-        console.log(`✅ ${table} 테이블 생성/확인 중...`);
+  try {
+    await testDbConnection();
+    connection = await pool.getConnection();
+
+    const rows = await connection.query('SHOW TABLES');
+    const actualTables = rows.map((row) => Object.values(row)[0]);
+    const missingTables = expectedTables.filter((table) => !actualTables.includes(table));
+
+    if (missingTables.length > 0) {
+      throw new Error(`생성되지 않은 테이블이 있습니다: ${missingTables.join(', ')}`);
     }
 
-    const [rows] = await connection.execute('SHOW TABLES');
-    console.log('📊 최종 테이블 개수:', rows.length);
-    console.log(rows);
-    connection.end();
+    console.log(`MariaDB 테이블 ${expectedTables.length}개를 모두 확인했습니다.`);
+  } catch (error) {
+    console.error('MariaDB 확인에 실패했습니다:', error.message);
+    process.exitCode = 1;
+  } finally {
+    if (connection) connection.release();
+    await pool.end();
+  }
 }
 
-initDB();
+testDatabase();

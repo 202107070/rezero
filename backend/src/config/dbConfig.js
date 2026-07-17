@@ -1,29 +1,29 @@
-const mysql = require('mysql'); 
-require('dotenv').config();
+require('./envConfig');
 
-// MariaDB 연결 설정
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || '127.0.0.1',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'osDB',
-    port: process.env.DB_PORT || 3306,
-    connectionLimit: 10
+const mariadb = require('mariadb');
+
+const pool = mariadb.createPool({
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 5),
 });
 
-// DB 연결 테스트 함수 (콜백 방식 적용)
-function connectDB() {
-    pool.getConnection((err, connection) => {
-        if (err) {
-            console.error('[MariaDB] Warning: Could not connect to DB, skipping...', err.message);
-            return;
-        }
-        console.log('[MariaDB] connected successfully');
-        connection.release();
-    });
+async function testDbConnection() {
+  let connection;
+
+  try {
+    connection = await pool.getConnection();
+    await connection.query('SELECT 1');
+    console.log('[MariaDB] connected');
+  } finally {
+    if (connection) connection.release();
+  }
 }
 
 module.exports = {
-    pool,
-    connectDB
+  pool,
+  testDbConnection,
 };
