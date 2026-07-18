@@ -1,8 +1,8 @@
-require('./envConfig');
+import './envConfig.js';
 
-const mariadb = require('mariadb');
+import mariadb from 'mariadb';
 
-const pool = mariadb.createPool({
+export const pool = mariadb.createPool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT || 3306),
   user: process.env.DB_USER,
@@ -11,7 +11,7 @@ const pool = mariadb.createPool({
   connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 5),
 });
 
-async function testDbConnection() {
+export async function testDbConnection() {
   let connection;
 
   try {
@@ -22,8 +22,3 @@ async function testDbConnection() {
     if (connection) connection.release();
   }
 }
-
-module.exports = {
-  pool,
-  testDbConnection,
-};

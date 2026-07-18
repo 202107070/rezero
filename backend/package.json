@@ -1,6 +1,11 @@
 {
+  "name": "rezero-backend",
+  "private": true,
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "preinstall": "node ../scripts/guard-root-install.js"
+    "preinstall": "node ../scripts/guard-root-install.js",
+    "start": "node bin/www",
+    "dev": "nodemon bin/www"
   }
 }

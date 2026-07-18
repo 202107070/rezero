@@ -1,4 +1,4 @@
-const { redisClient, connectRedis } = require('./src/config/redisConfig');
+import { redisClient, connectRedis } from './src/config/redisConfig.js';
 
 async function testValkey() {
   const key = 'test:valkey-connection';
