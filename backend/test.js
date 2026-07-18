@@ -1,5 +1,5 @@
-const { pool, testDbConnection } = require('./src/config/dbConfig');
-const { redisClient, connectRedis } = require('./src/config/redisConfig');
+import { pool, testDbConnection } from './src/config/dbConfig.js';
+import { redisClient, connectRedis } from './src/config/redisConfig.js';
 
 async function testConnections() {
   try {

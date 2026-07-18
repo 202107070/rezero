@@ -1,8 +1,8 @@
-const express = require('express');
-const logger = require('morgan');
+import express from 'express';
+import logger from 'morgan';
 
-const healthRouter = require('./src/api/health/router');
-const { notFoundHandler, errorHandler } = require('./src/middleware/errorHandler');
+import healthRouter from './src/api/health/router.js';
+import { notFoundHandler, errorHandler } from './src/middleware/errorHandler.js';
 
 const app = express();
 
@@ -18,4 +18,4 @@ app.use('/api/v1/health', healthRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

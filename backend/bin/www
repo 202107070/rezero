@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-const http = require('http');
+import http from 'node:http';
 
-const app = require('../app');
-const { env } = require('../src/config/envConfig');
-const { pool, testDbConnection } = require('../src/config/dbConfig');
-const { redisClient, connectRedis } = require('../src/config/redisConfig');
+import app from '../app.js';
+import { env } from '../src/config/envConfig.js';
+import { pool, testDbConnection } from '../src/config/dbConfig.js';
+import { redisClient, connectRedis } from '../src/config/redisConfig.js';
 
 const server = http.createServer(app);
 

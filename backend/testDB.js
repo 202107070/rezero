@@ -1,4 +1,4 @@
-const { pool, testDbConnection } = require('./src/config/dbConfig');
+import { pool, testDbConnection } from './src/config/dbConfig.js';
 
 const expectedTables = [
   'users',
