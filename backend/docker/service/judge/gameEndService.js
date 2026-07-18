@@ -1,8 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
+import { CONTAINER_CONFIG } from "../../docker/contaienrConfig.js";
 
-const SANDBOX_PATH = "/home/yhpark/rezero/backend/docker/sandbox";
-const RESULTBOX_PATH = "/home/yhpark/rezero/backend/docker/resultbox";
+const SANDBOX_PATH = CONTAINER_CONFIG.containerSandboxPath;
+const RESULTBOX_PATH = CONTAINER_CONFIG.containerResultboxPath;
 
 async function saveFinalResult(matchingRoomId, userId, compileResult) {
     const finalResultFileName = `final_${matchingRoomId}_${userId}_${Date.now()}.json`;

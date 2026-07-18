@@ -1,7 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
+import { CONTAINER_CONFIG } from "../../docker/contaienrConfig.js";
 
-const SANDBOX_PATH = "/home/yhpark/rezero/backend/docker/sandbox";
+const SANDBOX_PATH = CONTAINER_CONFIG.containerSandboxPath;
 
 export const fileService = {
     getExt(language) {
