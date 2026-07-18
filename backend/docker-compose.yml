@@ -1,0 +1,12 @@
+services:
+  build-compiler:
+    build:
+      context: ./docker/docker/gameroom
+    image: localhost/gameroom-image:latest
+    container_name: build_compiler_sandbox
+    command: tail -f /dev/null
+    volumes:
+      - ./docker/sandbox:/usr/src/sandbox:rw
+      - ./docker/resultbox:/usr/src/resultbox:rw
+    network_mode: "none"
+    restart: always
