@@ -16,5 +16,5 @@ export function errorHandler(error, req, res, next) {
   const message = status === 500 ? '서버에서 오류가 발생했습니다.' : error.message;
 
   if (status === 500) console.error(error);
-  return sendError(res, status, code, message);
+  return sendError(res, status, code, message, error.details);
 }
