@@ -5,6 +5,15 @@ import healthRouter from './src/api/health/router.js';
 import userRouter from './src/api/user/router.js';
 import { notFoundHandler, errorHandler } from './src/middleware/errorHandler.js';
 
+// 비동기 처리 중 예외가 발생해 서버 프로세스가 종료되는 것을 방지
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection 발생:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception 발생:', err);
+});
+
 const app = express();
 
 app.use(logger('dev'));
