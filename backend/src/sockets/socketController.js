@@ -1,37 +1,35 @@
-import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import { env } from "./envConfig.js";
-import { validateJoinRoom, validateSendMessage } from "../sockets/socketDto.js";
+import { authConfig } from "../config/authConfig.js";
+import { validateJoinRoom, validateSendMessage } from "./socketDto.js";
 import {
   saveAndFormatMessage,
   getRecentMessages,
-} from "../sockets/socketService.js";
-
-// socketDto.js 등에서 참조하는 socketConfig 설정 객체 추가
-export const socketConfig = {
-  maxMessageLength: 500,
-  recentMessageLimit: 50,
-  defaultRoom: "room_lobby",
-};
+} from "./socketService.js";
 
 export function socketAuthMiddleware(socket, next) {
-  let token =
-    socket.handshake.auth?.token || socket.handshake.headers?.authorization;
+  let token;
+  if (socket.handshake.auth && socket.handshake.auth.token) {
+    token = socket.handshake.auth.token;
+  } else if (
+    socket.handshake.headers &&
+    socket.handshake.headers.authorization
+  ) {
+    token = socket.handshake.headers.authorization;
+  }
 
   if (!token) {
-    return next(new Error("소켓 인증 실패 : 토큰이 존재하지 않습니다."));
+    return next(new Error("소켓 인증 실패: 토큰이 존재하지 않습니다."));
   }
 
   try {
     let actualToken;
-    if (token.startsWith("Bearer ")) {
+    if (token.indexOf("Bearer ") === 0) {
       actualToken = token.split(" ")[1];
     } else {
       actualToken = token;
     }
 
-    const secret = env.jwtSecret || process.env.JWT_SECRET;
-    const decoded = jwt.verify(actualToken, secret);
+    const decoded = jwt.verify(actualToken, authConfig.jwtSecret);
 
     socket.user = {
       id: decoded.id,
@@ -42,7 +40,7 @@ export function socketAuthMiddleware(socket, next) {
     next();
   } catch (err) {
     return next(
-      new Error("소켓 인증 실패 : 유효하지 않거나 만료된 토큰입니다."),
+      new Error("소켓 인증 실패: 유효하지 않거나 만료된 토큰입니다."),
     );
   }
 }
@@ -105,21 +103,4 @@ export function registerChatHandlers(io, socket) {
   socket.on("disconnect", function () {
     console.log("[Socket 연결 종료] " + socket.user.displayName);
   });
-}
-
-export function initSocket(server) {
-  const io = new Server(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-    },
-  });
-
-  io.use(socketAuthMiddleware);
-
-  io.on("connection", (socket) => {
-    registerChatHandlers(io, socket);
-  });
-
-  return io;
 }

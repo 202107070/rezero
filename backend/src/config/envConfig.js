@@ -13,4 +13,6 @@ export const env = {
   host: process.env.HOST || '0.0.0.0',
   // 프론트 개발 서버의 /api 프록시 포트와 동일한 8080을 사용합니다.
   port: Number(process.env.PORT || 8080),
+  jwtSecret: process.env.JWT_SECRET || '',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
 };

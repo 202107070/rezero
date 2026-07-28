@@ -6,8 +6,12 @@ import app from '../app.js';
 import { env } from '../src/config/envConfig.js';
 import { pool, testDbConnection } from '../src/config/dbConfig.js';
 import { redisClient, connectRedis } from '../src/config/redisConfig.js';
+import { initSocket } from '../src/config/socketConfig.js'; // 소켓 초기화 함수 임포트
 
 const server = http.createServer(app);
+
+// 프로젝트 내 구현된 Socket.io 모듈 초기화
+initSocket(server);
 
 async function startServer() {
   // DB와 Valkey가 둘 다 연결돼야 서버를 열 수 있습니다.

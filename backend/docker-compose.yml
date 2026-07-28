@@ -1,12 +1,46 @@
 services:
-  build-compiler:
+  game-server:
     build:
-      context: ./docker/docker/gameroom
-    image: localhost/gameroom-image:latest
-    container_name: build_compiler_sandbox
-    command: tail -f /dev/null
-    volumes:
-      - ./docker/sandbox:/usr/src/sandbox:Z
-      - ./docker/resultbox:/usr/src/resultbox:Z
-    network_mode: "none"
+      context: .
+      dockerfile: ./src/infra/docker/gameroom/game.Dockerfile
+    container_name: game-room
     restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./src/infra/mountpoint/sandbox:/app/src/infra/mountpoint/sandbox:z
+      - ./src/infra/mountpoint/resultbox:/app/src/infra/mountpoint/resultbox:z
+    depends_on:
+      - db
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+      - "host.docker.internal:host-gateway"
+
+  code-runner:
+    build:
+      context: .
+      dockerfile: ./src/infra/docker/buildsystem/build.Dockerfile
+    container_name: build-runner
+    restart: always
+    volumes:
+      - ./src/infra/mountpoint/sandbox:/app/sandbox:z
+      - ./src/infra/mountpoint/resultbox:/app/resultbox:z
+    tty: true
+    stdin_open: true
+
+  db:
+    image: mariadb:10.11
+    container_name: game-db
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: "root_password_1234"
+      MARIADB_DATABASE: "rezero_game"
+      MARIADB_USER: "game_user"
+      MARIADB_PASSWORD: "user_password_5678"
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./src/infra/mountpoint/dbbox:/var/lib/mysql:z
+      - ./src/infra/docker/gameroom/init.sql:/docker-entrypoint-initdb.d/init.sql:z
