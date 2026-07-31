@@ -11,12 +11,12 @@ RUN curl -fsSL "https://github.com/valkey-io/valkey/archive/refs/tags/${VALKEY_V
  && make -C "/tmp/valkey-${VALKEY_VERSION}" install PREFIX=/opt/valkey USE_REDIS_SYMLINKS=no \
  && rm -rf "/tmp/valkey-${VALKEY_VERSION}"
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi9/ubi:latest
 
-RUN microdnf update -y && microdnf install -y \
-    nodejs \
-    npm \
-    && microdnf clean all
+RUN dnf update -y \
+ && dnf module enable nodejs:20 -y \
+ && dnf install -y nodejs \
+ && dnf clean all
 
 COPY --from=valkey-build /opt/valkey/bin/valkey-server /usr/local/bin/valkey-server
 COPY --from=valkey-build /opt/valkey/bin/valkey-cli /usr/local/bin/valkey-cli
@@ -24,7 +24,8 @@ COPY --from=valkey-build /opt/valkey/bin/valkey-cli /usr/local/bin/valkey-cli
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+# backend/package.json 의 preinstall은 저장소 루트 전용이라 컨테이너 빌드에서는 건너뜁니다.
+RUN npm install --ignore-scripts
 
 COPY . .
 
