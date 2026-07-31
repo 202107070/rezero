@@ -52,21 +52,19 @@ services:
       MARIADB_DATABASE: "rezero_game"
       MARIADB_USER: "game_user"
       MARIADB_PASSWORD: "user_password_5678"
-    ports:
-      - "3306:3306"
+    # 호스트 3306 충돌 방지: compose 네트워크 내부에서만 노출합니다.
     volumes:
       - ./src/infra/mountpoint/dbbox:/var/lib/mysql:z
       - ./src/infra/docker/gameroom/init.sql:/docker-entrypoint-initdb.d/init.sql:z
 
-  # Valkey(Redis 호환). backend/.env 의 REDIS_PORT 를 사용합니다.
+  # Valkey(Redis 호환). game-server 는 REDIS_HOST=redis 로 접속합니다.
   redis:
     image: docker.io/valkey/valkey:8.1-alpine
     container_name: game-redis
     restart: always
     env_file:
       - .env
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    # 호스트 6379 충돌 방지: compose 네트워크 내부에서만 노출합니다.
     command: ["valkey-server", "--appendonly", "yes"]
     volumes:
       - ./src/infra/mountpoint/redisbox:/data:z
