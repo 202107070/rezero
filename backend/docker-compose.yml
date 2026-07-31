@@ -7,11 +7,17 @@ services:
     restart: always
     ports:
       - "3000:3000"
+      - "6379:6379"
+    environment:
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
     volumes:
       - .:/app
       - /app/node_modules
       - ./src/infra/mountpoint/sandbox:/app/src/infra/mountpoint/sandbox:z
       - ./src/infra/mountpoint/resultbox:/app/src/infra/mountpoint/resultbox:z
+      - ./src/infra/mountpoint/valkeybox:/data:z
     depends_on:
       - db
     extra_hosts:
