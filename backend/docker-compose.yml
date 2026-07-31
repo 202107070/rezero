@@ -1,22 +1,29 @@
 services:
   game-server:
     build:
-      context: .
-      dockerfile: ./src/infra/docker/gameroom/game.Dockerfile
+      context: ..
+      dockerfile: backend/src/infra/docker/gameroom/game.Dockerfile
     container_name: game-room
     restart: always
     env_file:
       - .env
     environment:
       # compose 네트워크 안에서는 서비스 이름을 호스트로 사용합니다.
+      PORT: "3000"
       REDIS_HOST: redis
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: game_user
+      DB_PASSWORD: user_password_5678
+      DB_NAME: rezero_game
     ports:
       - "3000:3000"
     volumes:
-      - .:/app
+      - ..:/app
       - /app/node_modules
-      - ./src/infra/mountpoint/sandbox:/app/src/infra/mountpoint/sandbox:z
-      - ./src/infra/mountpoint/resultbox:/app/src/infra/mountpoint/resultbox:z
+      - /app/backend/node_modules
+      - ./src/infra/mountpoint/sandbox:/app/backend/src/infra/mountpoint/sandbox:z
+      - ./src/infra/mountpoint/resultbox:/app/backend/src/infra/mountpoint/resultbox:z
     depends_on:
       - db
       - redis
@@ -37,7 +44,7 @@ services:
     stdin_open: true
 
   db:
-    image: mariadb:10.11
+    image: docker.io/library/mariadb:10.11
     container_name: game-db
     restart: always
     environment:
@@ -51,27 +58,20 @@ services:
       - ./src/infra/mountpoint/dbbox:/var/lib/mysql:z
       - ./src/infra/docker/gameroom/init.sql:/docker-entrypoint-initdb.d/init.sql:z
 
-  # Valkey(Redis 호환). backend/.env 의 REDIS_* 값을 사용합니다.
+  # Valkey(Redis 호환). backend/.env 의 REDIS_PORT 를 사용합니다.
   redis:
-    image: valkey/valkey:8.1-alpine
+    image: docker.io/valkey/valkey:8.1-alpine
     container_name: game-redis
     restart: always
     env_file:
       - .env
     ports:
       - "${REDIS_PORT:-6379}:6379"
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        if [ -n "$$REDIS_PASSWORD" ]; then
-          exec valkey-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
-        else
-          exec valkey-server --appendonly yes
-        fi
+    command: ["valkey-server", "--appendonly", "yes"]
     volumes:
       - ./src/infra/mountpoint/redisbox:/data:z
     healthcheck:
-      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then valkey-cli -a \"$$REDIS_PASSWORD\" ping; else valkey-cli ping; fi"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10

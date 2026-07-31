@@ -1,20 +1,23 @@
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi9/ubi:latest
 
-RUN microdnf update -y && microdnf install -y \
-    nodejs \
-    npm \
-    && microdnf clean all
+RUN dnf update -y \
+ && dnf module enable nodejs:20 -y \
+ && dnf install -y nodejs \
+ && dnf clean all
 
 WORKDIR /app
 
+# 루트 의존성(express, redis, mariadb 등) + backend 의존성(socket.io 등)
 COPY package*.json ./
-RUN npm install
+COPY scripts ./scripts
+COPY backend/package*.json ./backend/
+RUN npm install --ignore-scripts \
+ && npm install --ignore-scripts --prefix ./backend
 
-COPY . .
+COPY backend ./backend
 
-RUN chown -R 1001:0 /app
-USER 1001
+WORKDIR /app/backend
 
 EXPOSE 3000
 
-CMD ["node", "app.js"]
+CMD ["node", "bin/www"]
