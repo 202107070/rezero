@@ -5,6 +5,11 @@ services:
       dockerfile: ./src/infra/docker/gameroom/game.Dockerfile
     container_name: game-room
     restart: always
+    env_file:
+      - .env
+    environment:
+      # compose 네트워크 안에서는 서비스 이름을 호스트로 사용합니다.
+      REDIS_HOST: redis
     ports:
       - "3000:3000"
     volumes:
@@ -14,6 +19,7 @@ services:
       - ./src/infra/mountpoint/resultbox:/app/src/infra/mountpoint/resultbox:z
     depends_on:
       - db
+      - redis
     extra_hosts:
       - "host.containers.internal:host-gateway"
       - "host.docker.internal:host-gateway"
@@ -44,3 +50,29 @@ services:
     volumes:
       - ./src/infra/mountpoint/dbbox:/var/lib/mysql:z
       - ./src/infra/docker/gameroom/init.sql:/docker-entrypoint-initdb.d/init.sql:z
+
+  # Valkey(Redis 호환). backend/.env 의 REDIS_* 값을 사용합니다.
+  redis:
+    image: valkey/valkey:8.1-alpine
+    container_name: game-redis
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec valkey-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+        else
+          exec valkey-server --appendonly yes
+        fi
+    volumes:
+      - ./src/infra/mountpoint/redisbox:/data:z
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then valkey-cli -a \"$$REDIS_PASSWORD\" ping; else valkey-cli ping; fi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
