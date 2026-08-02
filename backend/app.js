@@ -2,6 +2,7 @@ import express from 'express';
 import logger from 'morgan';
 
 import healthRouter from './src/api/health/router.js';
+import roomRouter from './src/api/room/router.js';
 import userRouter from './src/api/user/router.js';
 import { notFoundHandler, errorHandler } from './src/middleware/errorHandler.js';
 
@@ -24,6 +25,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/health', healthRouter);
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1', userRouter);
+app.use('/api/v1', roomRouter);
 
 // 등록되지 않은 주소와 실행 중 발생한 오류는 아래 공통 처리 부분을 확인하시면 됩니다.
 app.use(notFoundHandler);
