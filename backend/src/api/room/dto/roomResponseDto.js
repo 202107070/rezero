@@ -5,7 +5,7 @@ function toTimestamp(value) {
 
 export function toParticipantResponse(participant) {
   return {
-    id: participant.id,
+    id: Number(participant.id),
     userId: participant.userId,
     name: participant.displayName,
     slotIndex: Number(participant.slotIndex),
