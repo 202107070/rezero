@@ -46,3 +46,23 @@ export function validateSendMessage(data) {
     message: trimmedMessage,
   };
 }
+
+export function validateReadyChange(data) {
+  if (
+    !data ||
+    !data.roomId ||
+    typeof data.roomId !== "string" ||
+    data.roomId.trim() === ""
+  ) {
+    throw new Error("READY 상태를 변경할 roomId가 필요합니다.");
+  }
+
+  if (typeof data.isReady !== "boolean") {
+    throw new Error("isReady 값은 true 또는 false여야 합니다.");
+  }
+
+  return {
+    roomId: data.roomId.trim(),
+    isReady: data.isReady,
+  };
+}

@@ -1,10 +1,15 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { env } from "./envConfig.js";
-import { validateJoinRoom, validateSendMessage } from "../sockets/socketDto.js";
+import {
+  validateJoinRoom,
+  validateReadyChange,
+  validateSendMessage,
+} from "../sockets/socketDto.js";
 import {
   saveAndFormatMessage,
   getRecentMessages,
+  saveReadyState,
 } from "../sockets/socketService.js";
 
 // socketDto.js 등에서 참조하는 socketConfig 설정 객체 추가
@@ -34,7 +39,7 @@ export function socketAuthMiddleware(socket, next) {
     const decoded = jwt.verify(actualToken, secret);
 
     socket.user = {
-      id: decoded.id,
+      id: decoded.sub || decoded.id,
       username: decoded.username,
       displayName: decoded.displayName,
     };
@@ -96,6 +101,27 @@ export function registerChatHandlers(io, socket) {
       }
     } catch (error) {
       socket.emit("chat_error", { message: error.message });
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on("toggle_ready", async function (data, callback) {
+    try {
+      const validatedData = validateReadyChange(data);
+      const readyState = await saveReadyState({
+        roomId: validatedData.roomId,
+        userId: socket.user.id,
+        isReady: validatedData.isReady,
+      });
+
+      io.to(validatedData.roomId).emit("ready_changed", readyState);
+
+      if (typeof callback === "function") {
+        callback({ success: true, readyState: readyState });
+      }
+    } catch (error) {
       if (typeof callback === "function") {
         callback({ success: false, message: error.message });
       }
