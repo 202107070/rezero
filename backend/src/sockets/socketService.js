@@ -53,3 +53,37 @@ export async function getRecentMessages(roomId) {
 
   return [];
 }
+
+export async function saveReadyState(params) {
+  const roomId = params.roomId;
+  const userId = String(params.userId);
+  const participantsKey = "room:" + roomId + ":participants";
+  const readyKey = "room:" + roomId + ":ready";
+  const stateKey = "room:" + roomId + ":state";
+
+  const roomState = await redisClient.hGetAll(stateKey);
+  if (!roomState || !roomState.hostUserId) {
+    throw new Error("현재 대기 중인 방을 찾을 수 없습니다.");
+  }
+
+  const isParticipant = await redisClient.sIsMember(participantsKey, userId);
+  if (!isParticipant) {
+    throw new Error("방에 참가한 사용자만 READY 상태를 변경할 수 있습니다.");
+  }
+
+  if (String(roomState.hostUserId) === userId) {
+    throw new Error("방장은 READY 대상이 아닙니다.");
+  }
+
+  if (params.isReady) {
+    await redisClient.sAdd(readyKey, userId);
+  } else {
+    await redisClient.sRem(readyKey, userId);
+  }
+
+  return {
+    roomId: String(roomId),
+    userId,
+    isReady: params.isReady,
+  };
+}

@@ -3,6 +3,7 @@ import {
   connectRedis,
   redisClient,
 } from './src/config/redisConfig.js';
+import { io } from 'socket.io-client';
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:8080';
 const createdUserIds = [];
@@ -12,6 +13,58 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function connectSocket(token) {
+  const socket = io(BASE_URL, {
+    auth: { token: `Bearer ${token}` },
+    transports: ['polling', 'websocket'],
+  });
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.disconnect();
+      reject(new Error('Socket 연결 시간이 초과됐습니다.'));
+    }, 5000);
+
+    socket.once('connect', () => {
+      clearTimeout(timeout);
+      resolve(socket);
+    });
+    socket.once('connect_error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
+function emitWithAck(socket, eventName, data) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${eventName} 응답 시간이 초과됐습니다.`));
+    }, 5000);
+
+    socket.emit(eventName, data, (response) => {
+      clearTimeout(timeout);
+      resolve(response);
+    });
+  });
+}
+
+function waitForEvent(socket, eventName) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off(eventName, listener);
+      reject(new Error(`${eventName} 수신 시간이 초과됐습니다.`));
+    }, 5000);
+
+    function listener(data) {
+      clearTimeout(timeout);
+      resolve(data);
+    }
+
+    socket.once(eventName, listener);
+  });
 }
 
 async function request(path, options = {}) {
@@ -167,6 +220,44 @@ async function runTest() {
   assert(joinResult.response.status === 200, '방 입장에 실패했습니다.');
   assert(joinResult.data.players === '2/2', '방 입장 후 인원이 올바르지 않습니다.');
   console.log('PASS: 방 입장');
+
+  let hostSocket;
+  let guestSocket;
+
+  try {
+    hostSocket = await connectSocket(host.token);
+    guestSocket = await connectSocket(guest.token);
+    await emitWithAck(hostSocket, 'join_room', { roomId: String(roomId) });
+    await emitWithAck(guestSocket, 'join_room', { roomId: String(roomId) });
+
+    const readyChanged = waitForEvent(hostSocket, 'ready_changed');
+    const readyAck = await emitWithAck(guestSocket, 'toggle_ready', {
+      roomId: String(roomId),
+      isReady: true,
+    });
+    const readyEvent = await readyChanged;
+
+    assert(readyAck.success, 'READY 저장 응답을 확인해 주세요.');
+    assert(
+      readyEvent.userId === guest.id && readyEvent.isReady,
+      'READY 변경 상태가 방 참가자에게 전달되지 않았습니다.',
+    );
+
+    const canStartResult = await request(`/api/v1/rooms/${roomId}/can-start`, {
+      token: host.token,
+    });
+    assert(canStartResult.response.status === 200, '게임 시작 조건 조회에 실패했습니다.');
+    assert(canStartResult.data.data.canStart, '1/1 방의 게임 시작 조건을 확인해 주세요.');
+
+    await emitWithAck(guestSocket, 'toggle_ready', {
+      roomId: String(roomId),
+      isReady: false,
+    });
+    console.log('PASS: READY Valkey 저장, Socket 전달, 게임 시작 조건 확인');
+  } finally {
+    if (hostSocket) hostSocket.disconnect();
+    if (guestSocket) guestSocket.disconnect();
+  }
 
   const duplicateJoin = await request(`/api/v1/rooms/${roomId}/join`, {
     method: 'POST',
