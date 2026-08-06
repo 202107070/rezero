@@ -410,6 +410,18 @@ export async function closeRoom(roomId) {
   }
 }
 
+export async function markRoomStarted(roomId) {
+  const result = await pool.query(
+    `UPDATE rooms
+     SET status = 'STARTED'
+     WHERE id = ?
+       AND status = 'WAITING'`,
+    [roomId],
+  );
+
+  return Number(result.affectedRows) > 0;
+}
+
 // 방 생성 중 Valkey 저장이 실패한 경우에만 미완성 기록을 완전히 정리합니다.
 export async function hardDeleteRoom(roomId) {
   const result = await pool.query(

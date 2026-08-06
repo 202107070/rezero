@@ -10,6 +10,7 @@ import {
   joinRoom,
   leaveRoom,
   removeRoom,
+  startRoom,
 } from './service.js';
 import { sendSuccess } from '../../utils/responseHelper.js';
 
@@ -57,6 +58,16 @@ export async function leave(req, res, next) {
   try {
     const roomId = parseRoomId(req.params.id);
     const result = await leaveRoom(roomId, req.user.id);
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function start(req, res, next) {
+  try {
+    const roomId = parseRoomId(req.params.id);
+    const result = await startRoom(roomId, req.user.id);
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);
