@@ -401,6 +401,108 @@ async function runTest() {
   );
   console.log('PASS: 마지막 참가자 퇴장 시 방 종료');
 
+  const startRoomResult = await request('/api/v1/rooms', {
+    method: 'POST',
+    token: host.token,
+    body: {
+      roomTitle: '게임 시작 API 테스트방',
+      playerMode: '1/1',
+      gameMode: 'normal',
+      difficulty: '보통',
+      language: 'JAVA',
+      roomPwd: '',
+      problemCount: 5,
+    },
+  });
+  assert(startRoomResult.response.status === 201, '게임 시작 테스트용 방 생성에 실패했습니다.');
+
+  const startRoomId = startRoomResult.data.id;
+  createdRoomIds.push(startRoomId);
+
+  const insufficientPlayers = await request(`/api/v1/rooms/${startRoomId}/start`, {
+    method: 'POST',
+    token: host.token,
+  });
+  assert(
+    insufficientPlayers.response.status === 409
+      && insufficientPlayers.data.error.code === 'ROOM_MINIMUM_PLAYERS_REQUIRED',
+    '최소 인원 미달 상태에서 게임 시작이 차단되지 않았습니다.',
+  );
+  console.log('PASS: 게임 시작 최소 인원 확인');
+
+  const startRoomJoin = await request(`/api/v1/rooms/${startRoomId}/join`, {
+    method: 'POST',
+    token: guest.token,
+    body: { language: 'JAVA', character: 'char2' },
+  });
+  assert(startRoomJoin.response.status === 200, '게임 시작 테스트방 입장에 실패했습니다.');
+
+  const nonHostStart = await request(`/api/v1/rooms/${startRoomId}/start`, {
+    method: 'POST',
+    token: guest.token,
+  });
+  assert(
+    nonHostStart.response.status === 403
+      && nonHostStart.data.error.code === 'ROOM_START_FORBIDDEN',
+    '방장이 아닌 사용자의 게임 시작이 차단되지 않았습니다.',
+  );
+  console.log('PASS: 게임 시작 방장 권한 확인');
+
+  const notReadyStart = await request(`/api/v1/rooms/${startRoomId}/start`, {
+    method: 'POST',
+    token: host.token,
+  });
+  assert(
+    notReadyStart.response.status === 409
+      && notReadyStart.data.error.code === 'ROOM_PARTICIPANTS_NOT_READY',
+    'READY하지 않은 참가자가 있는데 게임이 시작됐습니다.',
+  );
+  console.log('PASS: 게임 시작 READY 상태 확인');
+
+  await connectRedis();
+  await redisClient.sAdd(`room:${startRoomId}:ready`, String(guest.id));
+
+  const startSuccess = await request(`/api/v1/rooms/${startRoomId}/start`, {
+    method: 'POST',
+    token: host.token,
+  });
+  assert(startSuccess.response.status === 200, '정상적인 게임 시작 요청에 실패했습니다.');
+  assert(
+    startSuccess.data.roomId === startRoomId
+      && startSuccess.data.status === 'STARTED',
+    '게임 시작 응답값을 확인해 주세요.',
+  );
+
+  const startedRoomRows = await pool.query(
+    'SELECT status FROM rooms WHERE id = ?',
+    [startRoomId],
+  );
+  assert(
+    startedRoomRows.length === 1 && startedRoomRows[0].status === 'STARTED',
+    'MariaDB의 방 상태가 STARTED로 변경되지 않았습니다.',
+  );
+
+  const valkeyRoomStatus = await redisClient.hGet(
+    `room:${startRoomId}:state`,
+    'status',
+  );
+  assert(
+    valkeyRoomStatus === 'STARTED',
+    'Valkey의 방 상태가 STARTED로 변경되지 않았습니다.',
+  );
+  console.log('PASS: 게임 시작과 MariaDB/Valkey 상태 변경');
+
+  const duplicateStart = await request(`/api/v1/rooms/${startRoomId}/start`, {
+    method: 'POST',
+    token: host.token,
+  });
+  assert(
+    duplicateStart.response.status === 409
+      && duplicateStart.data.error.code === 'ROOM_ALREADY_STARTED',
+    '이미 시작한 방의 중복 시작이 차단되지 않았습니다.',
+  );
+  console.log('PASS: 게임 중복 시작 차단');
+
   const missingRoom = await request('/api/v1/rooms/999999999', {
     token: host.token,
   });

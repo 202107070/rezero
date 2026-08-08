@@ -239,6 +239,81 @@ export async function leaveRoom(roomId, userId) {
   };
 }
 
+export async function startRoom(roomId, userId) {
+  const room = await roomModel.findRoomById(roomId);
+
+  if (!room) {
+    throw roomNotFound();
+  }
+
+  if (String(room.hostUserId) !== String(userId)) {
+    throw new AppError(
+      403,
+      'ROOM_START_FORBIDDEN',
+      '방장만 게임을 시작할 수 있습니다.',
+    );
+  }
+
+  if (room.status !== 'WAITING') {
+    throw new AppError(
+      409,
+      'ROOM_ALREADY_STARTED',
+      '대기 중인 방만 게임을 시작할 수 있습니다.',
+    );
+  }
+
+  const participants = await redisClient.sMembers(roomParticipantsKey(roomId));
+  const readyUserIds = await redisClient.sMembers(roomReadyKey(roomId));
+  const nonHostUserIds = participants.filter(
+    (participantId) => String(participantId) !== String(room.hostUserId),
+  );
+  const minimumPlayers = room.mode === '1/1' ? 2 : 3;
+
+  if (participants.length < minimumPlayers) {
+    throw new AppError(
+      409,
+      'ROOM_MINIMUM_PLAYERS_REQUIRED',
+      `게임 시작에는 최소 ${minimumPlayers}명이 필요합니다.`,
+    );
+  }
+
+  const readyUserIdSet = new Set(readyUserIds.map(String));
+  const allParticipantsReady = nonHostUserIds.length > 0
+    && nonHostUserIds.every((participantId) => (
+      readyUserIdSet.has(String(participantId))
+    ));
+
+  if (!allParticipantsReady) {
+    throw new AppError(
+      409,
+      'ROOM_PARTICIPANTS_NOT_READY',
+      '방장을 제외한 모든 참가자가 READY 상태여야 합니다.',
+    );
+  }
+
+  const started = await roomModel.markRoomStarted(roomId);
+
+  if (!started) {
+    throw new AppError(
+      409,
+      'ROOM_ALREADY_STARTED',
+      '대기 중인 방만 게임을 시작할 수 있습니다.',
+    );
+  }
+
+  await redisClient.hSet(roomStateKey(roomId), {
+    status: 'STARTED',
+    updatedAt: new Date().toISOString(),
+  });
+
+  return {
+    roomId,
+    status: 'STARTED',
+    totalPlayers: participants.length,
+    readyPlayers: nonHostUserIds.length,
+  };
+}
+
 export async function removeRoom(roomId, userId) {
   const room = await roomModel.findRoomWithPassword(roomId);
 
