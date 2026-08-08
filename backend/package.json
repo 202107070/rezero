@@ -8,9 +8,16 @@
     "start": "node bin/www",
     "dev": "nodemon bin/www"
   },
-  "dependencies": {
-    "jsonwebtoken": "^9.0.3",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+  "imports": {
+    "#config/*": "./src/config/*",
+    "#controller/*": "./src/controller/*",
+    "#middleware/*": "./src/middleware/*",
+    "#model/*": "./src/model/*",
+    "#utils/*": "./src/utils/*",
+    "#service/*": "./src/service/*",
+    "#handler/*": "./src/handler/*",
+    "#dto/*": "./src/dto/*",
+    "#infra/*": "./src/infra/*",
+    "#constants/*": "./src/constants/*"
   }
 }

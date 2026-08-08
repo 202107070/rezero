@@ -1,5 +1,4 @@
-// src/manageRoom/gameStartController.js
-import gameStartService from "./gameStartService.js";
+import gameStartService from "#service/manageGameService.js";
 
 class GameStartController {
   async checkRoomCanStart(roomId) {

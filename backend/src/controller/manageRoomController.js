@@ -1,5 +1,4 @@
-// src/manageroom/manageRoomController.js
-import manageRoomService from "./manageRoomService.js";
+import manageRoomService from "#service/manageRoomService.js";
 
 class ManageRoomController {
   async fetchRooms(limit) {

@@ -1,5 +1,4 @@
-// src/manageroom/manageRoomDto.js
-import { ROOM_STATUS } from "./manageRoomConfig.js";
+import { ROOM_STATUS } from "#config/manageRoomConfig.js";
 
 export class ManageRoomDto {
   constructor(room) {

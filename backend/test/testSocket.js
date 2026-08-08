@@ -5,7 +5,7 @@ const BASE_URL = "http://localhost:8080";
 async function runSocketTest() {
   console.log("--- Socket.io 채팅 기능 통합 테스트 시작 ---");
 
-  // 유효성 검사 규칙(영문 소문자, 숫자, 밑줄, 3자 이상)을 만족하는 고유 계정 생성
+  // 유효성 검사 규칙(영문 소문자, 숫자, 밑줄, 3자 이상)을 만족하는 고유 계정 생성[cite: 2]
   const uniqueId = Date.now();
   const testUser = {
     username: `user_${uniqueId}`,
@@ -45,7 +45,7 @@ async function runSocketTest() {
 
     const loginData = await loginRes.json();
 
-    // 응답 헬퍼 구조에 맞춰 token 추출 (result.token 또는 직접 token)
+    // 응답 헬퍼 구조에 맞춰 token 추출 (result.token 또는 직접 token)[cite: 4]
     accessToken = loginData.token || loginData.result?.token;
 
     if (loginRes.status === 200 && accessToken) {
@@ -64,7 +64,8 @@ async function runSocketTest() {
     auth: {
       token: `Bearer ${accessToken}`,
     },
-    transports: ["websocket"],
+    // polling 전송 방식을 포함하여 안정적인 소켓 연결 핸드셰이크 보장
+    transports: ["polling", "websocket"],
   });
 
   socket.on("connect", () => {

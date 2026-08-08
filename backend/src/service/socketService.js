@@ -1,5 +1,5 @@
-import { pool } from "../config/dbConfig.js";
-import { redisClient } from "../config/redisConfig.js";
+import { pool } from "#config/dbConfig.js";
+import { redisClient } from "#config/redisConfig.js";
 
 export async function saveAndFormatMessage(params) {
   const roomId = params.roomId;
@@ -23,15 +23,6 @@ export async function saveAndFormatMessage(params) {
     console.error("Valkey 최근 대화 저장 실패: " + err.message);
   }
 
-  // DB 영구 저장 필요 시 chat_messages 테이블에 INSERT
-  /*
-  const sql = " \
-    INSERT INTO chat_messages (room_id, user_id, message, created_at) \
-    VALUES (?, ?, ?, NOW()) \
-  ";
-  await pool.query(sql, [roomId, sender.id, message]);
-  */
-
   return chatData;
 }
 
@@ -40,12 +31,14 @@ export async function getRecentMessages(roomId) {
     const redisKey = "chat:room:" + roomId + ":recent";
     const cachedMessages = await redisClient.lRange(redisKey, 0, 49);
 
-    if (cachedMessages && cachedMessages.length > 0) {
-      const parsedMessages = [];
-      for (let i = 0; i < cachedMessages.length; i++) {
-        parsedMessages.push(JSON.parse(cachedMessages[i]));
+    if (cachedMessages) {
+      if (cachedMessages.length > 0) {
+        const parsedMessages = [];
+        for (let i = 0; i < cachedMessages.length; i++) {
+          parsedMessages.push(JSON.parse(cachedMessages[i]));
+        }
+        return parsedMessages.reverse();
       }
-      return parsedMessages.reverse();
     }
   } catch (err) {
     console.error("Valkey 조회 실패, DB 조회 전환: " + err.message);
@@ -62,7 +55,10 @@ export async function saveReadyState(params) {
   const stateKey = "room:" + roomId + ":state";
 
   const roomState = await redisClient.hGetAll(stateKey);
-  if (!roomState || !roomState.hostUserId) {
+  if (!roomState) {
+    throw new Error("현재 대기 중인 방을 찾을 수 없습니다.");
+  }
+  if (!roomState.hostUserId) {
     throw new Error("현재 대기 중인 방을 찾을 수 없습니다.");
   }
 
@@ -83,7 +79,7 @@ export async function saveReadyState(params) {
 
   return {
     roomId: String(roomId),
-    userId,
+    userId: userId,
     isReady: params.isReady,
   };
 }

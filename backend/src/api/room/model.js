@@ -1,4 +1,4 @@
-import { pool } from '../../config/dbConfig.js';
+import { pool } from "#config/dbConfig.js";
 
 const ROOM_SELECT = `
   SELECT
@@ -173,14 +173,14 @@ export async function addRoomParticipant(input) {
 
     if (roomRows.length === 0) {
       await connection.rollback();
-      return { success: false, reason: 'ROOM_NOT_FOUND' };
+      return { success: false, reason: "ROOM_NOT_FOUND" };
     }
 
     const room = roomRows[0];
 
-    if (room.status !== 'WAITING') {
+    if (room.status !== "WAITING") {
       await connection.rollback();
-      return { success: false, reason: 'ROOM_ALREADY_STARTED' };
+      return { success: false, reason: "ROOM_ALREADY_STARTED" };
     }
 
     const existingRows = await connection.query(
@@ -195,7 +195,7 @@ export async function addRoomParticipant(input) {
 
     if (existingRows.length > 0) {
       await connection.rollback();
-      return { success: false, reason: 'ROOM_ALREADY_JOINED' };
+      return { success: false, reason: "ROOM_ALREADY_JOINED" };
     }
 
     const activeParticipants = await connection.query(
@@ -209,7 +209,7 @@ export async function addRoomParticipant(input) {
 
     if (activeParticipants.length >= Number(room.maxPlayers)) {
       await connection.rollback();
-      return { success: false, reason: 'ROOM_FULL' };
+      return { success: false, reason: "ROOM_FULL" };
     }
 
     const occupiedSlots = new Set(
@@ -233,13 +233,7 @@ export async function addRoomParticipant(input) {
          status
        )
        VALUES (?, ?, ?, FALSE, FALSE, ?, ?, 'WAITING')`,
-      [
-        input.roomId,
-        input.userId,
-        slotIndex,
-        input.language,
-        input.character,
-      ],
+      [input.roomId, input.userId, slotIndex, input.language, input.character],
     );
 
     await connection.commit();
@@ -268,7 +262,7 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
 
     if (roomRows.length === 0) {
       await connection.rollback();
-      return { success: false, reason: 'ROOM_NOT_FOUND' };
+      return { success: false, reason: "ROOM_NOT_FOUND" };
     }
 
     const participantRows = await connection.query(
@@ -284,7 +278,7 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
 
     if (participantRows.length === 0) {
       await connection.rollback();
-      return { success: false, reason: 'ROOM_NOT_JOINED' };
+      return { success: false, reason: "ROOM_NOT_JOINED" };
     }
 
     const participant = participantRows[0];
@@ -327,7 +321,7 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
         newHostUserId = nextHost.userId;
 
         await connection.query(
-          'UPDATE rooms SET host_user_id = ? WHERE id = ?',
+          "UPDATE rooms SET host_user_id = ? WHERE id = ?",
           [newHostUserId, roomId],
         );
         await connection.query(
@@ -424,10 +418,7 @@ export async function markRoomStarted(roomId) {
 
 // 방 생성 중 Valkey 저장이 실패한 경우에만 미완성 기록을 완전히 정리합니다.
 export async function hardDeleteRoom(roomId) {
-  const result = await pool.query(
-    'DELETE FROM rooms WHERE id = ?',
-    [roomId],
-  );
+  const result = await pool.query("DELETE FROM rooms WHERE id = ?", [roomId]);
 
   return Number(result.affectedRows) > 0;
 }

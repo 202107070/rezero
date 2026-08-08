@@ -1,4 +1,3 @@
-// src/manageRoom/gameStartDto.js
 export class GameStartDto {
   constructor({
     roomId,
@@ -12,9 +11,9 @@ export class GameStartDto {
     this.canStart = canStart;
     this.reason = reason;
     this.playerSummary = {
-      totalPlayers,
-      nonHostPlayers,
-      readyNonHostPlayers,
+      totalPlayers: totalPlayers,
+      nonHostPlayers: nonHostPlayers,
+      readyNonHostPlayers: readyNonHostPlayers,
     };
   }
 

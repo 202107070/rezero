@@ -1,10 +1,10 @@
 import jwt from "jsonwebtoken";
-import { authConfig } from "../config/authConfig.js";
-import { validateJoinRoom, validateSendMessage } from "./socketDto.js";
+import { authConfig } from "#config/authConfig.js";
+import { validateJoinRoom, validateSendMessage } from "#dto/socketDto.js";
 import {
   saveAndFormatMessage,
   getRecentMessages,
-} from "./socketService.js";
+} from "#service/socketService.js";
 
 export function socketAuthMiddleware(socket, next) {
   let token;

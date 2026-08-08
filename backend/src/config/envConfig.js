@@ -1,18 +1,51 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import dotenv from 'dotenv';
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 실행 위치와 관계없이 backend/.env를 읽을 수 있도록 경로를 고정합니다.
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+function getNodeEnv() {
+  if (process.env.NODE_ENV) {
+    return process.env.NODE_ENV;
+  }
+  return "development";
+}
+
+function getHost() {
+  if (process.env.HOST) {
+    return process.env.HOST;
+  }
+  return "0.0.0.0";
+}
+
+function getPort() {
+  if (process.env.PORT) {
+    return Number(process.env.PORT);
+  }
+  return 8080;
+}
+
+function getJwtSecret() {
+  if (process.env.JWT_SECRET) {
+    return process.env.JWT_SECRET;
+  }
+  return "";
+}
+
+function getJwtExpiresIn() {
+  if (process.env.JWT_EXPIRES_IN) {
+    return process.env.JWT_EXPIRES_IN;
+  }
+  return "1h";
+}
 
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
-  host: process.env.HOST || '0.0.0.0',
-  // 프론트 개발 서버의 /api 프록시 포트와 동일한 8080을 사용합니다.
-  port: Number(process.env.PORT || 8080),
-  jwtSecret: process.env.JWT_SECRET || '',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
+  nodeEnv: getNodeEnv(),
+  host: getHost(),
+  port: getPort(),
+  jwtSecret: getJwtSecret(),
+  jwtExpiresIn: getJwtExpiresIn(),
 };

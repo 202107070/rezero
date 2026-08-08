@@ -1,8 +1,5 @@
-import { parseCreateRoomRequest } from './dto/createRoomRequestDto.js';
-import {
-  parseJoinRoomRequest,
-  parseRoomId,
-} from './dto/joinRoomRequestDto.js';
+import { parseCreateRoomRequest } from "./dto/createRoomRequestDto.js";
+import { parseJoinRoomRequest, parseRoomId } from "./dto/joinRoomRequestDto.js";
 import {
   createRoom,
   getRoom,
@@ -11,8 +8,8 @@ import {
   leaveRoom,
   removeRoom,
   startRoom,
-} from './service.js';
-import { sendSuccess } from '../../utils/responseHelper.js';
+} from "./service.js";
+import { sendSuccess } from "#utils/responseHelper.js ";
 
 export async function create(req, res, next) {
   try {

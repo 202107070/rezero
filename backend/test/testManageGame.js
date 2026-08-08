@@ -1,11 +1,7 @@
-// testGameStart.js
-import { pool } from "./src/config/dbConfig.js";
-import {
-  connectRedis,
-  redisClient,
-} from "./src/config/redisConfig.js";
-import gameStartService from "./src/manageRoom/gameStartService.js";
-import gameStartController from "./src/manageRoom/gameStartController.js";
+import { pool } from "#config/dbConfig.js";
+import { connectRedis, redisClient } from "#config/redisConfig.js";
+import gameStartService from "#service/manageGameService.js";
+import gameStartController from "#controller/manageGameController.js";
 
 async function runGameStartTest() {
   console.log("==================================================");
@@ -15,14 +11,12 @@ async function runGameStartTest() {
   try {
     await connectRedis();
 
-    // 1번 방 검사 (방장 외 미준비자 존재 -> 시작 불가)
     console.log("1번 방 검사 (방장 외 미준비자 존재)");
     const room1Result = await gameStartService.checkCanStart(1);
     console.dir(room1Result, { depth: null, colors: true });
 
     console.log("\n--------------------------------------------------\n");
 
-    // 2번 방 검사 (방장 외 전원 준비 완료 -> 시작 가능)
     console.log("2번 방 검사 (방장 외 전원 준비 완료)");
     const room2Result = await gameStartController.checkRoomCanStart(2);
     console.dir(room2Result, { depth: null, colors: true });
@@ -37,8 +31,10 @@ async function runGameStartTest() {
     if (redisClient.isOpen) {
       await redisClient.quit();
     }
-    if (pool && typeof pool.end === "function") {
-      await pool.end();
+    if (pool) {
+      if (typeof pool.end === "function") {
+        await pool.end();
+      }
     }
   }
 }

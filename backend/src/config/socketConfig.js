@@ -1,18 +1,17 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import { env } from "./envConfig.js";
+import { env } from "#config/envConfig.js";
 import {
   validateJoinRoom,
   validateReadyChange,
   validateSendMessage,
-} from "../sockets/socketDto.js";
+} from "#dto/socketDto.js";
 import {
   saveAndFormatMessage,
   getRecentMessages,
   saveReadyState,
-} from "../sockets/socketService.js";
+} from "#service/socketService.js";
 
-// socketDto.js 등에서 참조하는 socketConfig 설정 객체 추가
 export const socketConfig = {
   maxMessageLength: 500,
   recentMessageLimit: 50,
@@ -20,8 +19,14 @@ export const socketConfig = {
 };
 
 export function socketAuthMiddleware(socket, next) {
-  let token =
-    socket.handshake.auth?.token || socket.handshake.headers?.authorization;
+  let token;
+  if (socket.handshake.auth && socket.handshake.auth.token) {
+    token = socket.handshake.auth.token;
+  } else {
+    if (socket.handshake.headers && socket.handshake.headers.authorization) {
+      token = socket.handshake.headers.authorization;
+    }
+  }
 
   if (!token) {
     return next(new Error("소켓 인증 실패 : 토큰이 존재하지 않습니다."));
@@ -35,11 +40,24 @@ export function socketAuthMiddleware(socket, next) {
       actualToken = token;
     }
 
-    const secret = env.jwtSecret || process.env.JWT_SECRET;
+    let secret;
+    if (env.jwtSecret) {
+      secret = env.jwtSecret;
+    } else {
+      secret = process.env.JWT_SECRET;
+    }
+
     const decoded = jwt.verify(actualToken, secret);
 
+    let userId;
+    if (decoded.sub) {
+      userId = decoded.sub;
+    } else {
+      userId = decoded.id;
+    }
+
     socket.user = {
-      id: decoded.sub || decoded.id,
+      id: userId,
       username: decoded.username,
       displayName: decoded.displayName,
     };
@@ -143,7 +161,7 @@ export function initSocket(server) {
 
   io.use(socketAuthMiddleware);
 
-  io.on("connection", (socket) => {
+  io.on("connection", function (socket) {
     registerChatHandlers(io, socket);
   });
 
