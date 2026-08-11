@@ -17,7 +17,16 @@
     "#service/*": "./src/service/*",
     "#handler/*": "./src/handler/*",
     "#dto/*": "./src/dto/*",
-    "#infra/*": "./src/infra/*",
-    "#constants/*": "./src/constants/*"
+    "#docker/config/*": "./src/infra/docker/config/*",
+    "#docker/controller/*": "./src/infra/docker/controller/*",
+    "#docker/dto/*": "./src/infra/docker/dto/*",
+    "#docker/middleware/*": "./src/infra/docker/middleware/*",
+    "#docker/service/*": "./src/infra/docker/service/*",
+    "#docker/worker/*": "./src/infra/docker/worker/*",
+    "#constants/*": "./src/constants/*",
+    "#sandbox/*": "../../../shared/fileShare/sandbox/",
+    "#gameDocker/*": "./src/infra/docker/dockerimage/game.Dockerfile/*",
+    "#roomDocker/*": "../src/infra/docker/dockerimage/room.Dockerfile/*",
+    "#resultbox/*": "../../../shared/fileShare/resultbox/"
   }
 }

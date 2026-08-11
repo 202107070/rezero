@@ -1,10 +1,5 @@
 import jwt from "jsonwebtoken";
 import { authConfig } from "#config/authConfig.js";
-import { validateJoinRoom, validateSendMessage } from "#dto/socketDto.js";
-import {
-  saveAndFormatMessage,
-  getRecentMessages,
-} from "#service/socketService.js";
 
 export function socketAuthMiddleware(socket, next) {
   let token;
@@ -32,7 +27,7 @@ export function socketAuthMiddleware(socket, next) {
     const decoded = jwt.verify(actualToken, authConfig.jwtSecret);
 
     socket.user = {
-      id: decoded.id,
+      id: decoded.id || decoded.sub,
       username: decoded.username,
       displayName: decoded.displayName,
     };
@@ -43,64 +38,4 @@ export function socketAuthMiddleware(socket, next) {
       new Error("소켓 인증 실패: 유효하지 않거나 만료된 토큰입니다."),
     );
   }
-}
-
-export function registerChatHandlers(io, socket) {
-  console.log(
-    "[Socket 연결 완료] " + socket.user.displayName + " (" + socket.id + ")",
-  );
-
-  socket.on("join_room", async function (data, callback) {
-    try {
-      const validatedRoom = validateJoinRoom(data);
-      const roomId = validatedRoom.roomId;
-
-      socket.join(roomId);
-      console.log(
-        socket.user.displayName + " 님이 [" + roomId + "] 방에 입장함",
-      );
-
-      const recentMessages = await getRecentMessages(roomId);
-
-      socket.to(roomId).emit("user_joined", {
-        message: socket.user.displayName + " 님이 입장하셨습니다.",
-        user: socket.user,
-      });
-
-      if (typeof callback === "function") {
-        callback({ success: true, recentMessages: recentMessages });
-      }
-    } catch (error) {
-      if (typeof callback === "function") {
-        callback({ success: false, message: error.message });
-      }
-    }
-  });
-
-  socket.on("send_message", async function (data, callback) {
-    try {
-      const validatedData = validateSendMessage(data);
-
-      const chatMessage = await saveAndFormatMessage({
-        roomId: validatedData.roomId,
-        sender: socket.user,
-        message: validatedData.message,
-      });
-
-      io.to(validatedData.roomId).emit("receive_message", chatMessage);
-
-      if (typeof callback === "function") {
-        callback({ success: true });
-      }
-    } catch (error) {
-      socket.emit("chat_error", { message: error.message });
-      if (typeof callback === "function") {
-        callback({ success: false, message: error.message });
-      }
-    }
-  });
-
-  socket.on("disconnect", function () {
-    console.log("[Socket 연결 종료] " + socket.user.displayName);
-  });
 }

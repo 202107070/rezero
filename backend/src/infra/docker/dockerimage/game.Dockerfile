@@ -23,14 +23,21 @@ RUN dnf update -y && dnf install -y \
 RUN dnf module enable nodejs:20 -y && dnf install -y nodejs && dnf clean all
 
 WORKDIR /app
-RUN mkdir -p /app/sandbox /app/resultbox
+
+RUN mkdir -p /app/src/infra/mountpoint/sandbox /app/src/infra/mountpoint/resultbox /app/sandbox /app/resultbox
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
-RUN npm install -g htmlhint stylelint cheerio puppeteer pixelmatch
+RUN npm install -g --ignore-scripts htmlhint stylelint cheerio puppeteer pixelmatch
+
+COPY package*.json ./
+RUN npm install --only=production --ignore-scripts
+
+COPY . .
 
 RUN useradd -m runner && chown -R runner:runner /app
-
 USER runner
 
-CMD ["/bin/bash"]
+EXPOSE 8080
+
+CMD ["node", "src/app.js"]

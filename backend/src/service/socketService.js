@@ -1,4 +1,3 @@
-import { pool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
 
 export async function saveAndFormatMessage(params) {
@@ -31,17 +30,15 @@ export async function getRecentMessages(roomId) {
     const redisKey = "chat:room:" + roomId + ":recent";
     const cachedMessages = await redisClient.lRange(redisKey, 0, 49);
 
-    if (cachedMessages) {
-      if (cachedMessages.length > 0) {
-        const parsedMessages = [];
-        for (let i = 0; i < cachedMessages.length; i++) {
-          parsedMessages.push(JSON.parse(cachedMessages[i]));
-        }
-        return parsedMessages.reverse();
+    if (cachedMessages && cachedMessages.length > 0) {
+      const parsedMessages = [];
+      for (let i = 0; i < cachedMessages.length; i++) {
+        parsedMessages.push(JSON.parse(cachedMessages[i]));
       }
+      return parsedMessages.reverse();
     }
   } catch (err) {
-    console.error("Valkey 조회 실패, DB 조회 전환: " + err.message);
+    console.error("Valkey 조회 실패: " + err.message);
   }
 
   return [];
@@ -55,10 +52,7 @@ export async function saveReadyState(params) {
   const stateKey = "room:" + roomId + ":state";
 
   const roomState = await redisClient.hGetAll(stateKey);
-  if (!roomState) {
-    throw new Error("현재 대기 중인 방을 찾을 수 없습니다.");
-  }
-  if (!roomState.hostUserId) {
+  if (!roomState || !roomState.hostUserId) {
     throw new Error("현재 대기 중인 방을 찾을 수 없습니다.");
   }
 

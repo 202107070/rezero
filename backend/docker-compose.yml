@@ -1,19 +1,54 @@
+version: "3.8"
+
 services:
   game-server:
     build:
       context: .
-      dockerfile: ./src/infra/docker/gameroom/game.Dockerfile
-    container_name: game-room
+      dockerfile: ./backend/src/infra/docker/dockerimage/game.Dockerfile
+    container_name: game-server
     restart: always
     ports:
-      - "3000:3000"
+      - "8080:8080"
+    environment:
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - PORT=8080
     volumes:
       - .:/app
       - /app/node_modules
-      - ./src/infra/mountpoint/sandbox:/app/src/infra/mountpoint/sandbox:z
-      - ./src/infra/mountpoint/resultbox:/app/src/infra/mountpoint/resultbox:z
+      - ../../shared/fileShare/sandbox:/app/src/infra/mountpoint/sandbox:z
+      - ../../shared/fileShare/resultbox:/app/src/infra/mountpoint/resultbox:z
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+      - "host.docker.internal:host-gateway"
+
+  room-server:
+    build:
+      context: .
+      dockerfile: ./backend/src/infra/docker/dockerimage/room.Dockerfile
+    container_name: room-server
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - PORT=3000
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=game_user
+      - DB_PASSWORD=user_password_5678
+      - DB_NAME=rezero_game
+      - DB_CONNECTION_LIMIT=5
+      - REDIS_HOST=valkey
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+    volumes:
+      - .:/app
+      - /app/node_modules
     depends_on:
       - db
+      - valkey
     extra_hosts:
       - "host.containers.internal:host-gateway"
       - "host.docker.internal:host-gateway"
@@ -21,12 +56,12 @@ services:
   code-runner:
     build:
       context: .
-      dockerfile: ./src/infra/docker/buildsystem/build.Dockerfile
+      dockerfile: ./backend/src/infra/docker/dockerimage/game.Dockerfile
     container_name: build-runner
     restart: always
     volumes:
-      - ./src/infra/mountpoint/sandbox:/app/sandbox:z
-      - ./src/infra/mountpoint/resultbox:/app/resultbox:z
+      - ../../shared/fileShare/sandbox:/app/sandbox:z
+      - ../../shared/fileShare/resultbox:/app/resultbox:z
     tty: true
     stdin_open: true
 
@@ -42,5 +77,14 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./src/infra/mountpoint/dbbox:/var/lib/mysql:z
-      - ./src/infra/docker/gameroom/init.sql:/docker-entrypoint-initdb.d/init.sql:z
+      - ../../shared/fileShare/dbbox/data:/var/lib/mysql:z
+      - ../../shared/fileShare/dbbox/init.sql:/docker-entrypoint-initdb.d/init.sql:z
+
+  valkey:
+    image: redis:alpine
+    container_name: game-valkey
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ../../shared/fileShare/valkeybox:/data:z

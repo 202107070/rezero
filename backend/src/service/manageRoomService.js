@@ -9,28 +9,9 @@ class ManageRoomService {
       parsedLimit = DEFAULT_ROOM_LIMIT;
     }
 
-    const query = `
-      SELECT
-        r.id,
-        r.title,
-        r.status,
-        r.mode,
-        r.game_mode,
-        r.difficulty,
-        r.language,
-        r.password,
-        r.problem_count,
-        r.max_players,
-        r.host_user_id,
-        r.created_at,
-        COUNT(rp.id) AS current_players
-      FROM rooms r
-      LEFT JOIN room_participants rp
-        ON r.id = rp.room_id AND rp.left_at IS NULL
-      GROUP BY r.id
-      ORDER BY r.id ASC
-      LIMIT ${parsedLimit}
-    `;
+    const query =
+      "SELECT r.id, r.title, r.status, r.mode, r.game_mode, r.difficulty, r.language, r.password, r.problem_count, r.max_players, r.host_user_id, r.created_at, COUNT(rp.id) AS current_players FROM rooms r LEFT JOIN room_participants rp ON r.id = rp.room_id AND rp.left_at IS NULL GROUP BY r.id ORDER BY r.id ASC LIMIT " +
+      parsedLimit;
 
     try {
       const result = await pool.query(query);
