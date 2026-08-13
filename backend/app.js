@@ -1,6 +1,7 @@
 import express from "express";
 import logger from "morgan";
 
+import battleRouter from "./src/api/battle/router.js";
 import healthRouter from "./src/api/health/router.js";
 import roomRouter from "./src/api/room/router.js";
 import userRouter from "./src/api/user/router.js";
@@ -24,6 +25,7 @@ app.use("/health", healthRouter);
 app.use("/api/v1/health", healthRouter);
 app.use("/api/v1", userRouter);
 app.use("/api/v1", roomRouter);
+app.use("/api/v1", battleRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
