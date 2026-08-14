@@ -3,6 +3,7 @@ import { redisClient } from "#config/redisConfig.js";
 import { GameStartDto } from "#dto/manageGameDto.js";
 import { ROOM_STATUS } from "#config/manageRoomConfig.js";
 import { gameService } from "#docker/service/gameService.js";
+import { lockService } from "#infra/redis/lockService.js";
 
 class GameStartService {
   async checkCanStart(roomId) {
@@ -38,10 +39,10 @@ class GameStartService {
     }
 
     const participants = await redisClient.sMembers(
-      "room:" + roomId + ":participants",
+      "room:" + roomId + ":participants"
     );
     const readyPlayers = await redisClient.sMembers(
-      "room:" + roomId + ":ready",
+      "room:" + roomId + ":ready"
     );
     const totalPlayers = participants.length;
 
@@ -53,13 +54,13 @@ class GameStartService {
     const readyPlayerSet = new Set(
       readyPlayers.map(function (item) {
         return String(item);
-      }),
+      })
     );
 
     const readyNonHostPlayersCount = nonHostParticipants.filter(
       function (userId) {
         return readyPlayerSet.has(String(userId));
-      },
+      }
     ).length;
 
     let minimumPlayers = 3;
@@ -102,18 +103,38 @@ class GameStartService {
       }).toJSON();
     }
 
-    const allocatedPort = 4000 + Number(roomId);
-    await gameService.createRoomContainer(roomId, allocatedPort);
+    const lockKey = "room:" + roomId + ":container:start";
+    const acquiredLock = await lockService.acquireLock(lockKey, 30);
 
-    await pool.query("UPDATE rooms SET status = ? WHERE id = ?", [
-      ROOM_STATUS.STARTED,
-      roomId,
-    ]);
-    await redisClient.hSet(
-      "room:" + roomId + ":state",
-      "status",
-      ROOM_STATUS.STARTED,
-    );
+    if (!acquiredLock) {
+      return new GameStartDto({
+        roomId: roomId,
+        canStart: false,
+        reason:
+          "이미 게임룸 컨테이너 생성 요청이 진행 중이거나 처리되었습니다.",
+        totalPlayers: totalPlayers,
+        nonHostPlayers: nonHostPlayersCount,
+        readyNonHostPlayers: readyNonHostPlayersCount,
+      }).toJSON();
+    }
+
+    try {
+      const allocatedPort = 4000 + Number(roomId);
+      await gameService.createRoomContainer(roomId, allocatedPort);
+
+      await pool.query("UPDATE rooms SET status = ? WHERE id = ?", [
+        ROOM_STATUS.STARTED,
+        roomId,
+      ]);
+      await redisClient.hSet(
+        "room:" + roomId + ":state",
+        "status",
+        ROOM_STATUS.STARTED
+      );
+    } catch (containerError) {
+      await lockService.releaseLock(lockKey);
+      throw containerError;
+    }
 
     return new GameStartDto({
       roomId: roomId,

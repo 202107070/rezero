@@ -1,16 +1,16 @@
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi9/ubi:latest
 
-RUN microdnf update -y && microdnf install -y \
-    nodejs \
-    npm \
-    && microdnf clean all
+RUN dnf update -y && \
+    dnf module enable nodejs:20 -y && \
+    dnf install -y nodejs && \
+    dnf clean all
 
 WORKDIR /usr/src/gameroom
 
 RUN mkdir -p /usr/src/gameroom
 
 COPY package*.json ./
-RUN npm install --only=production
+RUN npm install --only=production --ignore-scripts
 
 COPY . .
 
@@ -24,4 +24,4 @@ ENV DB_HOST=db \
 
 EXPOSE 4000
 
-CMD ["node", "server.js"]
+CMD ["node", "bin/www"]
