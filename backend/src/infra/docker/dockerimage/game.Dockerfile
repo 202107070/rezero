@@ -30,14 +30,14 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
 RUN npm install -g --ignore-scripts htmlhint stylelint cheerio puppeteer pixelmatch
 
-COPY package*.json ./
-RUN npm install --only=production --ignore-scripts
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
 
-COPY . .
+COPY backend ./backend
 
 RUN useradd -m runner && chown -R runner:runner /app
 USER runner
 
 EXPOSE 8080
 
-CMD ["node", "bin/www"]
+CMD ["node", "backend/bin/www"]

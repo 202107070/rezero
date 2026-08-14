@@ -1,17 +1,24 @@
 import path from "path";
+import { fileURLToPath } from "node:url";
 
-const rootDir = process.cwd();
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const backendDirectory = path.resolve(currentDirectory, "../../../..");
+const projectRoot = path.resolve(backendDirectory, "..");
+const sharedDirectory = path.resolve(
+  backendDirectory,
+  "../../../shared/fileShare",
+);
 
 export const GAME_CONTAINER_CONFIG = {
   containerName: "build_compiler_sandbox",
   baseImage: "gameroom-base-image",
-  sandboxPath: path.resolve(rootDir, "../../../shared/fileShare/sandbox"),
-  resultboxPath: path.resolve(rootDir, "../../../shared/fileShare/resultbox"),
+  sandboxPath: path.resolve(sharedDirectory, "sandbox"),
+  resultboxPath: path.resolve(sharedDirectory, "resultbox"),
 
   build: {
-    contextPath: rootDir,
+    contextPath: projectRoot,
     dockerfilePath: path.resolve(
-      rootDir,
+      backendDirectory,
       "src/infra/docker/dockerimage/game.Dockerfile",
     ),
     imageTag: "gameroom-base-image:latest",
