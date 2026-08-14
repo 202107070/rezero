@@ -9,15 +9,10 @@ import {
   saveReadyState,
 } from "#service/socketService.js";
 import gameStartService from "#service/manageGameService.js";
-import { redisClient } from "#config/redisConfig.js";
-import { execFile } from "child_process";
-import { promisify } from "util";
-
-const execFileAsync = promisify(execFile);
 
 export function registerSocketHandlers(io, socket) {
   console.log(
-    "[Socket 연결 완료] " + socket.user.displayName + " (" + socket.id + ")",
+    "[Socket 연결 완료] " + socket.user.displayName + " (" + socket.id + ")"
   );
 
   socket.on("join_room", async function (data, callback) {
@@ -27,7 +22,7 @@ export function registerSocketHandlers(io, socket) {
 
       socket.join(roomId);
       console.log(
-        socket.user.displayName + " 님이 [" + roomId + "] 방에 입장함",
+        socket.user.displayName + " 님이 [" + roomId + "] 방에 입장함"
       );
 
       const recentMessages = await getRecentMessages(roomId);
@@ -92,68 +87,25 @@ export function registerSocketHandlers(io, socket) {
   });
 
   socket.on("request_game_start", async function (data, callback) {
-    const lockKey = `room:${data?.roomId}:container:lock`;
-    
     try {
-      const roomId = data && data.roomId ? String(data.roomId) : null;
+      let roomId = null;
+      if (data && data.roomId) {
+        roomId = String(data.roomId);
+      }
+
       if (!roomId) {
         throw new Error("유효한 roomId가 필요합니다.");
       }
 
-      const checkResult = await gameStartService.checkCanStart(roomId);
+      const startResult = await gameStartService.checkCanStart(roomId);
 
-      if (!checkResult.canStart) {
+      if (!startResult.canStart) {
         if (typeof callback === "function") {
-          callback({ success: false, message: checkResult.reason, data: checkResult });
-        }
-        return;
-      }
-
-      const acquiredLock = await redisClient.set(lockKey, "locked", {
-        NX: true,
-        EX: 30,
-      });
-
-      if (!acquiredLock) {
-        if (typeof callback === "function") {
-          callback({ 
-            success: false, 
-            message: "이미 게임룸 컨테이너 생성 요청이 진행 중이거나 실행되었습니다." 
+          callback({
+            success: false,
+            message: startResult.reason,
+            data: startResult,
           });
-        }
-        return;
-      }
-
-      let containerStarted = false;
-
-      try {
-        const containerName = `gameroom_${roomId}`;
-        const imageName = "gameroom:latest";
-
-        try {
-          await execFileAsync("podman", ["rm", "-f", containerName]);
-        } catch (e) {}
-
-        await execFileAsync("podman", [
-          "run",
-          "-d",
-          "--name",
-          containerName,
-          "-e",
-          `ROOM_ID=${roomId}`,
-          imageName,
-        ]);
-
-        containerStarted = true;
-      } catch (containerError) {
-        console.error(`[Podman Error] 방 ID ${roomId} 컨테이너 생성 실패:`, containerError);
-        containerStarted = false;
-        await redisClient.del(lockKey);
-      }
-
-      if (!containerStarted) {
-        if (typeof callback === "function") {
-          callback({ success: false, message: "게임룸 컨테이너 생성에 실패하였습니다." });
         }
         return;
       }
@@ -164,13 +116,9 @@ export function registerSocketHandlers(io, socket) {
       });
 
       if (typeof callback === "function") {
-        callback({ success: true, data: checkResult });
+        callback({ success: true, data: startResult });
       }
     } catch (error) {
-      try {
-        await redisClient.del(lockKey);
-      } catch (e) {}
-
       if (typeof callback === "function") {
         callback({ success: false, message: error.message });
       }

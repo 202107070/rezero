@@ -22,6 +22,7 @@
     "#docker/dto/*": "./src/infra/docker/dto/*",
     "#docker/middleware/*": "./src/infra/docker/middleware/*",
     "#docker/service/*": "./src/infra/docker/service/*",
+    "#infra/redis/*": "./src/infra/redis/*",
     "#docker/worker/*": "./src/infra/docker/worker/*",
     "#constants/*": "./src/constants/*",
     "#sandbox/*": "../../../shared/fileShare/sandbox/",

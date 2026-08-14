@@ -41,6 +41,7 @@ server.on("error", function (error) {
 process.on("SIGINT", function () {
   stopServer("SIGINT");
 });
+
 process.on("SIGTERM", function () {
   stopServer("SIGTERM");
 });
