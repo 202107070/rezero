@@ -1,8 +1,5 @@
-import { parseCreateRoomRequest } from './dto/createRoomRequestDto.js';
-import {
-  parseJoinRoomRequest,
-  parseRoomId,
-} from './dto/joinRoomRequestDto.js';
+import { parseCreateRoomRequest } from "./dto/createRoomRequestDto.js";
+import { parseJoinRoomRequest, parseRoomId } from "./dto/joinRoomRequestDto.js";
 import {
   createRoom,
   getRoom,
@@ -10,8 +7,9 @@ import {
   joinRoom,
   leaveRoom,
   removeRoom,
-} from './service.js';
-import { sendSuccess } from '../../utils/responseHelper.js';
+  startRoom,
+} from "./service.js";
+import { sendSuccess } from "#utils/responseHelper.js ";
 
 export async function create(req, res, next) {
   try {
@@ -57,6 +55,16 @@ export async function leave(req, res, next) {
   try {
     const roomId = parseRoomId(req.params.id);
     const result = await leaveRoom(roomId, req.user.id);
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function start(req, res, next) {
+  try {
+    const roomId = parseRoomId(req.params.id);
+    const result = await startRoom(roomId, req.user.id);
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);

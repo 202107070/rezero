@@ -1,0 +1,67 @@
+import { roomService } from "#docker/service/roomService.js";
+import { pool } from "#config/dbConfig.js";
+import { redisClient } from "#config/redisConfig.js";
+
+async function runRoomDockerTest() {
+  console.log("==========================================");
+  console.log("[Test] 2. Room Service (MariaDB & Valkey) Test");
+  console.log("==========================================");
+
+  const testHostId = 9999;
+  const testUserId = 8888;
+
+  try {
+    console.log(
+      "\n[Step 1] Creating new room (MariaDB INSERT & Valkey Hash/Set)...",
+    );
+    const createdRoom = await roomService.createRoom({
+      title: "Docker Integration Test Room",
+      mode: "1/1",
+      hostId: testHostId,
+    });
+
+    console.log(" Created Room:", createdRoom);
+    const roomId = createdRoom.roomId;
+
+    console.log(
+      "\n[Step 2] Fetching room details for Room ID: " + roomId + "...",
+    );
+    const roomDetails = await roomService.getRoomDetails(roomId);
+    console.log(" Room Details:", roomDetails);
+
+    console.log(
+      "\n[Step 3] Toggling ready status for user " + testUserId + "...",
+    );
+    const participantsKey = "room:" + roomId + ":participants";
+    await redisClient.sAdd(participantsKey, String(testUserId));
+
+    const readyOnResult = await roomService.toggleReady(
+      roomId,
+      testUserId,
+      true,
+    );
+    console.log(" Ready ON Result:", readyOnResult);
+
+    const readyOffResult = await roomService.toggleReady(
+      roomId,
+      testUserId,
+      false,
+    );
+    console.log(" Ready OFF Result:", readyOffResult);
+
+    const updatedDetails = await roomService.getRoomDetails(roomId);
+    console.log(
+      "\n[Step 4] Updated Room Details after ready toggle:",
+      updatedDetails,
+    );
+
+    console.log("\n Room Docker Service Test Completed Successfully!");
+  } catch (error) {
+    console.error("\n Room Docker Test Failed:", error);
+  } finally {
+    await pool.end();
+    await redisClient.disconnect();
+  }
+}
+
+runRoomDockerTest();

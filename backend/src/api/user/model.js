@@ -1,4 +1,4 @@
-import { pool } from '../../config/dbConfig.js';
+import { pool } from "#config/dbConfig.js";
 
 export async function createUser(input) {
   await pool.query(
@@ -12,7 +12,7 @@ export async function createUser(input) {
 
 export async function isUsernameTaken(username) {
   const rows = await pool.query(
-    'SELECT COUNT(*) AS count FROM users WHERE username = ?',
+    "SELECT COUNT(*) AS count FROM users WHERE username = ?",
     [username],
   );
 

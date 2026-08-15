@@ -1,7 +1,7 @@
-import { parseLoginRequest } from './dto/loginRequestDto.js';
-import { parseSignupRequest } from './dto/signupRequestDto.js';
-import { getCurrentUser, loginUser, signupUser } from './service.js';
-import { sendSuccess } from '../../utils/responseHelper.js';
+import { parseLoginRequest } from "./dto/loginRequestDto.js";
+import { parseSignupRequest } from "./dto/signupRequestDto.js";
+import { getCurrentUser, loginUser, signupUser } from "./service.js";
+import { sendSuccess } from "#utils/responseHelper.js";
 
 export async function signup(req, res, next) {
   try {

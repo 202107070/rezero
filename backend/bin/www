@@ -1,49 +1,56 @@
 #!/usr/bin/env node
 
-import http from 'node:http';
+import http from "node:http";
 
-import app from '../app.js';
-import { env } from '../src/config/envConfig.js';
-import { pool, testDbConnection } from '../src/config/dbConfig.js';
-import { redisClient, connectRedis } from '../src/config/redisConfig.js';
-import { initSocket } from '../src/config/socketConfig.js'; // 소켓 초기화 함수 임포트
+import app from "../app.js";
+import { env } from "#config/envConfig.js";
+import { pool, testDbConnection } from "#config/dbConfig.js";
+import { redisClient, connectRedis } from "#config/redisConfig.js";
+import { initSocket } from "#config/socketConfig.js";
 
 const server = http.createServer(app);
 
-// 프로젝트 내 구현된 Socket.io 모듈 초기화
 initSocket(server);
 
 async function startServer() {
-  // DB와 Valkey가 둘 다 연결돼야 서버를 열 수 있습니다.
   await testDbConnection();
   await connectRedis();
 
-  server.listen(env.port, env.host, () => {
-    console.log(`Backend running on http://${env.host}:${env.port}`);
+  server.listen(env.port, env.host, function () {
+    console.log("Backend running on http://" + env.host + ":" + env.port);
   });
 }
 
 async function stopServer(signal) {
-  console.log(`${signal} received. Backend is shutting down.`);
+  console.log(signal + " received. Backend is shutting down.");
 
-  server.close(async () => {
-    if (redisClient.isOpen) await redisClient.quit();
+  server.close(async function () {
+    if (redisClient.isOpen) {
+      await redisClient.quit();
+    }
     await pool.end();
     process.exit(0);
   });
 }
 
-server.on('error', (error) => {
-  console.error('Backend server error:', error.message);
+server.on("error", function (error) {
+  console.error("Backend server error:", error.message);
   process.exit(1);
 });
 
-process.on('SIGINT', () => stopServer('SIGINT'));
-process.on('SIGTERM', () => stopServer('SIGTERM'));
+process.on("SIGINT", function () {
+  stopServer("SIGINT");
+});
 
-startServer().catch(async (error) => {
-  console.error('Backend startup failed:', error.message);
-  if (redisClient.isOpen) await redisClient.quit();
+process.on("SIGTERM", function () {
+  stopServer("SIGTERM");
+});
+
+startServer().catch(async function (error) {
+  console.error("Backend startup failed:", error.message);
+  if (redisClient.isOpen) {
+    await redisClient.quit();
+  }
   await pool.end();
   process.exit(1);
 });

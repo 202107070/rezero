@@ -8,9 +8,26 @@
     "start": "node bin/www",
     "dev": "nodemon bin/www"
   },
-  "dependencies": {
-    "jsonwebtoken": "^9.0.3",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+  "imports": {
+    "#config/*": "./src/config/*",
+    "#controller/*": "./src/controller/*",
+    "#middleware/*": "./src/middleware/*",
+    "#model/*": "./src/model/*",
+    "#utils/*": "./src/utils/*",
+    "#service/*": "./src/service/*",
+    "#handler/*": "./src/handler/*",
+    "#dto/*": "./src/dto/*",
+    "#docker/config/*": "./src/infra/docker/config/*",
+    "#docker/controller/*": "./src/infra/docker/controller/*",
+    "#docker/dto/*": "./src/infra/docker/dto/*",
+    "#docker/middleware/*": "./src/infra/docker/middleware/*",
+    "#docker/service/*": "./src/infra/docker/service/*",
+    "#infra/redis/*": "./src/infra/redis/*",
+    "#docker/worker/*": "./src/infra/docker/worker/*",
+    "#constants/*": "./src/constants/*",
+    "#sandbox/*": "../../../shared/fileShare/sandbox/",
+    "#gameDocker/*": "./src/infra/docker/dockerimage/game.Dockerfile/*",
+    "#roomDocker/*": "../src/infra/docker/dockerimage/room.Dockerfile/*",
+    "#resultbox/*": "../../../shared/fileShare/resultbox/"
   }
 }

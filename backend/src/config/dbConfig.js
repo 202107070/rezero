@@ -1,6 +1,6 @@
-import './envConfig.js';
+import "#config/envConfig.js";
 
-import mariadb from 'mariadb';
+import mariadb from "mariadb";
 
 export const pool = mariadb.createPool({
   host: process.env.DB_HOST,
@@ -16,9 +16,11 @@ export async function testDbConnection() {
 
   try {
     connection = await pool.getConnection();
-    await connection.query('SELECT 1');
-    console.log('[MariaDB] connected');
+    await connection.query("SELECT 1");
+    console.log("[MariaDB] connected");
   } finally {
-    if (connection) connection.release();
+    if (connection) {
+      connection.release();
+    }
   }
 }

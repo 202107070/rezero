@@ -1,22 +1,44 @@
-import './envConfig.js';
+import "#config/envConfig.js";
 
-import { createClient } from 'redis';
+import { createClient } from "redis";
 
-// Valkey는 Redis 규격을 지원하므로 Redis 클라이언트를 사용합니다.
+function getRedisHost() {
+  if (process.env.REDIS_HOST) {
+    return process.env.REDIS_HOST;
+  }
+  return "127.0.0.1";
+}
+
+function getRedisPort() {
+  if (process.env.REDIS_PORT) {
+    return Number(process.env.REDIS_PORT);
+  }
+  return 6379;
+}
+
+function getRedisPassword() {
+  if (process.env.REDIS_PASSWORD) {
+    return process.env.REDIS_PASSWORD;
+  }
+  return undefined;
+}
+
 export const redisClient = createClient({
   socket: {
-    host: process.env.REDIS_HOST || '127.0.0.1',
-    port: Number(process.env.REDIS_PORT || 6379),
+    host: getRedisHost(),
+    port: getRedisPort(),
   },
-  password: process.env.REDIS_PASSWORD || undefined,
+  password: getRedisPassword(),
 });
 
-redisClient.on('error', (error) => {
-  console.error('[Valkey] error:', error.message);
+redisClient.on("error", function (error) {
+  console.error("[Valkey] error:", error.message);
 });
 
 export async function connectRedis() {
-  if (!redisClient.isOpen) await redisClient.connect();
+  if (!redisClient.isOpen) {
+    await redisClient.connect();
+  }
   await redisClient.ping();
-  console.log('[Valkey] connected');
+  console.log("[Valkey] connected");
 }

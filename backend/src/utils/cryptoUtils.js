@@ -1,13 +1,13 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
-import { env } from '../config/envConfig.js';
+import { env } from "#config/envConfig.js";
 
 const PASSWORD_SALT_ROUNDS = 12;
 
 function getJwtSecret() {
   if (!env.jwtSecret) {
-    throw new Error('JWT_SECRET 환경변수 확인 후 진행하시면 됩니다.');
+    throw new Error("JWT_SECRET 환경변수 확인 후 진행하시면 됩니다.");
   }
 
   return env.jwtSecret;
