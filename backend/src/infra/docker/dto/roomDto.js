@@ -1,44 +1,49 @@
-import { ROOM_CONFIG } from "#docker/config/roomConfig.js";
+export const roomDto = {
+  toCreateRoomDto: function (body, userId) {
+    if (!body || typeof body !== "object") {
+      throw new Error("Invalid request body.");
+    }
 
-export class CreateRoomDto {
-  constructor(data) {
-    this.title = data.title;
-    this.mode = data.mode || "default";
-    this.hostId = data.hostId;
-  }
+    const title = body.title;
+    const mode = body.mode;
 
-  isValid() {
-    if (
-      !this.title ||
-      typeof this.title !== "string" ||
-      this.title.trim() === ""
-    ) {
-      return false;
+    if (!title || typeof title !== "string" || title.trim().length === 0) {
+      throw new Error("Room title is required and must be a valid string.");
     }
-    if (!this.mode || typeof this.mode !== "string") {
-      return false;
-    }
-    if (!this.hostId) {
-      return false;
-    }
-    return true;
-  }
-}
 
-export class ToggleReadyDto {
-  constructor(data) {
-    this.roomId = data.roomId;
-    this.userId = data.userId;
-    this.isReady = data.isReady;
-  }
+    let validatedMode = "normal";
+    if (mode && typeof mode === "string") {
+      validatedMode = mode.toLowerCase();
+    }
 
-  isValid() {
-    if (!this.roomId || !this.userId) {
-      return false;
+    if (!userId) {
+      throw new Error("Host user ID is required.");
     }
-    if (typeof this.isReady !== "boolean") {
-      return false;
+
+    return {
+      title: title.trim(),
+      mode: validatedMode,
+      hostId: String(userId),
+    };
+  },
+
+  toToggleReadyDto: function (body, userId) {
+    if (!body || typeof body !== "object") {
+      throw new Error("Invalid request body.");
     }
-    return true;
-  }
-}
+
+    let isReadyValue = false;
+    if (body.isReady === true || body.isReady === "true") {
+      isReadyValue = true;
+    }
+
+    if (!userId) {
+      throw new Error("User ID is required.");
+    }
+
+    return {
+      userId: String(userId),
+      isReady: isReadyValue,
+    };
+  },
+};

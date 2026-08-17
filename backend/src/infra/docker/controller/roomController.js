@@ -1,35 +1,46 @@
-import { CreateRoomDto } from "#docker/dto/roomDto.js";
-import { roomService } from "#docker/service/roomService.js";
+import { manageRoomManager } from "#docker/manager/manageRoomManager.js";
 
-export async function createRoomController(req, res, next) {
-  try {
-    const roomDto = new CreateRoomDto(req.body);
-    if (!roomDto.isValid()) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid room creation data." });
+export const roomController = {
+  createRoom: async function (req, res) {
+    try {
+      const title = req.body.title;
+      const mode = req.body.mode;
+      const hostId = req.user.id;
+
+      const roomData = await manageRoomManager.createRoom({
+        title: title,
+        mode: mode,
+        hostId: hostId,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: roomData,
+      });
+    } catch (error) {
+      console.error("[RoomController] createRoom error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
     }
+  },
 
-    const newRoom = await roomService.createRoom(roomDto);
-    return res.status(201).json({
-      success: true,
-      message: "Room successfully created.",
-      data: newRoom,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+  getRoomDetails: async function (req, res) {
+    try {
+      const roomId = req.params.roomId;
+      const details = await manageRoomManager.getRoomDetails(roomId);
 
-export async function getRoomController(req, res, next) {
-  try {
-    const roomId = req.targetRoomId;
-    const roomDetails = await roomService.getRoomDetails(roomId);
-    return res.status(200).json({
-      success: true,
-      data: roomDetails,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+      res.status(200).json({
+        success: true,
+        data: details,
+      });
+    } catch (error) {
+      console.error("[RoomController] getRoomDetails error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  },
+};

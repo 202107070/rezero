@@ -1,22 +1,53 @@
-import { CodeRequestDto, CompileResultDto } from "#docker/dto/gameDto.js";
-import { gameService } from "#docker/service/gameService.js";
+import { manageGameManager } from "#docker/manager/manageGameManager.js";
+import { saveInfoService } from "#docker/service/saveInfoService.js";
 
-export async function submitCode(req, res, next) {
-  try {
-    const codeDto = new CodeRequestDto(req.body);
-    if (!codeDto.isValid()) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Validation failed." });
+export const gameController = {
+  startGame: async function (req, res) {
+    try {
+      const roomId = req.params.roomId;
+      const gameResult = await manageGameManager.startGame(roomId);
+
+      res.status(200).json({
+        success: true,
+        message: "Game started successfully.",
+        data: gameResult,
+      });
+    } catch (error) {
+      console.error("[GameController] startGame error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
     }
+  },
 
-    const submissionId = Date.now();
-    return res.status(202).json({
-      success: true,
-      message: "Code submission accepted.",
-      data: { submissionId: submissionId, status: "PENDING" },
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+  endGame: async function (req, res) {
+    try {
+      const matchId = req.body.matchId;
+      const roomId = req.body.roomId;
+      const winnerId = req.body.winnerId;
+      const score = req.body.score;
+
+      const saveResult = await saveInfoService.saveGameResult({
+        matchId: matchId,
+        roomId: roomId,
+        winnerId: winnerId,
+        score: score,
+      });
+
+      await manageGameManager.stopGame(roomId);
+
+      res.status(200).json({
+        success: true,
+        message: "Game ended and results saved successfully.",
+        data: saveResult,
+      });
+    } catch (error) {
+      console.error("[GameController] endGame error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  },
+};

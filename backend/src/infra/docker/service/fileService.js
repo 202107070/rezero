@@ -5,6 +5,7 @@ import { GAME_CONTAINER_CONFIG } from "#docker/config/gameConfig.js";
 const SANDBOX_PATH = GAME_CONTAINER_CONFIG.sandboxPath;
 
 export const fileService = {
+  
   getExt: function (language) {
     if (typeof language !== "string" || language.trim().length === 0) {
       throw new Error("지원하지 않는 언어입니다: empty language");
@@ -19,27 +20,34 @@ export const fileService = {
     throw new Error("지원하지 않는 언어입니다: " + language);
   },
 
+  
   saveSourceCode: async function (userId, language, code) {
-    const ext = this.getExt(language);
+    const ext = fileService.getExt(language);
     const fileName = userId + "." + ext;
     const targetPath = path.join(SANDBOX_PATH, fileName);
 
     try {
       await fs.mkdir(SANDBOX_PATH, { recursive: true });
       console.log("[FileService] Save start --> " + fileName);
+
       await fs.writeFile(targetPath, code, "utf-8");
       console.log("[FileService] Save complete --> " + targetPath);
 
-      return { success: true, fileName: fileName, targetPath: targetPath };
+      return {
+        success: true,
+        fileName: fileName,
+        targetPath: targetPath,
+      };
     } catch (error) {
       console.error("[FileService] Save error:", error.message);
       throw new Error("Source code file creation error: " + error.message);
     }
   },
 
+  
   deleteSourceCode: async function (userId, language) {
     try {
-      const ext = this.getExt(language);
+      const ext = fileService.getExt(language);
       const fileName = userId + "." + ext;
       const targetPath = path.join(SANDBOX_PATH, fileName);
 

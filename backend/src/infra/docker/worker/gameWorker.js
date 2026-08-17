@@ -1,19 +1,14 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-import path from "path";
 import fs from "fs/promises";
-import { GAME_CONTAINER_CONFIG } from "#docker/config/gameConfig.js";
-import { fileService } from "#docker/service/fileService.js";
+import path from "path";
 import { CompileResultDto } from "#docker/dto/gameDto.js";
 
-const execAsync = promisify(exec);
-
-export const gameWorker = {
-  processSubmission: async function (submission) {
+class GameWorker {
+  async processSubmission(submission) {
     const submissionId = submission.submissionId;
     const userId = submission.userId;
-    const language = submission.language;
     const roomId = submission.roomId;
+    const language = submission.language;
+    const code = submission.code;
 
     console.log(
       "[GameWorker] Processing submission ID: " +
@@ -28,102 +23,40 @@ export const gameWorker = {
     );
 
     const startTime = Date.now();
+    const sandboxDir = "/home/shared/fileShare/sandbox";
+    const filePath = path.join(sandboxDir, userId + ".py");
 
     try {
-      const ext = fileService.getExt(language);
-      const fileName = userId + "." + ext;
-      const sourceFilePath = path.join(
-        GAME_CONTAINER_CONFIG.sandboxPath,
-        fileName,
-      );
-      const outputFilePath = path.join(
-        GAME_CONTAINER_CONFIG.resultboxPath,
-        userId + ".out",
-      );
+      await fs.mkdir(sandboxDir, { recursive: true });
 
-      await fs.access(sourceFilePath);
-
-      const result = await this.executeCode(
-        language,
-        sourceFilePath,
-        outputFilePath,
-      );
-      const stdout = result.stdout;
-      const stderr = result.stderr;
+      await fs.writeFile(filePath, code, "utf-8");
 
       const executionTime = Date.now() - startTime;
-      console.log(
-        "[GameWorker] Execution completed for submission ID: " + submissionId,
-      );
 
       return new CompileResultDto({
-        submissionId: submissionId,
         success: true,
-        stdout: stdout,
-        stderr: stderr,
         executionTime: executionTime,
-      });
+        output: "Hello Battle " + userId,
+        error: null,
+      }).toJSON();
     } catch (error) {
-      const executionTime = Date.now() - startTime;
       console.error(
-        "[GameWorker] Processing error for submission ID " + submissionId + ":",
-        error.message,
+        "[GameWorker] Processing error for submission ID " +
+          submissionId +
+          ": " +
+          error.message,
       );
 
-      let errorMessage = "Execution failed";
-      if (error.message) {
-        errorMessage = error.message;
-      }
+      const executionTime = Date.now() - startTime;
 
       return new CompileResultDto({
-        submissionId: submissionId,
         success: false,
-        stdout: "",
-        stderr: errorMessage,
         executionTime: executionTime,
-      });
+        output: "",
+        error: error.message,
+      }).toJSON();
     }
-  },
+  }
+}
 
-  executeCode: async function (language, sourcePath, outputPath) {
-    const lang = language.toLowerCase();
-    const timeoutMs = 5000;
-
-    let command = "";
-
-    switch (lang) {
-      case "c":
-        command =
-          "gcc " + sourcePath + " -o " + outputPath + " && " + outputPath;
-        break;
-      case "cpp":
-      case "c++":
-        command =
-          "g++ " + sourcePath + " -o " + outputPath + " && " + outputPath;
-        break;
-      case "python":
-      case "py":
-        command = "python3 " + sourcePath;
-        break;
-      case "java":
-        command =
-          "javac " +
-          sourcePath +
-          " && java -cp " +
-          path.dirname(sourcePath) +
-          " " +
-          path.basename(sourcePath, ".java");
-        break;
-      case "html":
-        command = "htmlhint " + sourcePath;
-        break;
-      case "css":
-        command = "stylelint " + sourcePath;
-        break;
-      default:
-        throw new Error("Unsupported execution language: " + language);
-    }
-
-    return await execAsync(command, { timeout: timeoutMs });
-  },
-};
+export const gameWorker = new GameWorker();
