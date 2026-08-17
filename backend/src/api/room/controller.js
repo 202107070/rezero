@@ -9,7 +9,7 @@ import {
   removeRoom,
   startRoom,
 } from "./service.js";
-import { sendSuccess } from "#utils/responseHelper.js ";
+import { sendSuccess } from "#utils/responseHelper.js";
 
 export async function create(req, res, next) {
   try {
