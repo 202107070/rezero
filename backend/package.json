@@ -24,6 +24,7 @@
     "#docker/service/*": "./src/infra/docker/service/*",
     "#infra/redis/*": "./src/infra/redis/*",
     "#docker/worker/*": "./src/infra/docker/worker/*",
+    "#docker/test/*": "./src/infra/docker/test/*",
     "#constants/*": "./src/constants/*",
     "#sandbox/*": "../../../shared/fileShare/sandbox/",
     "#gameDocker/*": "./src/infra/docker/dockerimage/game.Dockerfile/*",

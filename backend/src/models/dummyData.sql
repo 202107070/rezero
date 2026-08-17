@@ -1,0 +1,3667 @@
+SET
+    FOREIGN_KEY_CHECKS = 0;
+
+INSERT INTO
+    users (
+        id,
+        username,
+        password_hash,
+        display_name,
+        gold,
+        rating_score
+    )
+VALUES
+    (
+        'user_1710000001',
+        'alpha_coder',
+        '$2b$10$e8N/Rk.3...hash1',
+        '알파코더',
+        15000,
+        1450
+    ),
+    (
+        'user_1710000002',
+        'beta_tester',
+        '$2b$10$e8N/Rk.3...hash2',
+        '베타테스터',
+        2300,
+        1020
+    ),
+    (
+        'user_1710000003',
+        'gamma_dev',
+        '$2b$10$e8N/Rk.3...hash3',
+        '감마개발자',
+        5400,
+        1180
+    ),
+    (
+        'user_1710000004',
+        'delta_king',
+        '$2b$10$e8N/Rk.3...hash4',
+        '델타킹',
+        8900,
+        1320
+    ),
+    (
+        'user_1710000005',
+        'epsilon_pro',
+        '$2b$10$e8N/Rk.3...hash5',
+        '엡실론프로',
+        300,
+        950
+    ),
+    (
+        'user_1710000006',
+        'zeta_master',
+        '$2b$10$e8N/Rk.3...hash6',
+        '제타마스터',
+        32000,
+        1820
+    ),
+    (
+        'user_1710000007',
+        'eta_runner',
+        '$2b$10$e8N/Rk.3...hash7',
+        '에타러너',
+        4100,
+        1080
+    ),
+    (
+        'user_1710000008',
+        'theta_guru',
+        '$2b$10$e8N/Rk.3...hash8',
+        '세타구루',
+        18500,
+        1600
+    ),
+    (
+        'user_1710000009',
+        'iota_rookie',
+        '$2b$10$e8N/Rk.3...hash9',
+        '이오타루키',
+        0,
+        1000
+    ),
+    (
+        'user_1710000010',
+        'kappa_hacker',
+        '$2b$10$e8N/Rk.3...hash10',
+        '카파해커',
+        9400,
+        1290
+    ),
+    (
+        'user_1710000011',
+        'lambda_func',
+        '$2b$10$e8N/Rk.3...hash11',
+        '람다함수',
+        21000,
+        1510
+    ),
+    (
+        'user_1710000012',
+        'mu_solver',
+        '$2b$10$e8N/Rk.3...hash12',
+        '뮤솔버',
+        1200,
+        1040
+    ),
+    (
+        'user_1710000013',
+        'nu_variable',
+        '$2b$10$e8N/Rk.3...hash13',
+        '변수NU',
+        6700,
+        1150
+    ),
+    (
+        'user_1710000014',
+        'xi_stack',
+        '$2b$10$e8N/Rk.3...hash14',
+        '크시스택',
+        4300,
+        1100
+    ),
+    (
+        'user_1710000015',
+        'omikron_heap',
+        '$2b$10$e8N/Rk.3...hash15',
+        '힙마스터',
+        11200,
+        1380
+    ),
+    (
+        'user_1710000016',
+        'pi_circle',
+        '$2b$10$e8N/Rk.3...hash16',
+        '원주율',
+        800,
+        980
+    ),
+    (
+        'user_1710000017',
+        'rho_pointer',
+        '$2b$10$e8N/Rk.3...hash17',
+        '포인터',
+        14200,
+        1490
+    ),
+    (
+        'user_1710000018',
+        'sigma_sum',
+        '$2b$10$e8N/Rk.3...hash18',
+        '시그마합',
+        29000,
+        1750
+    ),
+    (
+        'user_1710000019',
+        'tau_time',
+        '$2b$10$e8N/Rk.3...hash19',
+        '타임아웃',
+        3100,
+        1060
+    ),
+    (
+        'user_1710000020',
+        'upsilon_flow',
+        '$2b$10$e8N/Rk.3...hash20',
+        '오버플로우',
+        5200,
+        1190
+    ),
+    (
+        'user_1710000021',
+        'phi_golden',
+        '$2b$10$e8N/Rk.3...hash21',
+        '황금비율',
+        17800,
+        1580
+    ),
+    (
+        'user_1710000022',
+        'chi_square',
+        '$2b$10$e8N/Rk.3...hash22',
+        '카이스퀘어',
+        2400,
+        1030
+    ),
+    (
+        'user_1710000023',
+        'psi_wave',
+        '$2b$10$e8N/Rk.3...hash23',
+        '파동함수',
+        8300,
+        1270
+    ),
+    (
+        'user_1710000024',
+        'omega_final',
+        '$2b$10$e8N/Rk.3...hash24',
+        '오메가',
+        45000,
+        1950
+    ),
+    (
+        'user_1710000025',
+        'algo_god',
+        '$2b$10$e8N/Rk.3...hash25',
+        '알고신',
+        50000,
+        2100
+    ),
+    (
+        'user_1710000026',
+        'bug_finder',
+        '$2b$10$e8N/Rk.3...hash26',
+        '버그잡이',
+        1100,
+        920
+    ),
+    (
+        'user_1710000027',
+        'code_monkey',
+        '$2b$10$e8N/Rk.3...hash27',
+        '코드몽키',
+        3900,
+        1070
+    ),
+    (
+        'user_1710000028',
+        'byte_ninja',
+        '$2b$10$e8N/Rk.3...hash28',
+        '바이트닌자',
+        13500,
+        1420
+    ),
+    (
+        'user_1710000029',
+        'script_kid',
+        '$2b$10$e8N/Rk.3...hash29',
+        '스크립트키디',
+        500,
+        890
+    ),
+    (
+        'user_1710000030',
+        'syntax_error',
+        '$2b$10$e8N/Rk.3...hash30',
+        '문법에러',
+        200,
+        850
+    );
+
+INSERT INTO
+    user_items (user_id, item_key, quantity)
+VALUES
+    ('user_1710000001', 'paint', 5),
+    ('user_1710000001', 'revealLength', 2),
+    ('user_1710000002', 'paint', 1),
+    ('user_1710000003', 'revealLength', 3),
+    ('user_1710000004', 'paint', 10),
+    ('user_1710000004', 'freeze', 4),
+    ('user_1710000006', 'paint', 20),
+    ('user_1710000006', 'revealLength', 15),
+    ('user_1710000008', 'freeze', 5),
+    ('user_1710000010', 'paint', 3),
+    ('user_1710000011', 'revealLength', 8),
+    ('user_1710000014', 'paint', 2),
+    ('user_1710000015', 'freeze', 3),
+    ('user_1710000017', 'paint', 6),
+    ('user_1710000018', 'revealLength', 10),
+    ('user_1710000020', 'paint', 1),
+    ('user_1710000021', 'freeze', 7),
+    ('user_1710000023', 'paint', 4),
+    ('user_1710000024', 'paint', 50),
+    ('user_1710000024', 'revealLength', 30),
+    ('user_1710000025', 'paint', 99),
+    ('user_1710000025', 'freeze', 50),
+    ('user_1710000027', 'paint', 2),
+    ('user_1710000028', 'revealLength', 4),
+    ('user_1710000028', 'freeze', 1),
+    ('user_1710000030', 'paint', 0),
+    ('user_1710000005', 'paint', 1),
+    ('user_1710000007', 'revealLength', 2),
+    ('user_1710000012', 'freeze', 1),
+    ('user_1710000013', 'paint', 3);
+
+INSERT INTO
+    user_titles (
+        user_id,
+        owned_title_ids,
+        equipped_title_id,
+        stats_total_wins,
+        stats_consecutive_wins,
+        stats_total_games,
+        stats_perfect_game,
+        stats_avg_speed,
+        stats_lang_wins
+    )
+VALUES
+    (
+        'user_1710000001',
+        '["rookie", "veteran"]',
+        'veteran',
+        12,
+        3,
+        20,
+        TRUE,
+        14.5,
+        '{"PYTHON": 8, "JAVA": 4}'
+    ),
+    (
+        'user_1710000002',
+        '["rookie"]',
+        'rookie',
+        2,
+        0,
+        10,
+        FALSE,
+        25.2,
+        '{"JAVA": 2}'
+    ),
+    (
+        'user_1710000003',
+        '["rookie"]',
+        NULL,
+        5,
+        1,
+        15,
+        FALSE,
+        18.9,
+        '{"CPP": 5}'
+    ),
+    (
+        'user_1710000004',
+        '["rookie", "speed_demon"]',
+        'speed_demon',
+        18,
+        5,
+        28,
+        TRUE,
+        9.8,
+        '{"PYTHON": 18}'
+    ),
+    (
+        'user_1710000005',
+        '["rookie"]',
+        'rookie',
+        1,
+        0,
+        8,
+        FALSE,
+        32.1,
+        '{"JS": 1}'
+    ),
+    (
+        'user_1710000006',
+        '["rookie", "veteran", "god"]',
+        'god',
+        45,
+        12,
+        50,
+        TRUE,
+        8.2,
+        '{"JAVA": 20, "PYTHON": 25}'
+    ),
+    (
+        'user_1710000007',
+        '["rookie"]',
+        'rookie',
+        4,
+        1,
+        12,
+        FALSE,
+        22.0,
+        '{"JS": 4}'
+    ),
+    (
+        'user_1710000008',
+        '["rookie", "veteran"]',
+        'veteran',
+        25,
+        4,
+        38,
+        TRUE,
+        12.1,
+        '{"CPP": 25}'
+    ),
+    (
+        'user_1710000009',
+        '["rookie"]',
+        'rookie',
+        0,
+        0,
+        3,
+        FALSE,
+        40.5,
+        '{}'
+    ),
+    (
+        'user_1710000010',
+        '["rookie"]',
+        NULL,
+        9,
+        2,
+        18,
+        FALSE,
+        16.4,
+        '{"PYTHON": 9}'
+    ),
+    (
+        'user_1710000011',
+        '["rookie", "veteran"]',
+        'veteran',
+        15,
+        2,
+        22,
+        TRUE,
+        11.3,
+        '{"JAVA": 15}'
+    ),
+    (
+        'user_1710000012',
+        '["rookie"]',
+        'rookie',
+        3,
+        0,
+        9,
+        FALSE,
+        28.7,
+        '{"CPP": 3}'
+    ),
+    (
+        'user_1710000013',
+        '["rookie"]',
+        'rookie',
+        6,
+        1,
+        14,
+        FALSE,
+        19.5,
+        '{"JS": 6}'
+    ),
+    (
+        'user_1710000014',
+        '["rookie"]',
+        NULL,
+        4,
+        0,
+        11,
+        FALSE,
+        21.2,
+        '{"PYTHON": 4}'
+    ),
+    (
+        'user_1710000015',
+        '["rookie", "speed_demon"]',
+        'speed_demon',
+        11,
+        3,
+        19,
+        FALSE,
+        10.5,
+        '{"JAVA": 11}'
+    ),
+    (
+        'user_1710000016',
+        '["rookie"]',
+        'rookie',
+        2,
+        0,
+        7,
+        FALSE,
+        30.0,
+        '{"CPP": 2}'
+    ),
+    (
+        'user_1710000017',
+        '["rookie", "veteran"]',
+        'veteran',
+        14,
+        2,
+        21,
+        TRUE,
+        13.8,
+        '{"PYTHON": 14}'
+    ),
+    (
+        'user_1710000018',
+        '["rookie", "god"]',
+        'god',
+        38,
+        8,
+        44,
+        TRUE,
+        7.9,
+        '{"JAVA": 38}'
+    ),
+    (
+        'user_1710000019',
+        '["rookie"]',
+        'rookie',
+        3,
+        0,
+        10,
+        FALSE,
+        27.4,
+        '{"JS": 3}'
+    ),
+    (
+        'user_1710000020',
+        '["rookie"]',
+        NULL,
+        7,
+        1,
+        16,
+        FALSE,
+        17.6,
+        '{"CPP": 7}'
+    ),
+    (
+        'user_1710000021',
+        '["rookie", "veteran"]',
+        'veteran',
+        22,
+        4,
+        31,
+        TRUE,
+        12.9,
+        '{"PYTHON": 22}'
+    ),
+    (
+        'user_1710000022',
+        '["rookie"]',
+        'rookie',
+        2,
+        0,
+        6,
+        FALSE,
+        29.1,
+        '{"JAVA": 2}'
+    ),
+    (
+        'user_1710000023',
+        '["rookie"]',
+        'rookie',
+        8,
+        2,
+        15,
+        FALSE,
+        15.3,
+        '{"JS": 8}'
+    ),
+    (
+        'user_1710000024',
+        '["rookie", "veteran", "god"]',
+        'god',
+        60,
+        15,
+        65,
+        TRUE,
+        6.5,
+        '{"PYTHON": 30, "JAVA": 30}'
+    ),
+    (
+        'user_1710000025',
+        '["rookie", "god", "unbeatable"]',
+        'unbeatable',
+        88,
+        25,
+        90,
+        TRUE,
+        5.1,
+        '{"CPP": 88}'
+    ),
+    (
+        'user_1710000026',
+        '["rookie"]',
+        'rookie',
+        1,
+        0,
+        5,
+        FALSE,
+        35.8,
+        '{"PYTHON": 1}'
+    ),
+    (
+        'user_1710000027',
+        '["rookie"]',
+        NULL,
+        4,
+        0,
+        13,
+        FALSE,
+        24.3,
+        '{"JAVA": 4}'
+    ),
+    (
+        'user_1710000028',
+        '["rookie", "veteran"]',
+        'veteran',
+        13,
+        3,
+        20,
+        TRUE,
+        13.1,
+        '{"JS": 13}'
+    ),
+    (
+        'user_1710000029',
+        '["rookie"]',
+        'rookie',
+        0,
+        0,
+        4,
+        FALSE,
+        42.0,
+        '{}'
+    ),
+    (
+        'user_1710000030',
+        '["rookie"]',
+        'rookie',
+        0,
+        0,
+        2,
+        FALSE,
+        45.0,
+        '{}'
+    );
+
+INSERT INTO
+    problems (
+        id,
+        type,
+        difficulty,
+        title,
+        question,
+        answer,
+        options,
+        correct_index,
+        explanation,
+        description,
+        input,
+        output
+    )
+VALUES
+    (
+        'prob_101',
+        'CHOICE',
+        'easy',
+        '두 수의 합 구하기',
+        '1 + 1의 결과는?',
+        '{"val": 2}',
+        '["1", "2", "3", "4"]',
+        1,
+        '1에 1을 더하면 2입니다.',
+        '기초 산수 문제',
+        '1 1',
+        '2'
+    ),
+    (
+        'prob_102',
+        'BLANK',
+        'easy',
+        '파이썬 출력 함수',
+        '파이썬에서 출력시 사용하는 함수는 ___이다.',
+        '{"val": "print"}',
+        NULL,
+        NULL,
+        'print() 함수를 사용합니다.',
+        '기초 언어 문법',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_103',
+        'CODE',
+        'medium',
+        '배열 뒤집기',
+        '주어진 배열을 역순으로 정렬하시오.',
+        '{"code": "arr.reverse()"}',
+        NULL,
+        NULL,
+        'reverse 메서드를 활용합니다.',
+        '알고리즘',
+        '[1,2,3]',
+        '[3,2,1]'
+    ),
+    (
+        'prob_104',
+        'CHOICE',
+        'easy',
+        '자바 자료형',
+        '참/거짓을 표현하는 자바의 자료형은?',
+        '{"val": "boolean"}',
+        '["int", "String", "boolean", "double"]',
+        2,
+        'boolean 타입입니다.',
+        '자바 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_105',
+        'BLANK',
+        'hard',
+        'C++ 포인터',
+        '변수 a의 주소값을 가져오기 위해 쓰는 연산자는 ___이다.',
+        '{"val": "&"}',
+        NULL,
+        NULL,
+        '& 연산자(Address-of)를 사용합니다.',
+        'C++ 문법',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_106',
+        'CHOICE',
+        'easy',
+        '자바스크립트 변수 선언',
+        '재할당이 불가능한 선언 키워드는?',
+        '{"val": "const"}',
+        '["var", "let", "const", "def"]',
+        2,
+        'const는 상수를 선언합니다.',
+        'JS 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_107',
+        'CODE',
+        'easy',
+        '짝수 판별기',
+        'n이 짝수이면 true를 반환하는 함수를 작성하세요.',
+        '{"code": "return n % 2 == 0;"}',
+        NULL,
+        NULL,
+        '2로 나눈 나머지가 0인지 확인합니다.',
+        '조건문',
+        '4',
+        'true'
+    ),
+    (
+        'prob_108',
+        'CHOICE',
+        'medium',
+        '스택의 특징',
+        '스택(Stack)의 입출력 방식은?',
+        '{"val": "LIFO"}',
+        '["FIFO", "LIFO", "LILO", "Random"]',
+        1,
+        'Last In First Out 구조입니다.',
+        '자료구조',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_109',
+        'CHOICE',
+        'medium',
+        '큐의 특징',
+        '큐(Queue)의 입출력 방식은?',
+        '{"val": "FIFO"}',
+        '["FIFO", "LIFO", "LILO", "Random"]',
+        0,
+        'First In First Out 구조입니다.',
+        '자료구조',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_110',
+        'BLANK',
+        'easy',
+        'SQL 조회 키워드',
+        '데이터 조회를 위한 SQL 구문은 ___이다.',
+        '{"val": "SELECT"}',
+        NULL,
+        NULL,
+        'SELECT 문을 사용합니다.',
+        'DB 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_111',
+        'CHOICE',
+        'hard',
+        '시간복잡도 비교',
+        '이진 탐색(Binary Search)의 시간복잡도는?',
+        '{"val": "O(log N)"}',
+        '["O(1)", "O(N)", "O(log N)", "O(N^2)"]',
+        2,
+        'O(log N) 입니다.',
+        '알고리즘',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_112',
+        'CODE',
+        'medium',
+        '팩토리얼 구하기',
+        'n!을 구하는 재귀함수를 작성하시오.',
+        '{"code": "return n <= 1 ? 1 : n * fact(n-1);"}',
+        NULL,
+        NULL,
+        '재귀호출을 이용합니다.',
+        '5',
+        '120'
+    ),
+    (
+        'prob_113',
+        'BLANK',
+        'medium',
+        'HTTP 상태코드',
+        '클라이언트 요청 성공을 뜻하는 HTTP 상태코드는 ___이다.',
+        '{"val": "200"}',
+        NULL,
+        NULL,
+        '200 OK 입니다.',
+        '네트워크',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_114',
+        'CHOICE',
+        'easy',
+        'HTML 태그',
+        '가장 큰 제목을 나타내는 HTML 태그는?',
+        '{"val": "<h1>"}',
+        '["<p>", "<h1>", "<h6>", "<div>"]',
+        1,
+        'h1 태그입니다.',
+        '웹 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_115',
+        'CODE',
+        'hard',
+        '피보나치 수열',
+        'n번째 피보나치 수를 구하시오.',
+        '{"code": "fib(n)"}',
+        NULL,
+        NULL,
+        'DP 또는 재귀를 사용합니다.',
+        '6',
+        '8'
+    ),
+    (
+        'prob_116',
+        'CHOICE',
+        'medium',
+        'Git 명령어',
+        '원격 저장소 변경사항을 가져오는 명령어는?',
+        '{"val": "git pull"}',
+        '["git push", "git pull", "git commit", "git init"]',
+        1,
+        'git pull 입니다.',
+        '버전관리',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_117',
+        'BLANK',
+        'easy',
+        '파이썬 리스트 추가',
+        '리스트 뒤에 요소를 추가하는 메서드는 ___이다.',
+        '{"val": "append"}',
+        NULL,
+        NULL,
+        'append()를 사용합니다.',
+        '파이썬 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_118',
+        'CHOICE',
+        'medium',
+        'REST API 메소드',
+        '리소스를 수정할 때 사용하는 HTTP 메소드는?',
+        '{"val": "PUT"}',
+        '["GET", "POST", "PUT", "DELETE"]',
+        2,
+        'PUT 혹은 PATCH입니다.',
+        '네트워크',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_119',
+        'CODE',
+        'easy',
+        '문자열 길이',
+        '문자열 s의 길이를 반환하시오.',
+        '{"code": "return s.length;"}',
+        NULL,
+        NULL,
+        'length 프로퍼티/메서드를 사용합니다.',
+        '"hello"',
+        '5'
+    ),
+    (
+        'prob_120',
+        'CHOICE',
+        'hard',
+        '정렬 알고리즘',
+        '최악의 경우에도 O(N log N)을 보장하는 정렬은?',
+        '{"val": "Merge Sort"}',
+        '["Quick Sort", "Bubble Sort", "Merge Sort", "Insertion Sort"]',
+        2,
+        '병합 정렬입니다.',
+        '알고리즘',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_121',
+        'BLANK',
+        'medium',
+        '자바 최상위 클래스',
+        '자바의 모든 클래스의 최상위 부모 클래스는 ___이다.',
+        '{"val": "Object"}',
+        NULL,
+        NULL,
+        'java.lang.Object 입니다.',
+        '자바 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_122',
+        'CHOICE',
+        'easy',
+        'CSS 속성',
+        '글자 색상을 변경하는 CSS 속성은?',
+        '{"val": "color"}',
+        '["background", "color", "font-style", "text-align"]',
+        1,
+        'color 속성입니다.',
+        '웹 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_123',
+        'CODE',
+        'medium',
+        '최댓값 찾기',
+        '배열에서 가장 큰 수를 찾으시오.',
+        '{"code": "Math.max(...arr)"}',
+        NULL,
+        NULL,
+        'Math.max를 응용합니다.',
+        '[3, 8, 2, 10, 5]',
+        '10'
+    ),
+    (
+        'prob_124',
+        'BLANK',
+        'hard',
+        '리눅스 권한',
+        '파일 권한을 변경하는 리눅스 명령어는 ___이다.',
+        '{"val": "chmod"}',
+        NULL,
+        NULL,
+        'chmod 명령어를 사용합니다.',
+        'OS',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_125',
+        'CHOICE',
+        'easy',
+        '데이터베이스 PK',
+        '기본키의 주요 특징은?',
+        '{"val": "Unique & Not Null"}',
+        '["중복 가능", "Null 허용", "Unique & Not Null", "외래키와 동일"]',
+        2,
+        '유일성과 비어있지 않음을 만족합니다.',
+        'DB 기초',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_126',
+        'CODE',
+        'hard',
+        '소수 판별',
+        'n이 소수인지 판별하는 함수를 작성하시오.',
+        '{"code": "checkPrime(n)"}',
+        NULL,
+        NULL,
+        '2부터 루트 n까지 나눕니다.',
+        '7',
+        'true'
+    ),
+    (
+        'prob_127',
+        'BLANK',
+        'medium',
+        'Docker 기본 구문',
+        '이미지를 생성하는 명령어는 docker ___이다.',
+        '{"val": "build"}',
+        NULL,
+        NULL,
+        'docker build 명령어입니다.',
+        '데브옵스',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_128',
+        'CHOICE',
+        'medium',
+        '객체지향 4대 요소',
+        '다음 중 객체지향 특징이 아닌 것은?',
+        '{"val": "절차성"}',
+        '["캡슐화", "상속성", "다형성", "절차성"]',
+        3,
+        '절차성은 특징이 아닙니다.',
+        'OOP',
+        NULL,
+        NULL
+    ),
+    (
+        'prob_129',
+        'CODE',
+        'medium',
+        '절댓값 구하기',
+        'n의 절댓값을 구하시오.',
+        '{"code": "Math.abs(n)"}',
+        NULL,
+        NULL,
+        'Math.abs 함수를 사용합니다.',
+        '-15',
+        '15'
+    ),
+    (
+        'prob_130',
+        'CHOICE',
+        'hard',
+        '교착상태 조건',
+        '데드락(Deadlock)의 4대 조건이 아닌 것은?',
+        '{"val": "선점 가능"}',
+        '["상호 배제", "점유와 대기", "비선점", "선점 가능"]',
+        3,
+        '비선점이 조건 중 하나입니다.',
+        'OS',
+        NULL,
+        NULL
+    );
+
+INSERT INTO
+    rooms (
+        id,
+        title,
+        status,
+        mode,
+        game_mode,
+        difficulty,
+        language,
+        password,
+        problem_count,
+        max_players,
+        host_user_id
+    )
+VALUES
+    (
+        1,
+        '알고리즘 한판 갈실분',
+        'WAITING',
+        '1/1',
+        'normal',
+        'EASY',
+        'PYTHON',
+        '',
+        3,
+        2,
+        'user_1710000001'
+    ),
+    (
+        2,
+        '아이템전 맞짱떠요',
+        'STARTED',
+        '1/1',
+        'item',
+        'NORMAL',
+        'JAVA',
+        '1234',
+        5,
+        2,
+        'user_1710000004'
+    ),
+    (
+        3,
+        '초보만 오세요',
+        'WAITING',
+        '1/N',
+        'normal',
+        'EASY',
+        'JS',
+        '',
+        3,
+        4,
+        'user_1710000002'
+    ),
+    (
+        4,
+        '고수 전용 랭킹전',
+        'STARTED',
+        '1/1',
+        'normal',
+        'HARD',
+        'CPP',
+        '',
+        5,
+        2,
+        'user_1710000006'
+    ),
+    (
+        5,
+        '즐겜 유저 환영',
+        'WAITING',
+        '1/N',
+        'item',
+        'EASY',
+        'PYTHON',
+        '',
+        3,
+        6,
+        'user_1710000007'
+    ),
+    (
+        6,
+        '자바 코딩 테스트 스터디',
+        'WAITING',
+        '1/N',
+        'normal',
+        'NORMAL',
+        'JAVA',
+        '',
+        5,
+        4,
+        'user_1710000008'
+    ),
+    (
+        7,
+        '파이썬 스피드전',
+        'STARTED',
+        '1/1',
+        'normal',
+        'EASY',
+        'PYTHON',
+        '',
+        3,
+        2,
+        'user_1710000011'
+    ),
+    (
+        8,
+        'C++ 하드모드 방',
+        'WAITING',
+        '1/1',
+        'item',
+        'HARD',
+        'CPP',
+        '0000',
+        5,
+        2,
+        'user_1710000018'
+    ),
+    (
+        9,
+        '심심한 사람 들어와',
+        'WAITING',
+        '1/N',
+        'normal',
+        'EASY',
+        'JS',
+        '',
+        3,
+        4,
+        'user_1710000013'
+    ),
+    (
+        10,
+        '아무나 덤벼라',
+        'STARTED',
+        '1/1',
+        'item',
+        'NORMAL',
+        'PYTHON',
+        '',
+        5,
+        2,
+        'user_1710000024'
+    ),
+    (
+        11,
+        '알고신에 도전하세요',
+        'WAITING',
+        '1/1',
+        'normal',
+        'HARD',
+        'CPP',
+        '',
+        5,
+        2,
+        'user_1710000025'
+    ),
+    (
+        12,
+        '뉴비 코딩 교실',
+        'WAITING',
+        '1/N',
+        'normal',
+        'EASY',
+        'JAVA',
+        '',
+        3,
+        4,
+        'user_1710000009'
+    ),
+    (
+        13,
+        '퇴근길 한판',
+        'STARTED',
+        '1/N',
+        'item',
+        'NORMAL',
+        'JS',
+        '',
+        3,
+        4,
+        'user_1710000028'
+    ),
+    (
+        14,
+        '야간 알고리즘 세션',
+        'WAITING',
+        '1/1',
+        'normal',
+        'HARD',
+        'PYTHON',
+        '',
+        5,
+        2,
+        'user_1710000021'
+    ),
+    (
+        15,
+        '1:1 빠른대전',
+        'WAITING',
+        '1/1',
+        'item',
+        'EASY',
+        'JAVA',
+        '',
+        3,
+        2,
+        'user_1710000017'
+    ),
+    (
+        16,
+        '방제목 뭐라고 지음',
+        'WAITING',
+        '1/N',
+        'normal',
+        'EASY',
+        'JS',
+        '',
+        3,
+        3,
+        'user_1710000019'
+    ),
+    (
+        17,
+        '상금 걸린 매치',
+        'STARTED',
+        '1/1',
+        'normal',
+        'NORMAL',
+        'CPP',
+        '7777',
+        5,
+        2,
+        'user_1710000010'
+    ),
+    (
+        18,
+        '파이썬 고수 구함',
+        'WAITING',
+        '1/1',
+        'item',
+        'HARD',
+        'PYTHON',
+        '',
+        5,
+        2,
+        'user_1710000015'
+    ),
+    (
+        19,
+        '자바 마스터 클래스',
+        'WAITING',
+        '1/N',
+        'normal',
+        'NORMAL',
+        'JAVA',
+        '',
+        3,
+        4,
+        'user_1710000012'
+    ),
+    (
+        20,
+        '쉬운 문제만 풀어용',
+        'STARTED',
+        '1/N',
+        'normal',
+        'EASY',
+        'JS',
+        '',
+        3,
+        4,
+        'user_1710000003'
+    ),
+    (
+        21,
+        'C++ 매니아 모임',
+        'WAITING',
+        '1/1',
+        'item',
+        'NORMAL',
+        'CPP',
+        '',
+        5,
+        2,
+        'user_1710000020'
+    ),
+    (
+        22,
+        '한판만 하고 자러감',
+        'WAITING',
+        '1/1',
+        'normal',
+        'EASY',
+        'PYTHON',
+        '',
+        3,
+        2,
+        'user_1710000023'
+    ),
+    (
+        23,
+        '랭킹 올릴 사람',
+        'STARTED',
+        '1/N',
+        'item',
+        'HARD',
+        'JAVA',
+        '',
+        5,
+        4,
+        'user_1710000014'
+    ),
+    (
+        24,
+        '초스피드 대전',
+        'WAITING',
+        '1/1',
+        'normal',
+        'EASY',
+        'JS',
+        '',
+        3,
+        2,
+        'user_1710000016'
+    ),
+    (
+        25,
+        '코테 대비 방',
+        'WAITING',
+        '1/N',
+        'normal',
+        'NORMAL',
+        'PYTHON',
+        '',
+        5,
+        4,
+        'user_1710000022'
+    ),
+    (
+        26,
+        '버그 대격돌',
+        'STARTED',
+        '1/1',
+        'item',
+        'EASY',
+        'JAVA',
+        '',
+        3,
+        2,
+        'user_1710000026'
+    ),
+    (
+        27,
+        '실력 테스트',
+        'WAITING',
+        '1/1',
+        'normal',
+        'HARD',
+        'CPP',
+        '',
+        5,
+        2,
+        'user_1710000027'
+    ),
+    (
+        28,
+        '스크립트 놀이터',
+        'WAITING',
+        '1/N',
+        'item',
+        'EASY',
+        'JS',
+        '',
+        3,
+        4,
+        'user_1710000029'
+    ),
+    (
+        29,
+        '문법 에러 잡기',
+        'WAITING',
+        '1/1',
+        'normal',
+        'EASY',
+        'PYTHON',
+        '',
+        3,
+        2,
+        'user_1710000030'
+    ),
+    (
+        30,
+        '최후의 승자는?',
+        'STARTED',
+        '1/N',
+        'normal',
+        'HARD',
+        'JAVA',
+        '',
+        5,
+        8,
+        'user_1710000005'
+    );
+
+INSERT INTO
+    room_participants (
+        room_id,
+        user_id,
+        slot_index,
+        is_host,
+        is_ready,
+        language,
+        `character`,
+        status,
+        selected_items
+    )
+VALUES
+    (
+        1,
+        'user_1710000001',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char1',
+        'READY',
+        '[]'
+    ),
+    (
+        1,
+        'user_1710000002',
+        1,
+        FALSE,
+        TRUE,
+        'PYTHON',
+        'char2',
+        'READY',
+        '[]'
+    ),
+    (
+        2,
+        'user_1710000004',
+        0,
+        TRUE,
+        TRUE,
+        'JAVA',
+        'char3',
+        'PLAYING',
+        '["paint"]'
+    ),
+    (
+        2,
+        'user_1710000003',
+        1,
+        FALSE,
+        TRUE,
+        'JAVA',
+        'char1',
+        'PLAYING',
+        '["freeze"]'
+    ),
+    (
+        3,
+        'user_1710000002',
+        0,
+        TRUE,
+        TRUE,
+        'JS',
+        'char2',
+        'READY',
+        '[]'
+    ),
+    (
+        4,
+        'user_1710000006',
+        0,
+        TRUE,
+        TRUE,
+        'CPP',
+        'char4',
+        'PLAYING',
+        '[]'
+    ),
+    (
+        4,
+        'user_1710000025',
+        1,
+        FALSE,
+        TRUE,
+        'CPP',
+        'char1',
+        'PLAYING',
+        '[]'
+    ),
+    (
+        5,
+        'user_1710000007',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char1',
+        'READY',
+        '["paint"]'
+    ),
+    (
+        6,
+        'user_1710000008',
+        0,
+        TRUE,
+        TRUE,
+        'JAVA',
+        'char2',
+        'READY',
+        '[]'
+    ),
+    (
+        7,
+        'user_1710000011',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char3',
+        'PLAYING',
+        '[]'
+    ),
+    (
+        7,
+        'user_1710000010',
+        1,
+        FALSE,
+        TRUE,
+        'PYTHON',
+        'char1',
+        'PLAYING',
+        '[]'
+    ),
+    (
+        8,
+        'user_1710000018',
+        0,
+        TRUE,
+        TRUE,
+        'CPP',
+        'char4',
+        'READY',
+        '["revealLength"]'
+    ),
+    (
+        9,
+        'user_1710000013',
+        0,
+        TRUE,
+        TRUE,
+        'JS',
+        'char1',
+        'READY',
+        '[]'
+    ),
+    (
+        10,
+        'user_1710000024',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char3',
+        'PLAYING',
+        '["paint", "freeze"]'
+    ),
+    (
+        10,
+        'user_1710000021',
+        1,
+        FALSE,
+        TRUE,
+        'PYTHON',
+        'char2',
+        'PLAYING',
+        '["freeze"]'
+    ),
+    (
+        11,
+        'user_1710000025',
+        0,
+        TRUE,
+        TRUE,
+        'CPP',
+        'char1',
+        'READY',
+        '[]'
+    ),
+    (
+        12,
+        'user_1710000009',
+        0,
+        TRUE,
+        TRUE,
+        'JAVA',
+        'char2',
+        'READY',
+        '[]'
+    ),
+    (
+        13,
+        'user_1710000028',
+        0,
+        TRUE,
+        TRUE,
+        'JS',
+        'char3',
+        'PLAYING',
+        '["revealLength"]'
+    ),
+    (
+        14,
+        'user_1710000021',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char4',
+        'READY',
+        '[]'
+    ),
+    (
+        15,
+        'user_1710000017',
+        0,
+        TRUE,
+        TRUE,
+        'JAVA',
+        'char1',
+        'READY',
+        '["paint"]'
+    ),
+    (
+        16,
+        'user_1710000019',
+        0,
+        TRUE,
+        TRUE,
+        'JS',
+        'char2',
+        'READY',
+        '[]'
+    ),
+    (
+        17,
+        'user_1710000010',
+        0,
+        TRUE,
+        TRUE,
+        'CPP',
+        'char3',
+        'PLAYING',
+        '[]'
+    ),
+    (
+        18,
+        'user_1710000015',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char4',
+        'READY',
+        '["freeze"]'
+    ),
+    (
+        19,
+        'user_1710000012',
+        0,
+        TRUE,
+        TRUE,
+        'JAVA',
+        'char1',
+        'READY',
+        '[]'
+    ),
+    (
+        20,
+        'user_1710000003',
+        0,
+        TRUE,
+        TRUE,
+        'JS',
+        'char2',
+        'PLAYING',
+        '[]'
+    ),
+    (
+        21,
+        'user_1710000020',
+        0,
+        TRUE,
+        TRUE,
+        'CPP',
+        'char3',
+        'READY',
+        '["paint"]'
+    ),
+    (
+        22,
+        'user_1710000023',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char4',
+        'READY',
+        '[]'
+    ),
+    (
+        23,
+        'user_1710000014',
+        0,
+        TRUE,
+        TRUE,
+        'JAVA',
+        'char1',
+        'PLAYING',
+        '["revealLength"]'
+    ),
+    (
+        24,
+        'user_1710000016',
+        0,
+        TRUE,
+        TRUE,
+        'JS',
+        'char2',
+        'READY',
+        '[]'
+    ),
+    (
+        25,
+        'user_1710000022',
+        0,
+        TRUE,
+        TRUE,
+        'PYTHON',
+        'char3',
+        'READY',
+        '[]'
+    );
+
+INSERT INTO
+    matches (
+        id,
+        room_id,
+        status,
+        lang,
+        difficulty,
+        problem_count,
+        max_players,
+        room_mode,
+        game_mode,
+        round_seconds,
+        started_at
+    )
+VALUES
+    (
+        'battle-1',
+        1,
+        'FINISHED',
+        'PYTHON',
+        'EASY',
+        3,
+        2,
+        '1/1',
+        'normal',
+        180,
+        '2026-03-01 10:00:00'
+    ),
+    (
+        'battle-2',
+        2,
+        'IN_PROGRESS',
+        'JAVA',
+        'NORMAL',
+        5,
+        2,
+        '1/1',
+        'item',
+        300,
+        '2026-03-01 10:15:00'
+    ),
+    (
+        'battle-3',
+        3,
+        'FINISHED',
+        'JS',
+        'EASY',
+        3,
+        4,
+        '1/N',
+        'normal',
+        180,
+        '2026-03-01 11:00:00'
+    ),
+    (
+        'battle-4',
+        4,
+        'IN_PROGRESS',
+        'CPP',
+        'HARD',
+        5,
+        2,
+        '1/1',
+        'normal',
+        300,
+        '2026-03-01 11:30:00'
+    ),
+    (
+        'battle-5',
+        5,
+        'FINISHED',
+        'PYTHON',
+        'EASY',
+        3,
+        6,
+        '1/N',
+        'item',
+        180,
+        '2026-03-01 12:00:00'
+    ),
+    (
+        'battle-6',
+        6,
+        'FINISHED',
+        'JAVA',
+        'NORMAL',
+        5,
+        4,
+        '1/N',
+        'normal',
+        300,
+        '2026-03-01 13:00:00'
+    ),
+    (
+        'battle-7',
+        7,
+        'IN_PROGRESS',
+        'PYTHON',
+        'EASY',
+        3,
+        2,
+        '1/1',
+        'normal',
+        180,
+        '2026-03-01 13:45:00'
+    ),
+    (
+        'battle-8',
+        8,
+        'FINISHED',
+        'CPP',
+        'HARD',
+        5,
+        2,
+        '1/1',
+        'item',
+        300,
+        '2026-03-01 14:20:00'
+    ),
+    (
+        'battle-9',
+        9,
+        'FINISHED',
+        'JS',
+        'EASY',
+        3,
+        4,
+        '1/N',
+        'normal',
+        180,
+        '2026-03-01 15:00:00'
+    ),
+    (
+        'battle-10',
+        10,
+        'IN_PROGRESS',
+        'PYTHON',
+        'NORMAL',
+        5,
+        2,
+        '1/1',
+        'item',
+        300,
+        '2026-03-01 15:30:00'
+    ),
+    (
+        'battle-11',
+        11,
+        'FINISHED',
+        'CPP',
+        'HARD',
+        5,
+        2,
+        '1/1',
+        'normal',
+        300,
+        '2026-03-01 16:00:00'
+    ),
+    (
+        'battle-12',
+        12,
+        'FINISHED',
+        'JAVA',
+        'EASY',
+        3,
+        4,
+        '1/N',
+        'normal',
+        180,
+        '2026-03-01 16:40:00'
+    ),
+    (
+        'battle-13',
+        13,
+        'IN_PROGRESS',
+        'JS',
+        'NORMAL',
+        3,
+        4,
+        '1/N',
+        'item',
+        180,
+        '2026-03-01 17:10:00'
+    ),
+    (
+        'battle-14',
+        14,
+        'FINISHED',
+        'PYTHON',
+        'HARD',
+        5,
+        2,
+        '1/1',
+        'normal',
+        300,
+        '2026-03-01 18:00:00'
+    ),
+    (
+        'battle-15',
+        15,
+        'FINISHED',
+        'JAVA',
+        'EASY',
+        3,
+        2,
+        '1/1',
+        'item',
+        180,
+        '2026-03-01 18:30:00'
+    ),
+    (
+        'battle-16',
+        16,
+        'FINISHED',
+        'JS',
+        'EASY',
+        3,
+        3,
+        '1/N',
+        'normal',
+        180,
+        '2026-03-01 19:00:00'
+    ),
+    (
+        'battle-17',
+        17,
+        'IN_PROGRESS',
+        'CPP',
+        'NORMAL',
+        5,
+        2,
+        '1/1',
+        'normal',
+        300,
+        '2026-03-01 19:30:00'
+    ),
+    (
+        'battle-18',
+        18,
+        'FINISHED',
+        'PYTHON',
+        'HARD',
+        5,
+        2,
+        '1/1',
+        'item',
+        300,
+        '2026-03-01 20:00:00'
+    ),
+    (
+        'battle-19',
+        19,
+        'FINISHED',
+        'JAVA',
+        'NORMAL',
+        3,
+        4,
+        '1/N',
+        'normal',
+        180,
+        '2026-03-01 20:40:00'
+    ),
+    (
+        'battle-20',
+        20,
+        'IN_PROGRESS',
+        'JS',
+        'EASY',
+        3,
+        4,
+        '1/N',
+        'normal',
+        180,
+        '2026-03-01 21:10:00'
+    ),
+    (
+        'battle-21',
+        21,
+        'FINISHED',
+        'CPP',
+        'NORMAL',
+        5,
+        2,
+        '1/1',
+        'item',
+        300,
+        '2026-03-01 21:50:00'
+    ),
+    (
+        'battle-22',
+        22,
+        'FINISHED',
+        'PYTHON',
+        'EASY',
+        3,
+        2,
+        '1/1',
+        'normal',
+        180,
+        '2026-03-01 22:15:00'
+    ),
+    (
+        'battle-23',
+        23,
+        'IN_PROGRESS',
+        'JAVA',
+        'HARD',
+        5,
+        4,
+        '1/N',
+        'item',
+        300,
+        '2026-03-01 22:40:00'
+    ),
+    (
+        'battle-24',
+        24,
+        'FINISHED',
+        'JS',
+        'EASY',
+        3,
+        2,
+        '1/1',
+        'normal',
+        180,
+        '2026-03-01 23:00:00'
+    ),
+    (
+        'battle-25',
+        25,
+        'FINISHED',
+        'PYTHON',
+        'NORMAL',
+        5,
+        4,
+        '1/N',
+        'normal',
+        300,
+        '2026-03-01 23:30:00'
+    ),
+    (
+        'battle-26',
+        26,
+        'IN_PROGRESS',
+        'JAVA',
+        'EASY',
+        3,
+        2,
+        '1/1',
+        'item',
+        180,
+        '2026-03-02 00:00:00'
+    ),
+    (
+        'battle-27',
+        27,
+        'FINISHED',
+        'CPP',
+        'HARD',
+        5,
+        2,
+        '1/1',
+        'normal',
+        300,
+        '2026-03-02 00:30:00'
+    ),
+    (
+        'battle-28',
+        28,
+        'FINISHED',
+        'JS',
+        'EASY',
+        3,
+        4,
+        '1/N',
+        'item',
+        180,
+        '2026-03-02 01:00:00'
+    ),
+    (
+        'battle-29',
+        29,
+        'FINISHED',
+        'PYTHON',
+        'EASY',
+        3,
+        2,
+        '1/1',
+        'normal',
+        180,
+        '2026-03-02 01:30:00'
+    ),
+    (
+        'battle-30',
+        30,
+        'IN_PROGRESS',
+        'JAVA',
+        'HARD',
+        5,
+        8,
+        '1/N',
+        'normal',
+        300,
+        '2026-03-02 02:00:00'
+    );
+
+INSERT INTO
+    match_problems (
+        match_id,
+        problem_index,
+        problem_id,
+        problem_snapshot
+    )
+VALUES
+    (
+        'battle-1',
+        0,
+        'prob_101',
+        '{"title": "두 수의 합 구하기", "type": "CHOICE"}'
+    ),
+    (
+        'battle-1',
+        1,
+        'prob_102',
+        '{"title": "파이썬 출력 함수", "type": "BLANK"}'
+    ),
+    (
+        'battle-1',
+        2,
+        'prob_107',
+        '{"title": "짝수 판별기", "type": "CODE"}'
+    ),
+    (
+        'battle-2',
+        0,
+        'prob_104',
+        '{"title": "자바 자료형", "type": "CHOICE"}'
+    ),
+    (
+        'battle-2',
+        1,
+        'prob_121',
+        '{"title": "자바 최상위 클래스", "type": "BLANK"}'
+    ),
+    (
+        'battle-3',
+        0,
+        'prob_106',
+        '{"title": "자바스크립트 변수 선언", "type": "CHOICE"}'
+    ),
+    (
+        'battle-4',
+        0,
+        'prob_105',
+        '{"title": "C++ 포인터", "type": "BLANK"}'
+    ),
+    (
+        'battle-4',
+        1,
+        'prob_111',
+        '{"title": "시간복잡도 비교", "type": "CHOICE"}'
+    ),
+    (
+        'battle-5',
+        0,
+        'prob_117',
+        '{"title": "파이썬 리스트 추가", "type": "BLANK"}'
+    ),
+    (
+        'battle-6',
+        0,
+        'prob_128',
+        '{"title": "객체지향 4대 요소", "type": "CHOICE"}'
+    ),
+    (
+        'battle-7',
+        0,
+        'prob_101',
+        '{"title": "두 수의 합 구하기", "type": "CHOICE"}'
+    ),
+    (
+        'battle-8',
+        0,
+        'prob_120',
+        '{"title": "정렬 알고리즘", "type": "CHOICE"}'
+    ),
+    (
+        'battle-9',
+        0,
+        'prob_114',
+        '{"title": "HTML 태그", "type": "CHOICE"}'
+    ),
+    (
+        'battle-10',
+        0,
+        'prob_103',
+        '{"title": "배열 뒤집기", "type": "CODE"}'
+    ),
+    (
+        'battle-11',
+        0,
+        'prob_126',
+        '{"title": "소수 판별", "type": "CODE"}'
+    ),
+    (
+        'battle-12',
+        0,
+        'prob_104',
+        '{"title": "자바 자료형", "type": "CHOICE"}'
+    ),
+    (
+        'battle-13',
+        0,
+        'prob_119',
+        '{"title": "문자열 길이", "type": "CODE"}'
+    ),
+    (
+        'battle-14',
+        0,
+        'prob_115',
+        '{"title": "피보나치 수열", "type": "CODE"}'
+    ),
+    (
+        'battle-15',
+        0,
+        'prob_104',
+        '{"title": "자바 자료형", "type": "CHOICE"}'
+    ),
+    (
+        'battle-16',
+        0,
+        'prob_122',
+        '{"title": "CSS 속성", "type": "CHOICE"}'
+    ),
+    (
+        'battle-17',
+        0,
+        'prob_108',
+        '{"title": "스택의 특징", "type": "CHOICE"}'
+    ),
+    (
+        'battle-18',
+        0,
+        'prob_111',
+        '{"title": "시간복잡도 비교", "type": "CHOICE"}'
+    ),
+    (
+        'battle-19',
+        0,
+        'prob_128',
+        '{"title": "객체지향 4대 요소", "type": "CHOICE"}'
+    ),
+    (
+        'battle-20',
+        0,
+        'prob_106',
+        '{"title": "자바스크립트 변수 선언", "type": "CHOICE"}'
+    ),
+    (
+        'battle-21',
+        0,
+        'prob_109',
+        '{"title": "큐의 특징", "type": "CHOICE"}'
+    ),
+    (
+        'battle-22',
+        0,
+        'prob_102',
+        '{"title": "파이썬 출력 함수", "type": "BLANK"}'
+    ),
+    (
+        'battle-23',
+        0,
+        'prob_130',
+        '{"title": "교착상태 조건", "type": "CHOICE"}'
+    ),
+    (
+        'battle-24',
+        0,
+        'prob_119',
+        '{"title": "문자열 길이", "type": "CODE"}'
+    ),
+    (
+        'battle-25',
+        0,
+        'prob_112',
+        '{"title": "팩토리얼 구하기", "type": "CODE"}'
+    ),
+    (
+        'battle-26',
+        0,
+        'prob_101',
+        '{"title": "두 수의 합 구하기", "type": "CHOICE"}'
+    );
+
+INSERT INTO
+    match_submissions (
+        match_id,
+        user_id,
+        ingame_score,
+        rating_score_before,
+        rating_delta,
+        codes,
+        blank_answers,
+        selected_options,
+        solve_times,
+        problem_results,
+        solved_problems,
+        total_solve_time,
+        completion_time
+    )
+VALUES
+    (
+        'battle-1',
+        'user_1710000001',
+        300,
+        1430,
+        20,
+        '["print(2)", "print"]',
+        '["print"]',
+        '[1]',
+        '[10.5, 5.2]',
+        '[true, true]',
+        '[0, 1]',
+        15.7,
+        15.7
+    ),
+    (
+        'battle-1',
+        'user_1710000002',
+        100,
+        1030,
+        -10,
+        '["print(1)", ""]',
+        '[]',
+        '[0]',
+        '[20.1]',
+        '[false, false]',
+        '[0]',
+        20.1,
+        45.0
+    ),
+    (
+        'battle-3',
+        'user_1710000003',
+        250,
+        1160,
+        20,
+        '["const"]',
+        '[]',
+        '[2]',
+        '[8.4]',
+        '[true]',
+        '[0]',
+        8.4,
+        8.4
+    ),
+    (
+        'battle-5',
+        'user_1710000007',
+        200,
+        1060,
+        20,
+        '["append"]',
+        '["append"]',
+        '[]',
+        '[12.3]',
+        '[true]',
+        '[0]',
+        12.3,
+        12.3
+    ),
+    (
+        'battle-6',
+        'user_1710000008',
+        300,
+        1580,
+        20,
+        '[]',
+        '[]',
+        '[3]',
+        '[15.0]',
+        '[true]',
+        '[0]',
+        15.0,
+        15.0
+    ),
+    (
+        'battle-8',
+        'user_1710000018',
+        400,
+        1730,
+        20,
+        '[]',
+        '[]',
+        '[2]',
+        '[30.1]',
+        '[true]',
+        '[0]',
+        30.1,
+        30.1
+    ),
+    (
+        'battle-9',
+        'user_1710000013',
+        100,
+        1140,
+        10,
+        '[]',
+        '[]',
+        '[1]',
+        '[5.5]',
+        '[true]',
+        '[0]',
+        5.5,
+        5.5
+    ),
+    (
+        'battle-11',
+        'user_1710000025',
+        500,
+        2080,
+        20,
+        '["code"]',
+        '[]',
+        '[]',
+        '[45.0]',
+        '[true]',
+        '[0]',
+        45.0,
+        45.0
+    ),
+    (
+        'battle-12',
+        'user_1710000009',
+        100,
+        1000,
+        0,
+        '[]',
+        '[]',
+        '[0]',
+        '[50.0]',
+        '[false]',
+        '[]',
+        50.0,
+        50.0
+    ),
+    (
+        'battle-14',
+        'user_1710000021',
+        350,
+        1560,
+        20,
+        '["fib code"]',
+        '[]',
+        '[]',
+        '[80.2]',
+        '[true]',
+        '[0]',
+        80.2,
+        80.2
+    ),
+    (
+        'battle-15',
+        'user_1710000017',
+        200,
+        1470,
+        20,
+        '[]',
+        '[]',
+        '[2]',
+        '[11.1]',
+        '[true]',
+        '[0]',
+        11.1,
+        11.1
+    ),
+    (
+        'battle-16',
+        'user_1710000019',
+        150,
+        1050,
+        10,
+        '[]',
+        '[]',
+        '[1]',
+        '[9.2]',
+        '[true]',
+        '[0]',
+        9.2,
+        9.2
+    ),
+    (
+        'battle-18',
+        'user_1710000015',
+        300,
+        1360,
+        20,
+        '[]',
+        '[]',
+        '[2]',
+        '[22.4]',
+        '[true]',
+        '[0]',
+        22.4,
+        22.4
+    ),
+    (
+        'battle-19',
+        'user_1710000012',
+        100,
+        1030,
+        10,
+        '[]',
+        '[]',
+        '[3]',
+        '[18.0]',
+        '[true]',
+        '[0]',
+        18.0,
+        18.0
+    ),
+    (
+        'battle-21',
+        'user_1710000020',
+        250,
+        1170,
+        20,
+        '[]',
+        '[]',
+        '[0]',
+        '[14.3]',
+        '[true]',
+        '[0]',
+        14.3,
+        14.3
+    ),
+    (
+        'battle-22',
+        'user_1710000023',
+        200,
+        1250,
+        20,
+        '[]',
+        '["print"]',
+        '[]',
+        '[6.8]',
+        '[true]',
+        '[0]',
+        6.8,
+        6.8
+    ),
+    (
+        'battle-24',
+        'user_1710000016',
+        100,
+        970,
+        10,
+        '["return s.length"]',
+        '[]',
+        '[]',
+        '[25.0]',
+        '[true]',
+        '[0]',
+        25.0,
+        25.0
+    ),
+    (
+        'battle-25',
+        'user_1710000022',
+        150,
+        1020,
+        10,
+        '["fact code"]',
+        '[]',
+        '[]',
+        '[60.0]',
+        '[true]',
+        '[0]',
+        60.0,
+        60.0
+    ),
+    (
+        'battle-27',
+        'user_1710000027',
+        300,
+        1050,
+        20,
+        '[]',
+        '[]',
+        '[3]',
+        '[35.5]',
+        '[true]',
+        '[0]',
+        35.5,
+        35.5
+    ),
+    (
+        'battle-28',
+        'user_1710000028',
+        200,
+        1400,
+        20,
+        '[]',
+        '[]',
+        '[2]',
+        '[12.0]',
+        '[true]',
+        '[0]',
+        12.0,
+        12.0
+    ),
+    (
+        'battle-29',
+        'user_1710000030',
+        50,
+        850,
+        0,
+        '[]',
+        '["echo"]',
+        '[]',
+        '[120.0]',
+        '[false]',
+        '[]',
+        120.0,
+        120.0
+    ),
+    (
+        'battle-1',
+        'user_1710000004',
+        150,
+        1310,
+        10,
+        '[]',
+        '[]',
+        '[1]',
+        '[25.0]',
+        '[true]',
+        '[0]',
+        25.0,
+        25.0
+    ),
+    (
+        'battle-3',
+        'user_1710000005',
+        0,
+        950,
+        -10,
+        '[]',
+        '[]',
+        '[0]',
+        '[30.0]',
+        '[false]',
+        '[]',
+        30.0,
+        30.0
+    ),
+    (
+        'battle-5',
+        'user_1710000006',
+        400,
+        1800,
+        20,
+        '[]',
+        '["append"]',
+        '[]',
+        '[5.1]',
+        '[true]',
+        '[0]',
+        5.1,
+        5.1
+    ),
+    (
+        'battle-6',
+        'user_1710000010',
+        200,
+        1270,
+        20,
+        '[]',
+        '[]',
+        '[3]',
+        '[20.0]',
+        '[true]',
+        '[0]',
+        20.0,
+        20.0
+    ),
+    (
+        'battle-8',
+        'user_1710000011',
+        100,
+        1500,
+        -10,
+        '[]',
+        '[]',
+        '[0]',
+        '[40.0]',
+        '[false]',
+        '[]',
+        40.0,
+        40.0
+    ),
+    (
+        'battle-9',
+        'user_1710000014',
+        50,
+        1090,
+        10,
+        '[]',
+        '[]',
+        '[1]',
+        '[15.0]',
+        '[true]',
+        '[0]',
+        15.0,
+        15.0
+    ),
+    (
+        'battle-11',
+        'user_1710000024',
+        450,
+        1930,
+        20,
+        '["code"]',
+        '[]',
+        '[]',
+        '[10.0]',
+        '[true]',
+        '[0]',
+        10.0,
+        10.0
+    ),
+    (
+        'battle-12',
+        'user_1710000026',
+        80,
+        910,
+        10,
+        '[]',
+        '[]',
+        '[2]',
+        '[22.0]',
+        '[true]',
+        '[0]',
+        22.0,
+        22.0
+    ),
+    (
+        'battle-14',
+        'user_1710000029',
+        0,
+        890,
+        0,
+        '[]',
+        '[]',
+        '[]',
+        '[180.0]',
+        '[false]',
+        '[]',
+        180.0,
+        180.0
+    );
+
+INSERT INTO
+    match_rankings (
+        match_id,
+        elapsed_sec,
+        round_seconds,
+        total_problems,
+        rankings_json
+    )
+VALUES
+    (
+        'battle-1',
+        45,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000001", "score": 300}, {"rank": 2, "userId": "user_1710000002", "score": 100}]'
+    ),
+    (
+        'battle-3',
+        30,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000003", "score": 250}, {"rank": 2, "userId": "user_1710000005", "score": 0}]'
+    ),
+    (
+        'battle-5',
+        15,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000006", "score": 400}, {"rank": 2, "userId": "user_1710000007", "score": 200}]'
+    ),
+    (
+        'battle-6',
+        60,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000008", "score": 300}, {"rank": 2, "userId": "user_1710000010", "score": 200}]'
+    ),
+    (
+        'battle-8',
+        90,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000018", "score": 400}, {"rank": 2, "userId": "user_1710000011", "score": 100}]'
+    ),
+    (
+        'battle-9',
+        20,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000013", "score": 100}, {"rank": 2, "userId": "user_1710000014", "score": 50}]'
+    ),
+    (
+        'battle-11',
+        50,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000025", "score": 500}, {"rank": 2, "userId": "user_1710000024", "score": 450}]'
+    ),
+    (
+        'battle-12',
+        60,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000009", "score": 100}, {"rank": 2, "userId": "user_1710000026", "score": 80}]'
+    ),
+    (
+        'battle-14',
+        180,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000021", "score": 350}, {"rank": 2, "userId": "user_1710000029", "score": 0}]'
+    ),
+    (
+        'battle-15',
+        15,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000017", "score": 200}]'
+    ),
+    (
+        'battle-16',
+        10,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000019", "score": 150}]'
+    ),
+    (
+        'battle-18',
+        25,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000015", "score": 300}]'
+    ),
+    (
+        'battle-19',
+        20,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000012", "score": 100}]'
+    ),
+    (
+        'battle-21',
+        15,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000020", "score": 250}]'
+    ),
+    (
+        'battle-22',
+        10,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000023", "score": 200}]'
+    ),
+    (
+        'battle-24',
+        30,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000016", "score": 100}]'
+    ),
+    (
+        'battle-25',
+        70,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000022", "score": 150}]'
+    ),
+    (
+        'battle-27',
+        40,
+        300,
+        5,
+        '[{"rank": 1, "userId": "user_1710000027", "score": 300}]'
+    ),
+    (
+        'battle-28',
+        15,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000028", "score": 200}]'
+    ),
+    (
+        'battle-29',
+        120,
+        180,
+        3,
+        '[{"rank": 1, "userId": "user_1710000030", "score": 50}]'
+    ),
+    ('battle-2', 0, 300, 5, '[]'),
+    ('battle-4', 0, 300, 5, '[]'),
+    ('battle-7', 0, 180, 3, '[]'),
+    ('battle-10', 0, 300, 5, '[]'),
+    ('battle-13', 0, 180, 3, '[]'),
+    ('battle-17', 0, 300, 5, '[]'),
+    ('battle-20', 0, 180, 3, '[]'),
+    ('battle-23', 0, 300, 5, '[]'),
+    ('battle-26', 0, 180, 3, '[]'),
+    ('battle-30', 0, 300, 5, '[]');
+
+INSERT INTO
+    match_code_history (
+        history_id,
+        user_id,
+        room_id,
+        submitted_at,
+        lang,
+        mode,
+        code,
+        codes,
+        problems
+    )
+VALUES
+    (
+        '1::2026-03-01 10:05:00',
+        'user_1710000001',
+        '1',
+        '2026-03-01 10:05:00',
+        'PYTHON',
+        '1/1',
+        'print(2)',
+        '["print(2)"]',
+        '[{"id": "prob_101"}]'
+    ),
+    (
+        '1::2026-03-01 10:06:00',
+        'user_1710000002',
+        '1',
+        '2026-03-01 10:06:00',
+        'PYTHON',
+        '1/1',
+        'print(1)',
+        '["print(1)"]',
+        '[{"id": "prob_101"}]'
+    ),
+    (
+        '3::2026-03-01 11:02:00',
+        'user_1710000003',
+        '3',
+        '2026-03-01 11:02:00',
+        'JS',
+        '1/N',
+        'const a = 10;',
+        '["const a = 10;"]',
+        '[{"id": "prob_106"}]'
+    ),
+    (
+        '5::2026-03-01 12:02:00',
+        'user_1710000007',
+        '5',
+        '2026-03-01 12:02:00',
+        'PYTHON',
+        '1/N',
+        'arr.append(1)',
+        '["arr.append(1)"]',
+        '[{"id": "prob_117"}]'
+    ),
+    (
+        '6::2026-03-01 13:05:00',
+        'user_1710000008',
+        '6',
+        '2026-03-01 13:05:00',
+        'JAVA',
+        '1/N',
+        'System.out.println();',
+        '["System.out.println();"]',
+        '[{"id": "prob_128"}]'
+    ),
+    (
+        '8::2026-03-01 14:25:00',
+        'user_1710000018',
+        '8',
+        '2026-03-01 14:25:00',
+        'CPP',
+        '1/1',
+        'std::cout << "hi";',
+        '["std::cout << \"hi\";"]',
+        '[{"id": "prob_120"}]'
+    ),
+    (
+        '9::2026-03-01 15:01:00',
+        'user_1710000013',
+        '9',
+        '2026-03-01 15:01:00',
+        'JS',
+        '1/N',
+        'console.log("h1")',
+        '["console.log(\"h1\")"]',
+        '[{"id": "prob_114"}]'
+    ),
+    (
+        '11::2026-03-01 16:05:00',
+        'user_1710000025',
+        '11',
+        '2026-03-01 16:05:00',
+        'CPP',
+        '1/1',
+        'bool isPrime() { return true; }',
+        '["bool isPrime() { return true; }"]',
+        '[{"id": "prob_126"}]'
+    ),
+    (
+        '12::2026-03-01 16:42:00',
+        'user_1710000009',
+        '12',
+        '2026-03-01 16:42:00',
+        'JAVA',
+        '1/N',
+        'int a = 0;',
+        '["int a = 0;"]',
+        '[{"id": "prob_104"}]'
+    ),
+    (
+        '14::2026-03-01 18:05:00',
+        'user_1710000021',
+        '14',
+        '2026-03-01 18:05:00',
+        'PYTHON',
+        '1/1',
+        'def fib(n): return n',
+        '["def fib(n): return n"]',
+        '[{"id": "prob_115"}]'
+    ),
+    (
+        '15::2026-03-01 18:31:00',
+        'user_1710000017',
+        '15',
+        '2026-03-01 18:31:00',
+        'JAVA',
+        '1/1',
+        'boolean flag = true;',
+        '["boolean flag = true;"]',
+        '[{"id": "prob_104"}]'
+    ),
+    (
+        '16::2026-03-01 19:01:00',
+        'user_1710000019',
+        '16',
+        '2026-03-01 19:01:00',
+        'JS',
+        '1/N',
+        'color: red;',
+        '["color: red;"]',
+        '[{"id": "prob_122"}]'
+    ),
+    (
+        '18::2026-03-01 20:02:00',
+        'user_1710000015',
+        '18',
+        '2026-03-01 20:02:00',
+        'PYTHON',
+        '1/1',
+        'O(log N)',
+        '["O(log N)"]',
+        '[{"id": "prob_111"}]'
+    ),
+    (
+        '19::2026-03-01 20:42:00',
+        'user_1710000012',
+        '19',
+        '2026-03-01 20:42:00',
+        'JAVA',
+        '1/N',
+        'Object obj;',
+        '["Object obj;"]',
+        '[{"id": "prob_128"}]'
+    ),
+    (
+        '21::2026-03-01 21:52:00',
+        'user_1710000020',
+        '21',
+        '2026-03-01 21:52:00',
+        'CPP',
+        '1/1',
+        'FIFO',
+        '["FIFO"]',
+        '[{"id": "prob_109"}]'
+    ),
+    (
+        '22::2026-03-01 22:16:00',
+        'user_1710000023',
+        '22',
+        '2026-03-01 22:16:00',
+        'PYTHON',
+        '1/1',
+        'print()',
+        '["print()"]',
+        '[{"id": "prob_102"}]'
+    ),
+    (
+        '24::2026-03-01 23:02:00',
+        'user_1710000016',
+        '24',
+        '2026-03-01 23:02:00',
+        'JS',
+        '1/1',
+        'return str.length',
+        '["return str.length"]',
+        '[{"id": "prob_119"}]'
+    ),
+    (
+        '25::2026-03-01 23:35:00',
+        'user_1710000022',
+        '25',
+        '2026-03-01 23:35:00',
+        'PYTHON',
+        '1/N',
+        'return n * fact(n-1)',
+        '["return n * fact(n-1)"]',
+        '[{"id": "prob_112"}]'
+    ),
+    (
+        '27::2026-03-02 00:32:00',
+        'user_1710000027',
+        '27',
+        '2026-03-02 00:32:00',
+        'CPP',
+        '1/1',
+        '선점 가능',
+        '["선점 가능"]',
+        '[{"id": "prob_130"}]'
+    ),
+    (
+        '28::2026-03-02 01:02:00',
+        'user_1710000028',
+        '28',
+        '2026-03-02 01:02:00',
+        'JS',
+        '1/N',
+        'PUT',
+        '["PUT"]',
+        '[{"id": "prob_118"}]'
+    ),
+    (
+        '29::2026-03-02 01:32:00',
+        'user_1710000030',
+        '29',
+        '2026-03-02 01:32:00',
+        'PYTHON',
+        '1/1',
+        'wrong answer',
+        '["wrong answer"]',
+        '[{"id": "prob_101"}]'
+    ),
+    (
+        '1::2026-03-01 10:05:30',
+        'user_1710000004',
+        '1',
+        '2026-03-01 10:05:30',
+        'JAVA',
+        '1/1',
+        '2',
+        '["2"]',
+        '[{"id": "prob_101"}]'
+    ),
+    (
+        '3::2026-03-01 11:03:00',
+        'user_1710000005',
+        '3',
+        '2026-03-01 11:03:00',
+        'JS',
+        '1/N',
+        'var b = 5;',
+        '["var b = 5;"]',
+        '[{"id": "prob_106"}]'
+    ),
+    (
+        '5::2026-03-01 12:01:00',
+        'user_1710000006',
+        '5',
+        '2026-03-01 12:01:00',
+        'PYTHON',
+        '1/N',
+        'append',
+        '["append"]',
+        '[{"id": "prob_117"}]'
+    ),
+    (
+        '6::2026-03-01 13:04:00',
+        'user_1710000010',
+        '6',
+        '2026-03-01 13:04:00',
+        'JAVA',
+        '1/N',
+        '절차성',
+        '["절차성"]',
+        '[{"id": "prob_128"}]'
+    ),
+    (
+        '8::2026-03-01 14:28:00',
+        'user_1710000011',
+        '8',
+        '2026-03-01 14:28:00',
+        'CPP',
+        '1/1',
+        'Quick Sort',
+        '["Quick Sort"]',
+        '[{"id": "prob_120"}]'
+    ),
+    (
+        '9::2026-03-01 15:02:00',
+        'user_1710000014',
+        '9',
+        '2026-03-01 15:02:00',
+        'JS',
+        '1/N',
+        '<h1>',
+        '["<h1>"]',
+        '[{"id": "prob_114"}]'
+    ),
+    (
+        '11::2026-03-01 16:02:00',
+        'user_1710000024',
+        '11',
+        '2026-03-01 16:02:00',
+        'CPP',
+        '1/1',
+        'checkPrime()',
+        '["checkPrime()"]',
+        '[{"id": "prob_126"}]'
+    ),
+    (
+        '12::2026-03-01 16:41:00',
+        'user_1710000026',
+        '12',
+        '2026-03-01 16:41:00',
+        'JAVA',
+        '1/N',
+        'boolean',
+        '["boolean"]',
+        '[{"id": "prob_104"}]'
+    ),
+    (
+        '14::2026-03-01 18:08:00',
+        'user_1710000029',
+        '14',
+        '2026-03-01 18:08:00',
+        'PYTHON',
+        '1/1',
+        'none',
+        '["none"]',
+        '[{"id": "prob_115"}]'
+    );
+
+INSERT INTO
+    friends (user_id, friend_user_id)
+VALUES
+    ('user_1710000001', 'user_1710000002'),
+    ('user_1710000001', 'user_1710000003'),
+    ('user_1710000001', 'user_1710000004'),
+    ('user_1710000002', 'user_1710000001'),
+    ('user_1710000003', 'user_1710000001'),
+    ('user_1710000004', 'user_1710000001'),
+    ('user_1710000004', 'user_1710000006'),
+    ('user_1710000006', 'user_1710000004'),
+    ('user_1710000006', 'user_1710000024'),
+    ('user_1710000006', 'user_1710000025'),
+    ('user_1710000008', 'user_1710000011'),
+    ('user_1710000010', 'user_1710000011'),
+    ('user_1710000011', 'user_1710000008'),
+    ('user_1710000011', 'user_1710000010'),
+    ('user_1710000012', 'user_1710000013'),
+    ('user_1710000013', 'user_1710000012'),
+    ('user_1710000015', 'user_1710000017'),
+    ('user_1710000017', 'user_1710000015'),
+    ('user_1710000018', 'user_1710000021'),
+    ('user_1710000021', 'user_1710000018'),
+    ('user_1710000024', 'user_1710000025'),
+    ('user_1710000025', 'user_1710000024'),
+    ('user_1710000025', 'user_1710000006'),
+    ('user_1710000027', 'user_1710000028'),
+    ('user_1710000028', 'user_1710000027'),
+    ('user_1710000029', 'user_1710000030'),
+    ('user_1710000030', 'user_1710000029'),
+    ('user_1710000005', 'user_1710000007'),
+    ('user_1710000007', 'user_1710000005'),
+    ('user_1710000016', 'user_1710000019');
+
+INSERT INTO
+    review_invites (
+        id,
+        session_id,
+        from_user_id,
+        to_user_id,
+        problem_indices,
+        status
+    )
+VALUES
+    (
+        'rev_1001',
+        'battle-1',
+        'user_1710000001',
+        'user_1710000002',
+        '[0, 1]',
+        'accepted'
+    ),
+    (
+        'rev_1002',
+        'battle-1',
+        'user_1710000002',
+        'user_1710000001',
+        '[1]',
+        'rejected'
+    ),
+    (
+        'rev_1003',
+        'battle-3',
+        'user_1710000003',
+        'user_1710000005',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1004',
+        'battle-5',
+        'user_1710000006',
+        'user_1710000007',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1005',
+        'battle-6',
+        'user_1710000008',
+        'user_1710000010',
+        '[0]',
+        'cancelled'
+    ),
+    (
+        'rev_1006',
+        'battle-8',
+        'user_1710000018',
+        'user_1710000011',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1007',
+        'battle-9',
+        'user_1710000013',
+        'user_1710000014',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1008',
+        'battle-11',
+        'user_1710000025',
+        'user_1710000024',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1009',
+        'battle-12',
+        'user_1710000009',
+        'user_1710000026',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1010',
+        'battle-14',
+        'user_1710000021',
+        'user_1710000029',
+        '[0]',
+        'rejected'
+    ),
+    (
+        'rev_1011',
+        'battle-15',
+        'user_1710000017',
+        'user_1710000015',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1012',
+        'battle-16',
+        'user_1710000019',
+        'user_1710000016',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1013',
+        'battle-18',
+        'user_1710000015',
+        'user_1710000018',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1014',
+        'battle-19',
+        'user_1710000012',
+        'user_1710000013',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1015',
+        'battle-21',
+        'user_1710000020',
+        'user_1710000021',
+        '[0]',
+        'cancelled'
+    ),
+    (
+        'rev_1016',
+        'battle-22',
+        'user_1710000023',
+        'user_1710000022',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1017',
+        'battle-24',
+        'user_1710000016',
+        'user_1710000019',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1018',
+        'battle-25',
+        'user_1710000022',
+        'user_1710000025',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1019',
+        'battle-27',
+        'user_1710000027',
+        'user_1710000028',
+        '[0]',
+        'rejected'
+    ),
+    (
+        'rev_1020',
+        'battle-28',
+        'user_1710000028',
+        'user_1710000027',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1021',
+        'battle-29',
+        'user_1710000030',
+        'user_1710000029',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1022',
+        'battle-1',
+        'user_1710000004',
+        'user_1710000001',
+        '[0]',
+        'cancelled'
+    ),
+    (
+        'rev_1023',
+        'battle-3',
+        'user_1710000005',
+        'user_1710000003',
+        '[0]',
+        'rejected'
+    ),
+    (
+        'rev_1024',
+        'battle-5',
+        'user_1710000007',
+        'user_1710000006',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1025',
+        'battle-6',
+        'user_1710000010',
+        'user_1710000008',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1026',
+        'battle-8',
+        'user_1710000011',
+        'user_1710000018',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1027',
+        'battle-9',
+        'user_1710000014',
+        'user_1710000013',
+        '[0]',
+        'accepted'
+    ),
+    (
+        'rev_1028',
+        'battle-11',
+        'user_1710000024',
+        'user_1710000025',
+        '[0]',
+        'pending'
+    ),
+    (
+        'rev_1029',
+        'battle-12',
+        'user_1710000026',
+        'user_1710000009',
+        '[0]',
+        'cancelled'
+    ),
+    (
+        'rev_1030',
+        'battle-14',
+        'user_1710000029',
+        'user_1710000021',
+        '[0]',
+        'rejected'
+    );
+
+SET
+    FOREIGN_KEY_CHECKS = 1;

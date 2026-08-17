@@ -12,7 +12,7 @@ import gameStartService from "#service/manageGameService.js";
 
 export function registerSocketHandlers(io, socket) {
   console.log(
-    "[Socket 연결 완료] " + socket.user.displayName + " (" + socket.id + ")"
+    "[Socket 연결 완료] " + socket.user.displayName + " (" + socket.id + ")",
   );
 
   socket.on("join_room", async function (data, callback) {
@@ -22,7 +22,7 @@ export function registerSocketHandlers(io, socket) {
 
       socket.join(roomId);
       console.log(
-        socket.user.displayName + " 님이 [" + roomId + "] 방에 입장함"
+        socket.user.displayName + " 님이 [" + roomId + "] 방에 입장함",
       );
 
       const recentMessages = await getRecentMessages(roomId);
@@ -97,7 +97,7 @@ export function registerSocketHandlers(io, socket) {
         throw new Error("유효한 roomId가 필요합니다.");
       }
 
-      const startResult = await gameStartService.checkCanStart(roomId);
+      const startResult = await gameStartService.checkCanStart(roomId, io);
 
       if (!startResult.canStart) {
         if (typeof callback === "function") {
@@ -109,11 +109,6 @@ export function registerSocketHandlers(io, socket) {
         }
         return;
       }
-
-      io.to(roomId).emit("game_started", {
-        roomId: roomId,
-        message: "게임이 시작되었습니다. 게임룸으로 접속합니다.",
-      });
 
       if (typeof callback === "function") {
         callback({ success: true, data: startResult });

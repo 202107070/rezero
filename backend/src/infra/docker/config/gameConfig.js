@@ -1,13 +1,18 @@
 import path from "path";
-import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 
-const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config();
+
+const currentDirectory = import.meta.dirname;
 const backendDirectory = path.resolve(currentDirectory, "../../../..");
 const projectRoot = path.resolve(backendDirectory, "..");
-const sharedDirectory = path.resolve(
-  backendDirectory,
-  "../../../shared/fileShare",
-);
+
+let sharedDirectory;
+if (process.env.SHARED_DIR) {
+  sharedDirectory = path.resolve(process.env.SHARED_DIR);
+} else {
+  sharedDirectory = path.resolve(backendDirectory, "../../../shared/fileShare");
+}
 
 export const GAME_CONTAINER_CONFIG = {
   containerName: "build_compiler_sandbox",

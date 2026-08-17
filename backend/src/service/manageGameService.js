@@ -1,12 +1,12 @@
+import { prepareInfoService } from "#docker/service/prepareInfoService.js";
 import { pool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
 import { GameStartDto } from "#dto/manageGameDto.js";
 import { ROOM_STATUS } from "#config/manageRoomConfig.js";
-import { gameService } from "#docker/service/gameService.js";
 import { lockService } from "#infra/redis/lockService.js";
 
 class GameStartService {
-  async checkCanStart(roomId) {
+  async checkCanStart(roomId, io) {
     const roomQuery =
       "SELECT id, status, mode, host_user_id FROM rooms WHERE id = ?";
     const roomRows = await pool.query(roomQuery, [roomId]);
@@ -39,10 +39,10 @@ class GameStartService {
     }
 
     const participants = await redisClient.sMembers(
-      "room:" + roomId + ":participants"
+      "room:" + roomId + ":participants",
     );
     const readyPlayers = await redisClient.sMembers(
-      "room:" + roomId + ":ready"
+      "room:" + roomId + ":ready",
     );
     const totalPlayers = participants.length;
 
@@ -54,13 +54,13 @@ class GameStartService {
     const readyPlayerSet = new Set(
       readyPlayers.map(function (item) {
         return String(item);
-      })
+      }),
     );
 
     const readyNonHostPlayersCount = nonHostParticipants.filter(
       function (userId) {
         return readyPlayerSet.has(String(userId));
-      }
+      },
     ).length;
 
     let minimumPlayers = 3;
@@ -119,8 +119,7 @@ class GameStartService {
     }
 
     try {
-      const allocatedPort = 4000 + Number(roomId);
-      await gameService.createRoomContainer(roomId, allocatedPort);
+      await prepareInfoService.getGameStartPayload(roomId, io);
 
       await pool.query("UPDATE rooms SET status = ? WHERE id = ?", [
         ROOM_STATUS.STARTED,
@@ -129,7 +128,7 @@ class GameStartService {
       await redisClient.hSet(
         "room:" + roomId + ":state",
         "status",
-        ROOM_STATUS.STARTED
+        ROOM_STATUS.STARTED,
       );
     } catch (containerError) {
       await lockService.releaseLock(lockKey);
