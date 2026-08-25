@@ -84,3 +84,56 @@ export async function findMatchById(matchId) {
 
   return rows[0];
 }
+
+export async function findMatchProblem(matchId, problemIndex) {
+  const rows = await pool.query(
+    `SELECT
+       m.id AS matchId,
+       m.room_id AS roomId,
+       m.status,
+       m.lang AS language,
+       m.game_mode AS gameMode,
+       mp.problem_index AS problemIndex,
+       mp.problem_snapshot AS problemSnapshot
+     FROM matches m
+     JOIN match_problems mp ON mp.match_id = m.id
+     WHERE m.id = ?
+       AND mp.problem_index = ?
+     LIMIT 1`,
+    [matchId, problemIndex],
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return rows[0];
+}
+
+export async function isMatchParticipant(matchId, userId) {
+  const rows = await pool.query(
+    `SELECT rp.user_id AS userId
+     FROM matches m
+     JOIN room_participants rp ON rp.room_id = m.room_id
+     WHERE m.id = ?
+       AND rp.user_id = ?
+       AND rp.left_at IS NULL
+     LIMIT 1`,
+    [matchId, userId],
+  );
+
+  return rows.length > 0;
+}
+
+export async function consumeUserItem(userId, itemKey) {
+  const result = await pool.query(
+    `UPDATE user_items
+     SET quantity = quantity - 1
+     WHERE user_id = ?
+       AND item_key = ?
+       AND quantity > 0`,
+    [userId, itemKey],
+  );
+
+  return Number(result.affectedRows) === 1;
+}
