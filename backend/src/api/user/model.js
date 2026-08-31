@@ -63,3 +63,32 @@ export async function findUserById(id) {
 
   return rows[0];
 }
+
+export async function findUserItems(userId) {
+  return pool.query(
+    `SELECT item_key AS itemKey, quantity
+     FROM user_items
+     WHERE user_id = ?`,
+    [userId],
+  );
+}
+
+export async function findUserTitleData(userId) {
+  const rows = await pool.query(
+    `SELECT
+       owned_title_ids AS ownedTitleIds,
+       equipped_title_id AS equippedTitleId,
+       stats_total_wins AS totalWins,
+       stats_consecutive_wins AS consecutiveWins,
+       stats_total_games AS totalGames,
+       stats_perfect_game AS perfectGame,
+       stats_avg_speed AS avgSpeed,
+       stats_lang_wins AS langWins
+     FROM user_titles
+     WHERE user_id = ?
+     LIMIT 1`,
+    [userId],
+  );
+
+  return rows.length > 0 ? rows[0] : null;
+}
