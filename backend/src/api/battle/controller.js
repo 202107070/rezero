@@ -10,6 +10,8 @@ import {
   submitMatchResult,
   useBattleItem,
 } from "./service.js";
+import { getSocket } from "#config/socketConfig.js";
+import { socketGameService } from "#service/socketService.js";
 import { sendSuccess } from "#utils/responseHelper.js";
 
 export async function start(req, res, next) {
@@ -60,6 +62,26 @@ export async function submitResult(req, res, next) {
       ...input,
       userId: req.user.id,
     });
+
+    if (
+      result.resultReady === true &&
+      Array.isArray(result.ranking?.rewards)
+    ) {
+      const io = getSocket();
+
+      if (io) {
+        await socketGameService.broadcastGameEnded(
+          io,
+          String(result.roomId),
+          {
+            roomId: result.roomId,
+            matchId: input.matchId,
+            ranking: result.ranking.players,
+            rewards: result.ranking.rewards,
+          },
+        );
+      }
+    }
 
     return sendSuccess(res, result);
   } catch (error) {

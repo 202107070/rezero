@@ -456,6 +456,7 @@ export async function submitMatchResult(input) {
   if (match.status === "FINISHED") {
     const ranking = await getStoredRanking(input.matchId);
     return {
+      roomId: match.roomId,
       submitted: true,
       resultReady: true,
       ranking,
@@ -501,6 +502,7 @@ export async function submitMatchResult(input) {
 
   if (waitingForUserIds.length > 0) {
     return {
+      roomId: match.roomId,
       submitted: true,
       resultReady: false,
       waitingForUserIds,
@@ -513,6 +515,7 @@ export async function submitMatchResult(input) {
   });
 
   return {
+    roomId: match.roomId,
     submitted: true,
     resultReady: true,
     ranking,

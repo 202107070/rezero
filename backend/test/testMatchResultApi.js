@@ -1,11 +1,13 @@
 import { pool } from "#config/dbConfig.js";
 import { connectRedis, redisClient } from "#config/redisConfig.js";
+import { io } from "socket.io-client";
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://127.0.0.1:8080";
 const createdUserIds = [];
 const createdProblemIds = [];
 let createdRoomId;
 let createdMatchId;
+const connectedSockets = [];
 
 function assert(condition, message) {
   if (!condition) {
@@ -27,6 +29,57 @@ async function request(path, options = {}) {
   });
 
   return { response, data: await response.json() };
+}
+
+function connectSocket(token) {
+  return new Promise(function (resolve, reject) {
+    const socket = io(BASE_URL, {
+      auth: { token: "Bearer " + token },
+      transports: ["websocket"],
+    });
+    connectedSockets.push(socket);
+
+    const timer = setTimeout(function () {
+      socket.disconnect();
+      reject(new Error("Socket 연결 시간이 초과되었습니다."));
+    }, 5000);
+
+    socket.once("connect", function () {
+      clearTimeout(timer);
+      resolve(socket);
+    });
+
+    socket.once("connect_error", function (error) {
+      clearTimeout(timer);
+      socket.disconnect();
+      reject(error);
+    });
+  });
+}
+
+function joinSocketRoom(socket, roomId) {
+  return new Promise(function (resolve, reject) {
+    socket.emit("join_room", { roomId: String(roomId) }, function (result) {
+      if (result?.success === true) {
+        resolve();
+        return;
+      }
+      reject(new Error(result?.message || "Socket 방 입장에 실패했습니다."));
+    });
+  });
+}
+
+function waitForGameEnded(socket) {
+  return new Promise(function (resolve, reject) {
+    const timer = setTimeout(function () {
+      reject(new Error("game_ended 이벤트를 받지 못했습니다."));
+    }, 5000);
+
+    socket.once("game_ended", function (data) {
+      clearTimeout(timer);
+      resolve(data);
+    });
+  });
 }
 
 async function signup(label) {
@@ -123,6 +176,10 @@ function submitBody(score, solvedProblems, completionTime) {
 
 async function cleanup() {
   try {
+    connectedSockets.forEach(function (socket) {
+      socket.disconnect();
+    });
+
     if (createdMatchId) {
       await pool.query("DELETE FROM matches WHERE id = ?", [createdMatchId]);
       await redisClient.del("battle:scores:" + createdMatchId);
@@ -166,6 +223,14 @@ async function runTest() {
   await redisClient.hSet("battle:scores:" + createdMatchId, String(host.id), "300");
   await redisClient.hSet("battle:scores:" + createdMatchId, String(guest.id), "100");
 
+  const hostSocket = await connectSocket(host.token);
+  const guestSocket = await connectSocket(guest.token);
+  await joinSocketRoom(hostSocket, createdRoomId);
+  await joinSocketRoom(guestSocket, createdRoomId);
+
+  const hostGameEnded = waitForGameEnded(hostSocket);
+  const guestGameEnded = waitForGameEnded(guestSocket);
+
   const guestResult = await request("/api/v1/matches/" + createdMatchId + "/submit", {
     method: "POST",
     token: guest.token,
@@ -186,6 +251,17 @@ async function runTest() {
   assert(hostResult.data.ratingDelta === 30, "레이팅 보상 계산에 실패했습니다.");
   assert(hostResult.data.newTitleIds.includes("rookie"), "첫 승리 칭호가 지급되지 않았습니다.");
   console.log("PASS: 순위, 골드, 레이팅, 칭호 저장");
+
+  const [hostEvent, guestEvent] = await Promise.all([
+    hostGameEnded,
+    guestGameEnded,
+  ]);
+  assert(String(hostEvent.roomId) === String(createdRoomId), "방장 결과 이벤트의 방 정보가 다릅니다.");
+  assert(hostEvent.matchId === createdMatchId, "방장 결과 이벤트의 경기 정보가 다릅니다.");
+  assert(hostEvent.ranking.length === 2, "방장에게 전달된 최종 순위가 올바르지 않습니다.");
+  assert(hostEvent.rewards.length === 2, "방장에게 전달된 보상 정보가 올바르지 않습니다.");
+  assert(guestEvent.matchId === createdMatchId, "참가자가 결과 이벤트를 받지 못했습니다.");
+  console.log("PASS: 두 참가자에게 게임 종료 결과 Socket 전달");
 
   const rankingResult = await request("/api/v1/matches/" + createdMatchId + "/ranking", {
     token: host.token,
