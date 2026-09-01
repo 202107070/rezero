@@ -22,6 +22,46 @@ function getModelFunction(name) {
   return modelFunction;
 }
 
+function parseJson(value, fallback) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return fallback;
+  }
+}
+
+async function getUserProfile(user) {
+  const [items, titleRow] = await Promise.all([
+    getModelFunction("findUserItems")(user.id),
+    getModelFunction("findUserTitleData")(user.id),
+  ]);
+
+  return toUserResponse({
+    ...user,
+    items,
+    titleData: {
+      owned: parseJson(titleRow?.ownedTitleIds, []),
+      equipped: titleRow?.equippedTitleId || null,
+      stats: {
+        totalWins: Number(titleRow?.totalWins || 0),
+        consecutiveWins: Number(titleRow?.consecutiveWins || 0),
+        totalGames: Number(titleRow?.totalGames || 0),
+        perfectGame: Boolean(titleRow?.perfectGame),
+        avgSpeed: Number(titleRow?.avgSpeed || 0),
+        langWins: parseJson(titleRow?.langWins, {}),
+      },
+    },
+  });
+}
+
 export async function signupUser(input) {
   const isUsernameTaken = getModelFunction("isUsernameTaken");
   const createUser = getModelFunction("createUser");
@@ -66,7 +106,7 @@ export async function loginUser(input) {
   }
 
   return {
-    user: toUserResponse(user),
+    user: await getUserProfile(user),
     token: createAccessToken(user.id),
   };
 }
@@ -83,5 +123,5 @@ export async function getCurrentUser(userId) {
     );
   }
 
-  return toUserResponse(user);
+  return getUserProfile(user);
 }

@@ -2,6 +2,8 @@ import { Server } from "socket.io";
 import { socketAuthMiddleware } from "#controller/socketController.js";
 import { registerSocketHandlers } from "#handler/socketHandler.js";
 
+let socketServer;
+
 export const socketConfig = {
   maxMessageLength: 500,
   recentMessageLimit: 50,
@@ -9,18 +11,22 @@ export const socketConfig = {
 };
 
 export function initSocket(server) {
-  const io = new Server(server, {
+  socketServer = new Server(server, {
     cors: {
       origin: "*",
       methods: ["GET", "POST"],
     },
   });
 
-  io.use(socketAuthMiddleware);
+  socketServer.use(socketAuthMiddleware);
 
-  io.on("connection", function (socket) {
-    registerSocketHandlers(io, socket);
+  socketServer.on("connection", function (socket) {
+    registerSocketHandlers(socketServer, socket);
   });
 
-  return io;
+  return socketServer;
+}
+
+export function getSocket() {
+  return socketServer;
 }

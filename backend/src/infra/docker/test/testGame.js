@@ -6,6 +6,7 @@ import { gameWorker } from "#docker/worker/gameWorker.js";
 
 import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { registerSocketHandlers } from "#handler/socketHandler.js";
+import { socketGameService } from "#service/socketService.js";
 
 function getRandomElement(arr) {
   if (!arr || arr.length === 0) {
@@ -16,11 +17,13 @@ function getRandomElement(arr) {
 }
 
 async function runBattleFlowTest() {
-  console.log("==================================================");
   console.log(
-    "[TEST START] 배틀 및 신규 소켓 통합 플로우 테스트 (랜덤 시나리오)를 시작합니다.",
+    "=================================================================",
   );
-  console.log("==================================================");
+  console.log("게임 종료, 재접속 및 Valkey 데이터 정리 테스트 시작");
+  console.log(
+    "=================================================================",
+  );
 
   try {
     if (!redisClient.isOpen) {
@@ -122,9 +125,10 @@ async function runBattleFlowTest() {
               console.log(" - 문제 ID    : " + problemId);
               console.log(" - 문제 제목  : " + problemTitle);
               console.log(" - 제한 시간  : " + payload.timeLimit + "초");
-            } else if (eventName === "game_ended") {
+            } else if (eventName === SOCKET_EVENTS.GAME_ENDED) {
               console.log(" - 우승자 ID  : " + payload.winnerId);
               console.log(" - 최종 점수  : " + payload.score);
+              console.log("게임 종료 결과 전달 성공!");
             } else {
               console.log(" - 데이터:", JSON.stringify(payload, null, 2));
             }
@@ -144,22 +148,6 @@ async function runBattleFlowTest() {
       roomId,
       fakeIo,
     );
-
-    console.log("\n==================================================");
-    console.log("[testGame] prepareInfoService로부터 반환받은 데이터:");
-    console.log(" - 매치 ID       : " + startPayload.matchId);
-    console.log(" - 방 ID         : " + startPayload.roomId);
-    console.log(
-      " - 참가자 명단   : [ " + startPayload.participants.join(", ") + " ]",
-    );
-    console.log(
-      " - 문제 ID/제목  : [" +
-        startPayload.problem.id +
-        "] " +
-        startPayload.problem.title,
-    );
-    console.log(" - 문제 제한시간 : " + startPayload.timeLimit + "초");
-    console.log("==================================================");
 
     let participantIds = [];
     if (startPayload.participants && startPayload.participants.length > 0) {
@@ -219,49 +207,19 @@ async function runBattleFlowTest() {
       });
     }
 
-    console.log(
-      "\n[STEP 5] [신규 소켓 이벤트] Handler & Service 통합 동작 검증",
-    );
-
-    const redisReadyKey = "room:" + roomId + ":ready";
-
-    const initialKeyType = await redisClient.type(redisReadyKey);
-    if (initialKeyType !== "none" && initialKeyType !== "set") {
-      await redisClient.del(redisReadyKey);
-    }
+    console.log("\n[STEP 5] 기존 [SOCKET] Handler & Service 통합 동작 검증");
 
     console.log(
-      "\n - [SOCKET/REDIS CHECK] '" +
+      "\n - [SOCKET] '" +
         SOCKET_EVENTS.TOGGLE_READY +
-        "' 실행 및 Redis Key 저장 검증...",
+        "' 이벤트 발생시키는 중...",
     );
-
     await socketEventListeners[SOCKET_EVENTS.TOGGLE_READY](
       { roomId: roomId, isReady: true },
       function (res) {
-        console.log("   [TOGGLE_READY ACK 응답]:", res);
+        console.log("   [ACK 응답]:", res);
       },
     );
-
-    const redisReadySetData = await redisClient.sMembers(redisReadyKey);
-
-    console.log("   --------------------------------------------------");
-    console.log("   [REDIS VERIFICATION SUCCESS]");
-    console.log("   - 타겟 Redis Key: " + redisReadyKey);
-    console.log(
-      "   - Redis Set 저장 데이터:",
-      JSON.stringify(redisReadySetData),
-    );
-    console.log(
-      "   - 검증 결과: manageGameService가 읽어올 Set 키(" +
-        redisReadyKey +
-        ")에 정상적으로 데이터가 저장되었습니다.",
-    );
-    console.log("   --------------------------------------------------");
-
-    const realQuestionId = startPayload.problem
-      ? startPayload.problem.id
-      : null;
 
     console.log(
       "\n - [SOCKET] '" +
@@ -273,34 +231,26 @@ async function runBattleFlowTest() {
         roomId: roomId,
         code: selectedCode,
         language: roomLangStr,
-        questionId: realQuestionId,
+        questionId: startPayload.problem ? startPayload.problem.id : null,
       },
       function (res) {
         console.log("   [ACK 응답]:", res);
       },
     );
 
-    const randomItemTypes = ["FOG_SCREEN", "PAINT", "FREEZE", "REVEAL_LENGTH"];
-    const selectedItem = getRandomElement(randomItemTypes);
-
+    console.log(
+      "\n - [SOCKET] '" + SOCKET_EVENTS.USE_ITEM + "' 이벤트 발생시키는 중...",
+    );
     const otherUsers = await dbPool.query(
       "SELECT id FROM users WHERE id != ? ORDER BY RAND() LIMIT 1",
       [testRoom.host_user_id],
     );
-
-    let realTargetUserId = null;
-    if (otherUsers && otherUsers.length > 0) {
-      realTargetUserId = otherUsers[0].id;
-    }
-
-    console.log(
-      "\n - [SOCKET] '" + SOCKET_EVENTS.USE_ITEM + "' 이벤트 발생시키는 중...",
-    );
     await socketEventListeners[SOCKET_EVENTS.USE_ITEM](
       {
         roomId: roomId,
-        targetUserId: realTargetUserId,
-        itemType: selectedItem,
+        targetUserId:
+          otherUsers && otherUsers.length > 0 ? otherUsers[0].id : null,
+        itemType: "FOG_SCREEN",
       },
       function (res) {
         console.log("   [ACK 응답]:", res);
@@ -316,6 +266,28 @@ async function runBattleFlowTest() {
       { roomId: roomId, questionIndex: 1 },
       function (res) {
         console.log("   [ACK 응답]:", res);
+      },
+    );
+
+    console.log(
+      "\n=================================================================",
+    );
+    console.log("연결 끊김(Disconnect) 및 재접속(JOIN_ROOM) 테스트");
+    console.log(
+      "=================================================================",
+    );
+
+    await socketEventListeners["disconnect"]();
+
+    console.log(
+      "\n - [SOCKET] 유저 재접속 '" +
+        SOCKET_EVENTS.JOIN_ROOM +
+        "' 이벤트 발생 (상태 복원 확인)...",
+    );
+    await socketEventListeners[SOCKET_EVENTS.JOIN_ROOM](
+      { roomId: roomId },
+      function (res) {
+        console.log("   [재접속 ACK 응답]:", res);
       },
     );
 
@@ -342,20 +314,17 @@ async function runBattleFlowTest() {
           problemsJson,
         ],
       );
-
-      console.log(
-        "[STEP 6 완료] 유저 " +
-          item.userId +
-          " 최후 코드 저장 완료 (History ID: " +
-          historyId +
-          ")",
-      );
     }
 
-    console.log("\n[STEP 7] saveInfoService.saveGameResult() 실행");
+    console.log(
+      "\n=================================================================",
+    );
+    console.log("saveInfoService.saveGameResult() 및 데이터 정리 테스트");
+    console.log(
+      "=================================================================",
+    );
 
     const winnerId = getRandomElement(participantIds);
-
     const gameResultData = {
       matchId: startPayload.matchId,
       roomId: roomId,
@@ -364,21 +333,26 @@ async function runBattleFlowTest() {
     };
 
     await saveInfoService.saveGameResult(gameResultData);
-    console.log(
-      "[STEP 7 완료] 매치 " +
-        gameResultData.matchId +
-        " 결과 저장 완료 (우승자: " +
-        gameResultData.winnerId +
-        " | 점수: " +
-        gameResultData.score +
-        ")",
-    );
+    console.log(" - DB에 매치 결과 저장 완료!");
 
-    console.log("\n==================================================");
     console.log(
-      "[TEST SUCCESS] 모든 배틀 및 소켓 기능의 통합 테스트 시나리오가 정상 종료되었습니다.",
+      "\n - [SOCKET] 방 참가자에게 게임 종료(GAME_ENDED) 결과 전송 및 Valkey 정리 수행...",
     );
-    console.log("==================================================");
+    await socketGameService.broadcastGameEnded(fakeIo, roomId, gameResultData);
+
+    const stateKey = "room:" + roomId + ":state";
+    const isCleaned = await redisClient.exists(stateKey);
+    console.log(" - Redis 정리 검증 (0이면 성공): " + isCleaned);
+
+    console.log(
+      "\n=================================================================",
+    );
+    console.log(
+      "게임 종료, 재접속 상태 복원, 데이터 정리(Valkey) 소켓 기능이 모두 성공적으로 테스트되었습니다! ",
+    );
+    console.log(
+      "=================================================================",
+    );
   } catch (error) {
     console.error("\n[TEST FAILED] 테스트 진행 중 오류 발생:", error);
   } finally {

@@ -208,6 +208,26 @@ export async function saveReadyState(params) {
   }
 }
 
+export async function cleanupRoomValkeyData(roomId) {
+  try {
+    const keysToDel = [
+      "room:" + roomId + ":state",
+      "room:" + roomId + ":participants",
+      "room:" + roomId + ":ready",
+      "room:" + roomId + ":messages",
+      "room:" + roomId + ":problems",
+    ];
+    for (let i = 0; i < keysToDel.length; i++) {
+      await redisClient.del(keysToDel[i]);
+    }
+    console.log(
+      "[socketService] Valkey 방 데이터 정리 완료 (roomId: " + roomId + ")",
+    );
+  } catch (err) {
+    console.error("[cleanupRoomValkeyData] Redis Error: " + err.message);
+  }
+}
+
 export const socketGameService = {
   broadcastGameState(io, roomId, gameStateData) {
     const payload = socketDto.toGameStateResponse(gameStateData);
@@ -227,5 +247,10 @@ export const socketGameService = {
   broadcastNextQuestion(io, roomId, nextQuestionData) {
     const payload = socketDto.toNextQuestionResponse(nextQuestionData);
     io.to(roomId).emit(SOCKET_EVENTS.NEXT_QUESTION_STARTED, payload);
+  },
+
+  async broadcastGameEnded(io, roomId, resultData) {
+    io.to(roomId).emit(SOCKET_EVENTS.GAME_ENDED, resultData);
+    await cleanupRoomValkeyData(roomId);
   },
 };

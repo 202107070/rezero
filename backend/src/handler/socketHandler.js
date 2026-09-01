@@ -1,3 +1,5 @@
+// src/handler/socketHandler.js
+
 import {
   validateJoinRoom,
   validateSendMessage,
@@ -31,6 +33,31 @@ export function registerSocketHandlers(io, socket) {
       console.log(
         socket.user.displayName + " 님이 [" + roomId + "] 방에 입장함",
       );
+
+      // Valkey에서 게임 진행 상태 확인 후 재접속 복원 처리
+      const roomStateKey = "room:" + roomId + ":state";
+      const roomState = await redisClient.hGetAll(roomStateKey);
+
+      if (
+        roomState &&
+        (roomState.status === "IN_GAME" || roomState.status === "STARTED")
+      ) {
+        console.log(
+          "[재접속 복원] " +
+            socket.user.displayName +
+            " 님이 진행 중인 게임에 재접속했습니다.",
+        );
+        socket.emit(SOCKET_EVENTS.USER_RECONNECTED, {
+          roomId: roomId,
+          matchId: roomState.matchId,
+          status: roomState.status,
+          currentProblemIndex: roomState.currentProblemIndex,
+          timeLimit: roomState.timeLimit,
+          language: roomState.language,
+          difficulty: roomState.difficulty,
+          problemId: roomState.problemId,
+        });
+      }
 
       const recentMessages = await getRecentMessages(roomId);
 
@@ -310,6 +337,10 @@ export function registerSocketHandlers(io, socket) {
   );
 
   socket.on("disconnect", function () {
-    console.log("[Socket 연결 종료] " + socket.user.displayName);
+    console.log(
+      "[Socket 연결 종료] " +
+        socket.user.displayName +
+        " - Valkey 데이터는 유지됩니다.",
+    );
   });
 }

@@ -16,4 +16,7 @@ export const SOCKET_EVENTS = {
   GAME_STATE_UPDATE: "game_state_update",
   ITEM_USED: "item_used",
   NEXT_QUESTION_STARTED: "next_question_started",
+
+  GAME_ENDED: "game_ended",
+  USER_RECONNECTED: "user_reconnected",
 };
