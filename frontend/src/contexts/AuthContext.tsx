@@ -12,8 +12,8 @@ import {
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => AuthResult;
-  signup: (username: string, password: string, displayName?: string) => AuthResult;
+  login: (username: string, password: string) => Promise<AuthResult>;
+  signup: (username: string, password: string, displayName?: string) => Promise<AuthResult>;
   logout: () => void;
 }
 
@@ -22,16 +22,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => initAuth());
 
-  const login = useCallback((username: string, password: string) => {
-    const result = authLogin(username, password);
+  const login = useCallback(async (username: string, password: string) => {
+    const result = await authLogin(username, password);
     if (result.ok) {
       setUser(result.user);
     }
     return result;
   }, []);
 
-  const signup = useCallback((username: string, password: string, displayName?: string) => {
-    const result = authSignup(username, password, displayName);
+  const signup = useCallback(async (username: string, password: string, displayName?: string) => {
+    const result = await authSignup(username, password, displayName);
     if (result.ok) {
       setUser(result.user);
     }

@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const switchMode = (next: AuthMode) => {
     setMode(next);
@@ -25,19 +26,26 @@ export default function LoginPage() {
     setError('');
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+
     setError('');
+    setSubmitting(true);
 
-    const result =
-      mode === 'login'
-        ? login(username, password)
-        : signup(username, password, displayName || undefined);
+    try {
+      const result =
+        mode === 'login'
+          ? await login(username, password)
+          : await signup(username, password, displayName || undefined);
 
-    if (result.ok) {
-      navigate(ROUTES.LOBBY, { replace: true });
-    } else {
-      setError(result.error);
+      if (result.ok) {
+        navigate(ROUTES.LOBBY, { replace: true });
+      } else {
+        setError(result.error);
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -110,8 +118,12 @@ export default function LoginPage() {
 
             {error && <div className="login-error">{error}</div>}
 
-            <button type="submit" className="pixel-btn pixel-btn-primary login-submit">
-              {mode === 'login' ? '로그인' : '회원가입'}
+            <button
+              type="submit"
+              className="pixel-btn pixel-btn-primary login-submit"
+              disabled={submitting}
+            >
+              {submitting ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}
             </button>
           </form>
         </div>

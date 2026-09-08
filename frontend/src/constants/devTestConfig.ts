@@ -3,7 +3,7 @@
  * 배포/멀티 연동 전에 `enabled: false` 로 되돌리세요.
  */
 export const DEV_TEST_USER_LOADOUT = {
-  enabled: true,
+  enabled: false,
   gold: 50_000,
   items: {
     paint: 10,
