@@ -1,5 +1,6 @@
 export interface RoomPlayer {
   id: number;
+  userId?: string;
   name: string;
   rank?: string;
   isHost: boolean;

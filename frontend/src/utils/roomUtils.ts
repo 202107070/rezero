@@ -1,18 +1,22 @@
 import type { Room } from '../types/lobby';
 import { getKickedCount } from '../services/roomStore';
-import { normalizeRoomEntry, normalizeRoomList } from './roomNormalize';
-
-export const DEFAULT_ROOMS: Room[] = [];
-
-export { normalizeRoomEntry, normalizeRoomList };
 
 export function parseRoomOccupancy(room: Room): { current: number; max: number } {
-  const raw = room?.players || '1/N';
-  const [, maxRaw] = String(raw).split('/');
-  const max = Math.max(1, parseInt(maxRaw, 10) || 8);
-  const kicked = getKickedCount(String(room.id));
-  const current = Math.max(1, max - kicked);
-  return { current, max };
-}
+  if (typeof room.currentPlayers === 'number' && typeof room.maxPlayers === 'number') {
+    return {
+      current: Math.max(0, room.currentPlayers),
+      max: Math.max(1, room.maxPlayers),
+    };
+  }
 
-export { loadDynamicRooms, persistDynamicRooms } from '../services/roomStore';
+  const raw = room?.players || '0/8';
+  const [currentRaw, maxRaw] = String(raw).split('/');
+  const max = Math.max(1, parseInt(maxRaw, 10) || 8);
+  const parsedCurrent = parseInt(currentRaw, 10);
+  if (Number.isFinite(parsedCurrent)) {
+    return { current: Math.max(0, parsedCurrent), max };
+  }
+
+  const kicked = getKickedCount(String(room.id));
+  return { current: Math.max(1, max - kicked), max };
+}

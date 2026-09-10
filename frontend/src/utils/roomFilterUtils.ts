@@ -31,7 +31,7 @@ export function matchesRoomFilter(room: Room, filter: RoomFilterState): boolean 
   }
 
   if (filter.visibility.length > 0) {
-    const visibility = room.pwd ? 'private' : 'public';
+    const visibility = room.isPrivate || room.pwd ? 'private' : 'public';
     if (!filter.visibility.includes(visibility)) return false;
   }
 

@@ -8,13 +8,7 @@ import { getLangKey } from '../utils/battle/codeUtils';
 import { problemSupportsLang } from '../utils/problemTypeUtils';
 import { normalizeBattleProblem } from '../utils/battle/problemResultUtils';
 import { normalizeProblemVisual } from '../utils/problemVisualUtils';
-import {
-  clearKickedCount,
-  loadDynamicRooms,
-  persistDynamicRooms,
-  removeRoomById,
-  updateRoomStatus,
-} from './roomStore';
+import { clearKickedCount } from './roomStore';
 import { clearBattleSessionForLeave, setBattleProblems, setBattleSettings } from './sessionStore';
 
 type ProblemRecord = {
@@ -100,9 +94,6 @@ export function prepareBattleStart(params: {
       })),
     });
 
-    if (params.roomId) {
-      updateRoomStatus(params.roomId, 'STARTED');
-    }
   } catch (e) {
     console.error('이전 전투 상태 정리 실패:', e);
   }
@@ -115,27 +106,5 @@ export function clearRoomSession(roomId: string): void {
     clearBattleSessionForLeave(sessionKey);
   } catch (e) {
     console.error('세션 정리 실패:', e);
-  }
-}
-
-export function removeRoomFromLobby(roomId: string): void {
-  removeRoomById(roomId);
-}
-
-export function updateRoomPlayerCount(roomId: string): void {
-  try {
-    const rooms = loadDynamicRooms();
-    const updated = rooms.map((r) => {
-      if (String(r.id) === String(roomId)) {
-        const parts = String(r.players).split('/');
-        const max = parseInt(parts[1] || '8', 10);
-        const current = Math.max(1, (parseInt(parts[0], 10) || 1) - 1);
-        return { ...r, players: `${current}/${max}` };
-      }
-      return r;
-    });
-    persistDynamicRooms(updated);
-  } catch (e) {
-    console.error('방 인원 업데이트 실패:', e);
   }
 }

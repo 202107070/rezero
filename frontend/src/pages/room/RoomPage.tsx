@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, type MouseEvent, useState } from 'react';
-import { getCurrentUserName } from '../../services/authService';
+import { useCallback, useEffect, useRef, type MouseEvent, useState } from 'react';
+import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../services/authService';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BattleSettingsPanel } from '../../components/room/BattleSettingsPanel/BattleSettingsPanel';
 import { CharacterSelect } from '../../components/room/CharacterSelect/CharacterSelect';
@@ -13,7 +13,6 @@ import { RoomProfileModal } from '../../components/room/RoomProfileModal/RoomPro
 import { StartGameOverlay } from '../../components/room/StartGameOverlay/StartGameOverlay';
 import {
   buildInitialMessages,
-  buildInitialPlayers,
   BOT_READY_DELAY_MS,
   DEMO_BOT_POOL,
   DIFF_MAP,
@@ -28,12 +27,21 @@ import {
 } from '../../constants/itemTypes';
 import { setKickedCount, getKickedCount } from '../../services/roomStore';
 import { ROUTES } from '../../constants/routes';
-import type { GameMode } from '../../types/lobby';
+import type { GameMode, Room } from '../../types/lobby';
+import {
+  emptyPlayerSlots,
+  fetchRoom,
+  getRoomErrorMessage,
+  isAlreadyJoinedError,
+  joinRoom,
+  leaveRoom,
+  mapParticipantsToPlayers,
+  startRoom as startRoomApi,
+  takePendingJoinPassword,
+} from '../../services/roomService';
 import {
   clearRoomSession,
   prepareBattleStart,
-  removeRoomFromLobby,
-  updateRoomPlayerCount,
 } from '../../services/battlePrepService';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
@@ -57,12 +65,10 @@ export default function RoomPage() {
   const [searchParams] = useSearchParams();
 
   const roomId = searchParams.get('id') || '';
-  const roomTitleFromUrl = searchParams.get('title') || '싱글 데스매치';
-  const roomPwd = searchParams.get('pwd') || '';
-  const isPrivate = roomPwd.length > 0;
-  const roomMode = searchParams.get('mode') || '1/1';
-  const gameMode = (searchParams.get('gameMode') || 'item') as GameMode;
-  const isItemMode = gameMode === 'item';
+  const fallbackTitle = searchParams.get('title') || '대기실';
+  const fallbackPwd = searchParams.get('pwd') || '';
+  const fallbackMode = searchParams.get('mode') || '1/1';
+  const fallbackGameMode = (searchParams.get('gameMode') || 'item') as GameMode;
 
   const urlLang = searchParams.get('lang') || 'JAVA';
   const urlDiff = searchParams.get('diff') || '보통';
@@ -70,20 +76,21 @@ export default function RoomPage() {
   const urlCount = searchParams.get('count') || '5';
   const urlMaxPlayers = searchParams.get('maxPlayers') || '8';
   const parsedMaxPlayers = Math.max(2, Math.min(8, parseInt(urlMaxPlayers, 10) || 8));
+  const numericRoomId = Number(roomId);
 
   const initialLang = LANG_MAP[urlLang] || 'java';
   const initialDiff = DIFF_MAP[urlDiff] || 'NORMAL';
   const initialCount = parseInt(urlCount, 10) >= 3 && parseInt(urlCount, 10) <= 10 ? urlCount : '5';
 
-  const initialPlayers = useMemo(() => buildInitialPlayers(), []);
+  const [roomDetail, setRoomDetail] = useState<Room | null>(null);
   const [itemInventory] = useState(loadItemInventory);
   const [selectedItems, setSelectedItems] = useState<Set<ItemKey>>(() => new Set(defaultSelectedItemKeys()));
 
-  const [myLanguage] = useState(initialLang);
+  const [myLanguage, setMyLanguage] = useState(initialLang);
   const [myCharacter, setMyCharacter] = useState('char1');
   const [isReady, setIsReady] = useState(false);
   const [autoReady, setAutoReady] = useState(false);
-  const [settings] = useState<RoomSettings>({
+  const [settings, setSettings] = useState<RoomSettings>({
     time: urlTimeRaw,
     diff: initialDiff,
     theme: 'ALGORITHM: DP',
@@ -100,8 +107,9 @@ export default function RoomPage() {
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [kickedCount, setKickedCountState] = useState(() => getKickedCount(roomId));
+  const [roomBusy, setRoomBusy] = useState(false);
 
-  const [players, setPlayers] = useState<(RoomPlayer | null)[]>(initialPlayers);
+  const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
   const botReadyTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
@@ -138,9 +146,7 @@ export default function RoomPage() {
   const [chatMsg, setChatMsg] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
   const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
-  const [messages, setMessages] = useState<RoomChatMessage[]>(() =>
-    buildInitialMessages(roomMode, parsedMaxPlayers, initialPlayers),
-  );
+  const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [contextMenu, setContextMenu] = useState<{
     open: boolean;
     x: number;
@@ -148,20 +154,89 @@ export default function RoomPage() {
     userName: string;
   } | null>(null);
 
-  const roomQuery = searchParams.toString();
+  const roomTitle = roomDetail?.title || fallbackTitle;
+  const isPrivate = roomDetail?.isPrivate ?? (fallbackPwd.length > 0 && fallbackPwd !== 'protected');
+  const roomMode = roomDetail?.mode || fallbackMode;
+  const gameMode = (roomDetail?.gameMode || fallbackGameMode) as GameMode;
+  const isItemMode = gameMode === 'item';
+  const roomQuery = searchParams.toString() || `id=${roomId}`;
+
+  const applyRoom = useCallback((room: Room) => {
+    setRoomDetail(room);
+    setPlayers(mapParticipantsToPlayers(room));
+    setMyLanguage(LANG_MAP[room.lang] || 'java');
+    setSettings({
+      time: urlTimeRaw,
+      diff: DIFF_MAP[room.diff] || 'NORMAL',
+      theme: 'ALGORITHM: DP',
+      count: room.count || '5',
+      maxPlayers: Math.max(2, Math.min(8, room.maxPlayers || parsedMaxPlayers)),
+    });
+    setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapParticipantsToPlayers(room)));
+  }, [parsedMaxPlayers, urlTimeRaw]);
 
   useEffect(() => {
     const me = getCurrentUserName();
     setUserPresence(me, {
       status: 'room',
       roomId,
-      roomTitle: roomTitleFromUrl,
+      roomTitle,
       roomQuery,
     });
     return () => {
       setUserPresence(me, { status: 'lobby' });
     };
-  }, [roomId, roomTitleFromUrl, roomQuery]);
+  }, [roomId, roomTitle, roomQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function enterRoom() {
+      if (!Number.isInteger(numericRoomId) || numericRoomId < 1) {
+        setAlertMessage('올바른 방 ID가 필요합니다.');
+        setShowAlertModal(true);
+        navigate(ROUTES.LOBBY);
+        return;
+      }
+
+      try {
+        let room = await fetchRoom(numericRoomId);
+        const myId = getCurrentUserId();
+        const alreadyIn =
+          String(room.hostUserId) === String(myId) ||
+          (room.participants || []).some((participant) => String(participant.userId) === String(myId));
+
+        if (!alreadyIn) {
+          try {
+            room = await joinRoom(numericRoomId, {
+              password: takePendingJoinPassword(),
+              language: room.lang,
+              character: 'char1',
+            });
+          } catch (error) {
+            if (!isAlreadyJoinedError(error)) {
+              throw error;
+            }
+            room = await fetchRoom(numericRoomId);
+          }
+        }
+
+        if (!cancelled) {
+          applyRoom(room);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setAlertMessage(getRoomErrorMessage(error));
+        setShowAlertModal(true);
+        navigate(ROUTES.LOBBY);
+      }
+    }
+
+    void enterRoom();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyRoom, navigate, numericRoomId]);
 
   const appendSystemMessage = (text: string) => {
     setMessages((prev) => [...prev, { type: 'sys', text: `>> ${text}` }]);
@@ -231,12 +306,20 @@ export default function RoomPage() {
     }
   };
 
-  const host = players[0];
-  const myIsReady = isReady;
+  const myUserId = getCurrentUserId();
+  const myPlayer = players.find(
+    (player) =>
+      player &&
+      (player.userId
+        ? String(player.userId) === String(myUserId)
+        : player.name === getCurrentDisplayName() || player.name === getCurrentUserName()),
+  );
+  const isMeHost = Boolean(myPlayer?.isHost);
+  const myIsReady = isReady || Boolean(myPlayer?.isReady);
   const occupiedCount = players.filter((p) => p !== null).length;
-  const displayMaxPlayers = roomMode === '1/1' ? 2 : parsedMaxPlayers;
+  const displayMaxPlayers = roomMode === '1/1' ? 2 : settings.maxPlayers || parsedMaxPlayers;
   const maxOccupancy = displayMaxPlayers;
-  const canInviteMore = Boolean(host?.isHost) && occupiedCount < maxOccupancy;
+  const canInviteMore = isMeHost && occupiedCount < maxOccupancy;
 
   const handleSendChat = () => {
     if (!chatMsg.trim()) return;
@@ -251,7 +334,7 @@ export default function RoomPage() {
   };
 
   const handleMyReadyToggle = () => {
-    if (host?.isHost) return;
+    if (isMeHost) return;
     setIsReady((r) => !r);
   };
 
@@ -260,8 +343,8 @@ export default function RoomPage() {
     setShowAlertModal(true);
   };
 
-  const handleStartGame = () => {
-    if (!host?.isHost) return;
+  const handleStartGame = async () => {
+    if (!isMeHost || roomBusy) return;
 
     const blockReason = getStartBlockReason(players, roomMode);
     if (blockReason) {
@@ -269,37 +352,56 @@ export default function RoomPage() {
       return;
     }
 
-    const roomRoster = players.filter((player): player is RoomPlayer => player !== null);
+    setRoomBusy(true);
+    try {
+      await startRoomApi(numericRoomId);
 
-    prepareBattleStart({
-      roomId,
-      settingsDiff: settings.diff,
-      settingsCount: settings.count,
-      settingsMaxPlayers: settings.maxPlayers,
-      myLanguage,
-      roomMode,
-      gameMode,
-      selectedItems: isItemMode ? Array.from(selectedItems) : [],
-      roomRoster,
-    });
+      const roomRoster = players.filter((player): player is RoomPlayer => player !== null);
 
-    const battleParams = new URLSearchParams({
-      fresh: '1',
-      roomId: roomId || '',
-      lang: myLanguage || 'java',
-      mode: roomMode || '1/1',
-      count: settings.count || '5',
-      maxPlayers: String(settings.maxPlayers || parsedMaxPlayers),
-      gameMode,
-    });
+      prepareBattleStart({
+        roomId,
+        settingsDiff: settings.diff,
+        settingsCount: settings.count,
+        settingsMaxPlayers: settings.maxPlayers,
+        myLanguage,
+        roomMode,
+        gameMode,
+        selectedItems: isItemMode ? Array.from(selectedItems) : [],
+        roomRoster,
+      });
 
-    navigate(`${ROUTES.BATTLE}?${battleParams.toString()}`);
+      const battleParams = new URLSearchParams({
+        fresh: '1',
+        roomId: roomId || '',
+        lang: myLanguage || 'java',
+        mode: roomMode || '1/1',
+        count: settings.count || '5',
+        maxPlayers: String(settings.maxPlayers || parsedMaxPlayers),
+        gameMode,
+      });
+
+      navigate(`${ROUTES.BATTLE}?${battleParams.toString()}`);
+    } catch (error) {
+      showStartAlert(getRoomErrorMessage(error));
+    } finally {
+      setRoomBusy(false);
+    }
   };
 
-  const handleLeaveToLobby = () => {
-    removeRoomFromLobby(roomId);
-    clearRoomSession(roomId);
-    navigate(ROUTES.LOBBY);
+  const handleLeaveToLobby = async () => {
+    if (roomBusy) return;
+    setRoomBusy(true);
+    try {
+      if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
+        await leaveRoom(numericRoomId);
+      }
+    } catch (error) {
+      showStartAlert(getRoomErrorMessage(error));
+    } finally {
+      clearRoomSession(roomId);
+      setRoomBusy(false);
+      navigate(ROUTES.LOBBY);
+    }
   };
 
   const handleKickPlayer = () => {
@@ -319,7 +421,6 @@ export default function RoomPage() {
     setKickedCountState(newKicked);
     setKickedCount(roomId, newKicked);
     setMessages((prev) => [...prev, { type: 'sys', text: `>> [${kickedName}] 님이 강퇴되었습니다.` }]);
-    updateRoomPlayerCount(roomId);
     setShowKickModal(false);
     setKickTarget(null);
   };
@@ -345,7 +446,7 @@ export default function RoomPage() {
       if (DEMO_BOT_POOL.length === 0) return;
 
       const slotIndex = roomMode === '1/1' ? 1 : index;
-      if (!host?.isHost || players[slotIndex] !== null || occupiedCount >= maxOccupancy) return;
+      if (!isMeHost || players[slotIndex] !== null || occupiedCount >= maxOccupancy) return;
 
       const botCount = players.filter((p) => p && !p.isHost).length;
       const bot = pickDemoBot(botCount);
@@ -368,9 +469,8 @@ export default function RoomPage() {
       });
       scheduleBotReady(newBotId, slotIndex);
       setMessages((prev) => [...prev, { type: 'sys', text: `>> [${bot.name}] 님이 입장하셨습니다.` }]);
-      updateRoomPlayerCount(roomId);
     },
-    [host?.isHost, players, roomMode, occupiedCount, maxOccupancy, roomId],
+    [isMeHost, players, roomMode, occupiedCount, maxOccupancy],
   );
 
   return (
@@ -380,7 +480,7 @@ export default function RoomPage() {
           <div className="room-main-col">
             <div className="pixel-card room-main-card">
               <RoomHeader
-                roomTitle={roomTitleFromUrl}
+                roomTitle={roomTitle}
                 isPrivate={isPrivate}
                 playerCount={occupiedCount}
                 maxPlayers={displayMaxPlayers}
@@ -430,20 +530,20 @@ export default function RoomPage() {
               <div className="room-side-bottom">
                 <RoomFriendMessenger
                   roomId={roomId}
-                  roomTitle={roomTitleFromUrl}
+                  roomTitle={roomTitle}
                   roomQuery={roomQuery}
                   onSummonSuccess={handleSummonSuccess}
                   onSummonFail={handleSummonFail}
                   onFriendContextMenu={openUserContextMenu}
                 />
                 <RoomActionBar
-                  isHost={Boolean(host?.isHost)}
+                  isHost={isMeHost}
                   myIsReady={myIsReady}
                   autoReady={autoReady}
                   onReadyToggle={handleMyReadyToggle}
                   onAutoReadyChange={setAutoReady}
-                  onStart={handleStartGame}
-                  onLeave={handleLeaveToLobby}
+                  onStart={() => void handleStartGame()}
+                  onLeave={() => void handleLeaveToLobby()}
                 />
               </div>
             </div>
@@ -474,7 +574,7 @@ export default function RoomPage() {
         player={profilePlayer}
         playerIndex={profilePlayerIndex}
         myCharacter={myCharacter}
-        isHost={Boolean(host?.isHost)}
+        isHost={isMeHost}
         onClose={() => setShowProfileModal(false)}
         onKick={(index, name) => {
           setKickTarget({ index, name });

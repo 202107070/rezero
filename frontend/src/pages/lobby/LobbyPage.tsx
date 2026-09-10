@@ -9,6 +9,7 @@ import { PracticeModal } from '../../components/lobby/PracticeModal/PracticeModa
 import { ProfilePanel } from '../../components/lobby/ProfilePanel/ProfilePanel';
 import { RankingBoard } from '../../components/lobby/RankingBoard/RankingBoard';
 import type { UserListMenuAction } from '../../components/lobby/UserListContextMenu/UserListContextMenu';
+import { JoinRoomPasswordModal } from '../../components/lobby/JoinRoomPasswordModal/JoinRoomPasswordModal';
 import { RoomCreateModal } from '../../components/lobby/RoomCreateModal/RoomCreateModal';
 import { RoomList } from '../../components/lobby/RoomList/RoomList';
 import { RouletteWheel } from '../../components/lobby/RouletteWheel/RouletteWheel';
@@ -19,7 +20,13 @@ import { ROULETTE_COST, ROULETTE_ITEMS, type ItemInventory } from '../../constan
 import { ROUTES } from '../../constants/routes';
 import { useAuthUser } from '../../contexts/AuthContext';
 import { loadTitles, type TitleData } from '../../constants/titleTypes';
-import { buildRoomSearchParams, createRoom } from '../../services/roomService';
+import {
+  buildRoomSearchParams,
+  createRoom,
+  fetchRooms,
+  getRoomErrorMessage,
+  setPendingJoinPassword,
+} from '../../services/roomService';
 import { getCurrentUserName } from '../../services/authService';
 import {
   addFriend,
@@ -42,7 +49,6 @@ import { persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtil
 import { EMPTY_ROOM_FILTER } from '../../types/roomFilter';
 import type { RoomFilterState } from '../../types/roomFilter';
 import { getRoomFilterSummary, matchesRoomFilter } from '../../utils/roomFilterUtils';
-import { DEFAULT_ROOMS, loadDynamicRooms } from '../../utils/roomUtils';
 import type { AudioSettings } from '../../types/audioSettings';
 import type { DisplayMode } from '../../types/electron';
 import { loadAudioSettings, saveAudioSettings } from '../../utils/audio/audioSettings';
@@ -113,11 +119,28 @@ export default function LobbyPage() {
   const [rouletteSpinning, setRouletteSpinning] = useState(false);
   const [rouletteResult, setRouletteResult] = useState<string | null>(null);
   const [wheelDeg, setWheelDeg] = useState(0);
-  const [rooms, setRooms] = useState<Room[]>(() => [...DEFAULT_ROOMS, ...loadDynamicRooms()]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [creatingRoom, setCreatingRoom] = useState(false);
+  const [joinTarget, setJoinTarget] = useState<Room | null>(null);
+  const [joinPwd, setJoinPwd] = useState('');
+  const [joinError, setJoinError] = useState('');
+  const [joiningRoom, setJoiningRoom] = useState(false);
 
-  const refreshRooms = useCallback(() => {
-    setRooms([...DEFAULT_ROOMS, ...loadDynamicRooms()]);
-    setCurrentPage(0);
+  const refreshRooms = useCallback(async () => {
+    try {
+      const nextRooms = await fetchRooms();
+      setRooms(nextRooms);
+    } catch (error) {
+      setRooms([]);
+      setChatMessages((prev) => {
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        return [
+          ...prev,
+          { sender: 'SYSTEM', text: getRoomErrorMessage(error), time: timeStr, mode: '[안내]' },
+        ];
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -141,9 +164,13 @@ export default function LobbyPage() {
   }, []);
 
   useEffect(() => {
-    window.addEventListener('pageshow', refreshRooms);
+    void refreshRooms();
+    const onPageShow = () => {
+      void refreshRooms();
+    };
+    window.addEventListener('pageshow', onPageShow);
     return () => {
-      window.removeEventListener('pageshow', refreshRooms);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, [refreshRooms]);
 
@@ -248,33 +275,63 @@ export default function LobbyPage() {
     setTimeout(() => setModalShake(false), 500);
   };
 
-  const handleConfirmCreate = () => {
+  const enterRoom = (room: Room, password = '') => {
+    setPendingJoinPassword(password);
+    navigate(`${ROUTES.ROOM}?${buildRoomSearchParams(room).toString()}`);
+  };
+
+  const handleConfirmCreate = async () => {
     if (!isCreateFormValid()) {
       triggerModalShake();
       return;
     }
+    if (creatingRoom) return;
 
-    const newRoom = createRoom({
-      roomTitle: roomTitle.trim(),
-      playerMode,
-      gameMode: gameMode as GameMode,
-      difficulty,
-      language,
-      roomPwd: roomVisibility === 'private' ? roomPwd : '',
-      problemCount,
-    });
+    setCreatingRoom(true);
+    try {
+      const newRoom = await createRoom({
+        roomTitle: roomTitle.trim(),
+        playerMode,
+        gameMode: gameMode as GameMode,
+        difficulty,
+        language,
+        roomPwd: roomVisibility === 'private' ? roomPwd : '',
+        problemCount,
+      });
 
-    setRooms([...DEFAULT_ROOMS, ...loadDynamicRooms()]);
-    setShowModal(false);
-    resetCreateForm();
-
-    const params = buildRoomSearchParams(newRoom);
-    if (playerMode === '1/1') params.set('maxPlayers', '1');
-    navigate(`${ROUTES.ROOM}?${params.toString()}`);
+      setShowModal(false);
+      resetCreateForm();
+      enterRoom(newRoom);
+    } catch (error) {
+      triggerModalShake();
+      appendSystemChat(getRoomErrorMessage(error));
+    } finally {
+      setCreatingRoom(false);
+    }
   };
 
   const handleJoinRoom = (room: Room) => {
-    navigate(`${ROUTES.ROOM}?${buildRoomSearchParams(room).toString()}`);
+    if (room.isPrivate || room.pwd) {
+      setJoinTarget(room);
+      setJoinPwd('');
+      setJoinError('');
+      return;
+    }
+    enterRoom(room);
+  };
+
+  const handleConfirmJoinPrivate = () => {
+    if (!joinTarget || joiningRoom) return;
+    if (!joinPwd.trim()) {
+      setJoinError('비밀번호를 입력해 주세요.');
+      return;
+    }
+    setJoiningRoom(true);
+    setJoinError('');
+    enterRoom(joinTarget, joinPwd);
+    setJoinTarget(null);
+    setJoinPwd('');
+    setJoiningRoom(false);
   };
 
   const spinRoulette = () => {
@@ -447,7 +504,7 @@ export default function LobbyPage() {
           setShowModal(false);
           resetCreateForm();
         }}
-        onConfirm={handleConfirmCreate}
+        onConfirm={() => void handleConfirmCreate()}
         onPlayerModeChange={setPlayerMode}
         onGameModeChange={setGameMode}
         onRoomTitleChange={setRoomTitle}
@@ -456,6 +513,24 @@ export default function LobbyPage() {
         onRoomVisibilityChange={setRoomVisibility}
         onRoomPwdChange={setRoomPwd}
         onProblemCountChange={setProblemCount}
+      />
+
+      <JoinRoomPasswordModal
+        open={joinTarget !== null}
+        roomTitle={joinTarget?.title || ''}
+        password={joinPwd}
+        error={joinError}
+        submitting={joiningRoom}
+        onPasswordChange={(value) => {
+          setJoinPwd(value);
+          setJoinError('');
+        }}
+        onClose={() => {
+          setJoinTarget(null);
+          setJoinPwd('');
+          setJoinError('');
+        }}
+        onConfirm={handleConfirmJoinPrivate}
       />
 
       <RoomFilterModal

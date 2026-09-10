@@ -1,8 +1,8 @@
 import type { BattleProblem, RoomUser } from '../types/battle';
 import { getCurrentUserId } from './authService';
+import { clearKickedCount } from './roomStore';
 import type { DemoBot } from '../utils/battle/demoBots';
 import type { FinalRankingSnapshot } from '../utils/battle/rankUtils';
-import { removeRoomById } from './roomStore';
 import {
   clearBattleSessionForLeave,
   getBattleDraft,
@@ -252,7 +252,7 @@ export function markProblemSubmitted(sessionId: string, indices: number[]): void
 
 export function clearBattleAndLeave(sessionId: string, roomId: string): void {
   if (roomId) {
-    removeRoomById(roomId);
+    clearKickedCount(roomId);
   }
   clearBattleSessionForLeave(sessionId);
   if (shouldSyncBackend()) {
