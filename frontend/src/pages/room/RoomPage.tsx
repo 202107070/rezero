@@ -61,7 +61,7 @@ import {
   removeFriend,
   setUserPresence,
 } from '../../services/friendStore';
-import { getStartBlockReason } from '../../utils/room/roomStartValidation';
+import { getStartBlockReason, hasLocalBots } from '../../utils/room/roomStartValidation';
 import {
   UserListContextMenu,
   type UserListMenuAction,
@@ -426,9 +426,13 @@ export default function RoomPage() {
 
     setRoomBusy(true);
     try {
-      await startRoomApi(numericRoomId);
-
       const roomRoster = players.filter((player): player is RoomPlayer => player !== null);
+      const localBotStart = hasLocalBots(players);
+
+      // 로컬 봇은 Redis 참가자가 아니므로 START API를 건너뛰고 배틀로 진입
+      if (!localBotStart) {
+        await startRoomApi(numericRoomId);
+      }
 
       prepareBattleStart({
         roomId,
