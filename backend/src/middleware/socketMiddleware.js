@@ -24,11 +24,16 @@ export function socketAuthMiddleware(socket, next) {
     }
 
     const decoded = jwt.verify(actualToken, authConfig.jwtSecret);
+    const userId = decoded.sub || decoded.id;
+
+    if (!userId) {
+      return next(new Error("소켓 인증 실패: 토큰에 사용자 ID가 없습니다."));
+    }
 
     socket.user = {
-      id: decoded.id,
-      username: decoded.username,
-      displayName: decoded.displayName,
+      id: String(userId),
+      username: decoded.username || "",
+      displayName: decoded.displayName || decoded.username || "",
     };
 
     next();

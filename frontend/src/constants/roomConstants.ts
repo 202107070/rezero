@@ -18,6 +18,7 @@ export const CHARACTERS: CharacterOption[] = [
   { id: 'char4', icon: '🤖', label: '로봇' },
 ];
 
+/** 로컬 테스트용 봇 (서버 참가자와는 별개 — START는 실제 유저만 인정) */
 export const DEMO_BOT_POOL: Array<{ name: string; rank: string; language: string; character: string }> = [
   { name: '알고리즘깎는노인', rank: '다이아', language: '☕', character: '🧙' },
   { name: '코딩마스터', rank: '플래티넘', language: '🐍', character: '🤖' },

@@ -1379,3 +1379,80 @@
 .text-start {
   text-align: left;
 }
+
+/* 비공개 방 입장 비밀번호 모달 */
+.join-pwd-modal {
+  width: min(420px, calc(100vw - 32px));
+  text-align: center;
+  padding: 28px 24px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.join-pwd-modal-kicker {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--px-warning);
+  margin-bottom: 8px;
+}
+
+.join-pwd-modal-title {
+  margin: 0 0 10px;
+  font-size: 24px;
+  color: var(--px-primary);
+  text-shadow: 2px 2px 0 #000;
+}
+
+.join-pwd-modal-room {
+  margin: 0 0 18px;
+  max-width: 100%;
+  font-size: 16px;
+  color: #ddd;
+  word-break: keep-all;
+}
+
+.join-pwd-modal-label {
+  align-self: stretch;
+  text-align: left;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #bbb;
+}
+
+.join-pwd-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #1a1e21;
+  border: 3px solid var(--px-border);
+  color: #fff;
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  padding: 12px 14px;
+  text-align: center;
+  outline: none;
+}
+
+.join-pwd-modal-input:focus {
+  border-color: var(--px-primary);
+}
+
+.join-pwd-modal-input::placeholder {
+  color: #666;
+}
+
+.join-pwd-modal-error {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--px-warning);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.join-pwd-modal-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}

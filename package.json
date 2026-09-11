@@ -17,7 +17,8 @@
     "lint": "eslint frontend",
     "preview": "vite preview --config frontend/vite.config.ts",
     "backend": "node backend/bin/www",
-    "backend:dev": "nodemon backend/bin/www"
+    "backend:dev": "nodemon backend/bin/www",
+    "rooms:reset-test": "node backend/scripts/resetTestLobbyRooms.js"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",

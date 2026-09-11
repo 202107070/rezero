@@ -27,20 +27,20 @@ export function JoinRoomPasswordModal({
   return (
     <div className="modal-overlay" onClick={triggerShake}>
       <div
-        className={`modal-content ${shaking ? 'modal-shake-error' : ''}`}
-        style={{ width: '380px' }}
+        className={`modal-content join-pwd-modal ${shaking ? 'modal-shake-error' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-center pixel-text-primary" style={{ marginBottom: '16px', fontSize: '22px' }}>
-          비공개 방
-        </h3>
-        <div className="text-center mb-3" style={{ fontSize: '16px', color: '#ddd' }}>
-          {roomTitle}
-        </div>
+        <div className="join-pwd-modal-kicker">PRIVATE ROOM</div>
+        <h3 className="join-pwd-modal-title">비공개 방</h3>
+        <p className="join-pwd-modal-room">{roomTitle}</p>
+        <label className="join-pwd-modal-label" htmlFor="join-room-password">
+          비밀번호
+        </label>
         <input
+          id="join-room-password"
           type="password"
-          className="modal-pwd-compact"
-          placeholder="비밀번호"
+          className="join-pwd-modal-input"
+          placeholder="방 비밀번호 입력"
           value={password}
           onChange={(e) => onPasswordChange(e.target.value)}
           onKeyDown={(e) => {
@@ -48,12 +48,8 @@ export function JoinRoomPasswordModal({
           }}
           autoFocus
         />
-        {error ? (
-          <div className="text-center pixel-text-warning" style={{ marginTop: '12px', fontSize: '14px' }}>
-            {error}
-          </div>
-        ) : null}
-        <div className="d-flex justify-content-center gap-3" style={{ marginTop: '18px' }}>
+        {error ? <div className="join-pwd-modal-error">{error}</div> : null}
+        <div className="join-pwd-modal-actions">
           <button type="button" className="pixel-btn pixel-btn-secondary" onClick={onClose} disabled={submitting}>
             취소
           </button>

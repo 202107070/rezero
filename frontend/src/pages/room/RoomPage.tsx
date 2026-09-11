@@ -43,6 +43,14 @@ import {
   clearRoomSession,
   prepareBattleStart,
 } from '../../services/battlePrepService';
+import {
+  disconnectRoomSocket,
+  joinRoomSocket,
+  ROOM_SOCKET_EVENTS,
+  toggleReadySocket,
+  type RoomReadyStatePayload,
+  getRoomSocket,
+} from '../../services/roomSocket';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
 import {
@@ -89,7 +97,6 @@ export default function RoomPage() {
   const [myLanguage, setMyLanguage] = useState(initialLang);
   const [myCharacter, setMyCharacter] = useState('char1');
   const [isReady, setIsReady] = useState(false);
-  const [autoReady, setAutoReady] = useState(false);
   const [settings, setSettings] = useState<RoomSettings>({
     time: urlTimeRaw,
     diff: initialDiff,
@@ -223,6 +230,35 @@ export default function RoomPage() {
 
         if (!cancelled) {
           applyRoom(room);
+          try {
+            await joinRoomSocket(numericRoomId);
+            const client = getRoomSocket();
+            client.off(ROOM_SOCKET_EVENTS.READY_CHANGED);
+            client.on(ROOM_SOCKET_EVENTS.READY_CHANGED, (payload: RoomReadyStatePayload) => {
+              const states = payload.roomReadyStates || [
+                { userId: String(payload.userId), isReady: Boolean(payload.isReady) },
+              ];
+              const readyMap = new Map(states.map((item) => [String(item.userId), Boolean(item.isReady)]));
+              setPlayers((prev) =>
+                prev.map((player) => {
+                  if (!player?.userId) return player;
+                  if (!readyMap.has(String(player.userId))) return player;
+                  const nextReady = readyMap.get(String(player.userId)) === true;
+                  return {
+                    ...player,
+                    isReady: player.isHost ? false : nextReady,
+                    status: player.isHost ? 'HOST' : nextReady ? 'READY' : 'WAITING',
+                  };
+                }),
+              );
+              const myId = getCurrentUserId();
+              if (readyMap.has(String(myId))) {
+                setIsReady(readyMap.get(String(myId)) === true);
+              }
+            });
+          } catch {
+            // 소켓 연결 실패 시에도 REST 입장 상태는 유지
+          }
         }
       } catch (error) {
         if (cancelled) return;
@@ -235,6 +271,13 @@ export default function RoomPage() {
     void enterRoom();
     return () => {
       cancelled = true;
+      try {
+        const client = getRoomSocket();
+        client.off(ROOM_SOCKET_EVENTS.READY_CHANGED);
+      } catch {
+        // ignore
+      }
+      disconnectRoomSocket();
     };
   }, [applyRoom, navigate, numericRoomId]);
 
@@ -319,7 +362,7 @@ export default function RoomPage() {
   const occupiedCount = players.filter((p) => p !== null).length;
   const displayMaxPlayers = roomMode === '1/1' ? 2 : settings.maxPlayers || parsedMaxPlayers;
   const maxOccupancy = displayMaxPlayers;
-  const canInviteMore = isMeHost && occupiedCount < maxOccupancy;
+  const canInviteMore = isMeHost && occupiedCount < maxOccupancy && DEMO_BOT_POOL.length > 0;
 
   const handleSendChat = () => {
     if (!chatMsg.trim()) return;
@@ -333,9 +376,38 @@ export default function RoomPage() {
     setChatMsg('');
   };
 
-  const handleMyReadyToggle = () => {
-    if (isMeHost) return;
-    setIsReady((r) => !r);
+  const handleMyReadyToggle = async () => {
+    if (isMeHost || roomBusy) return;
+
+    const nextReady = !myIsReady;
+    setRoomBusy(true);
+    try {
+      const result = await toggleReadySocket(numericRoomId, nextReady);
+      if (!result.success) {
+        showStartAlert(result.message || 'READY 상태 변경에 실패했습니다.');
+        return;
+      }
+
+      setIsReady(nextReady);
+      setPlayers((prev) =>
+        prev.map((player) => {
+          if (!player || player.isHost) return player;
+          const isMe = player.userId
+            ? String(player.userId) === String(myUserId)
+            : player.name === getCurrentDisplayName() || player.name === getCurrentUserName();
+          if (!isMe) return player;
+          return {
+            ...player,
+            isReady: nextReady,
+            status: nextReady ? 'READY' : 'WAITING',
+          };
+        }),
+      );
+    } catch (error) {
+      showStartAlert(getRoomErrorMessage(error));
+    } finally {
+      setRoomBusy(false);
+    }
   };
 
   const showStartAlert = (message: string) => {
@@ -539,9 +611,7 @@ export default function RoomPage() {
                 <RoomActionBar
                   isHost={isMeHost}
                   myIsReady={myIsReady}
-                  autoReady={autoReady}
-                  onReadyToggle={handleMyReadyToggle}
-                  onAutoReadyChange={setAutoReady}
+                  onReadyToggle={() => void handleMyReadyToggle()}
                   onStart={() => void handleStartGame()}
                   onLeave={() => void handleLeaveToLobby()}
                 />

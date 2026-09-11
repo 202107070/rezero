@@ -102,7 +102,9 @@ export function normalizeRoom(raw: unknown): Room {
 
 export async function fetchRooms(): Promise<Room[]> {
   const result = await apiRequest<{ rooms?: unknown[] }>('/rooms');
-  return normalizeRoomList((result.rooms || []).map(normalizeRoom));
+  return normalizeRoomList((result.rooms || []).map(normalizeRoom)).filter(
+    (room) => Boolean(room.hostUserId) && Number(room.currentPlayers) > 0,
+  );
 }
 
 export async function fetchRoom(roomId: number | string): Promise<Room> {

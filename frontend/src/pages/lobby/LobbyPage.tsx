@@ -34,7 +34,6 @@ import {
   getFriendNames,
   isFriend,
   removeFriend,
-  seedDemoFriendPresence,
   setUserPresence,
 } from '../../services/friendStore';
 import {
@@ -60,17 +59,8 @@ const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
 
 function loadInitialUsers(): LobbyUser[] {
   const me = getCurrentUserName();
-  const online: LobbyUser[] = [
-    { name: me, rank: '-', title: getEquippedTitleId() },
-    { name: '테스트유저1', rank: '골드', title: null },
-    { name: '테스트유저2', rank: '실버', title: null },
-  ];
-  const seen = new Set<string>();
-  return online.filter((user) => {
-    if (seen.has(user.name)) return false;
-    seen.add(user.name);
-    return true;
-  });
+  if (!me) return [];
+  return [{ name: me, rank: '-', title: getEquippedTitleId() }];
 }
 
 export default function LobbyPage() {
@@ -155,7 +145,6 @@ export default function LobbyPage() {
   }, [audioSettings.lobbyMusic]);
 
   useEffect(() => {
-    seedDemoFriendPresence();
     const me = getCurrentUserName();
     setUserPresence(me, { status: 'lobby' });
     return () => {

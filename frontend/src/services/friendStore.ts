@@ -134,18 +134,7 @@ export function summonFriendToRoom(
   return true;
 }
 
-/** 데모: 친구 접속 상태 초기값 */
+/** 데모용 친구 시드 — 실제 유저 presence만 쓰도록 비활성화 */
 export function seedDemoFriendPresence() {
-  const map = readPresenceMap();
-  if (!map['테스트유저1']) {
-    setUserPresence('테스트유저1', {
-      status: 'room',
-      roomId: '1',
-      roomTitle: '초보 환영 방',
-      roomQuery: 'id=1&title=%EC%B4%88%EB%B3%B4%20%ED%99%98%EC%98%81%20%EB%B0%A9&mode=1%2FN&diff=%EB%B3%B4%ED%86%B5&lang=JAVA&pwd=&count=5&maxPlayers=8&gameMode=item',
-    });
-  }
-  if (!map['테스트유저2']) {
-    setUserPresence('테스트유저2', { status: 'lobby' });
-  }
+  // no-op
 }

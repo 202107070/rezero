@@ -1,9 +1,7 @@
 interface RoomActionBarProps {
   isHost: boolean;
   myIsReady: boolean;
-  autoReady: boolean;
   onReadyToggle: () => void;
-  onAutoReadyChange: (checked: boolean) => void;
   onStart: () => void;
   onLeave: () => void;
 }
@@ -11,9 +9,7 @@ interface RoomActionBarProps {
 export function RoomActionBar({
   isHost,
   myIsReady,
-  autoReady,
   onReadyToggle,
-  onAutoReadyChange,
   onStart,
   onLeave,
 }: RoomActionBarProps) {
@@ -40,12 +36,6 @@ export function RoomActionBar({
           </>
         )}
       </div>
-      {!isHost && (
-        <label className="auto-ready-toggle room-auto-ready">
-          <input type="checkbox" checked={autoReady} onChange={(e) => onAutoReadyChange(e.target.checked)} />
-          자동 준비
-        </label>
-      )}
     </div>
   );
 }
