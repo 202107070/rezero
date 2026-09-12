@@ -6,7 +6,25 @@ export const ROOM_SOCKET_EVENTS = {
   USER_JOINED: 'user_joined',
   TOGGLE_READY: 'toggle_ready',
   READY_CHANGED: 'ready_changed',
+  USE_ITEM: 'use_item',
+  ITEM_USED: 'item_used',
+  GAME_ENDED: 'game_ended',
 } as const;
+
+export interface BattleItemUsedPayload {
+  fromUserId: string;
+  targetUserId?: string | null;
+  itemType: string;
+  success?: boolean;
+  effectDetails?: string;
+}
+
+export interface BattleGameEndedPayload {
+  roomId?: number | string;
+  matchId?: string;
+  ranking?: unknown;
+  rewards?: unknown;
+}
 
 export interface RoomReadyStatePayload {
   userId: string;
@@ -57,6 +75,29 @@ export function joinRoomSocket(
     client.emit(
       ROOM_SOCKET_EVENTS.JOIN_ROOM,
       { roomId: String(roomId) },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitBattleItemUsed(
+  roomId: string | number,
+  params: { itemType: string; targetUserId?: string },
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.USE_ITEM,
+      {
+        roomId: String(roomId),
+        itemType: params.itemType,
+        targetUserId: params.targetUserId || undefined,
+      },
       (response?: { success?: boolean; message?: string }) => {
         resolve({
           success: Boolean(response?.success),

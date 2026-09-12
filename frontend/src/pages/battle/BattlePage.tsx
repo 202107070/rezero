@@ -1,4 +1,4 @@
-import { getCurrentUserName } from '../../services/authService';
+import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BattleChatPanel, { type ChatMessage } from '../../components/battle/BattleChatPanel';
@@ -30,6 +30,21 @@ import {
   saveRoomUsers,
   syncBattleDemoState,
 } from '../../services/battleSessionService';
+import {
+  isAlreadySubmittedError,
+  getMatchErrorMessage,
+  submitMatchAnswer,
+  submitMatchResult,
+  useMatchItem,
+} from '../../services/matchService';
+import {
+  emitBattleItemUsed,
+  getRoomSocket,
+  joinRoomSocket,
+  ROOM_SOCKET_EVENTS,
+  type BattleGameEndedPayload,
+  type BattleItemUsedPayload,
+} from '../../services/roomSocket';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
@@ -106,6 +121,8 @@ export default function BattlePage() {
   const roomId = params.get('roomId') || '';
   const roomMode = params.get('mode') || '1/1';
   const battleMeta = useMemo(() => getBattleSettings(), []);
+  const matchId = params.get('matchId') || String(battleMeta.matchId || '');
+  const isLiveMatch = Boolean(matchId);
   const gameMode = params.get('gameMode') || battleMeta.gameMode || 'item';
   const isItemMode = gameMode === 'item';
   const selectedItemKeys = useMemo(() => {
@@ -135,13 +152,16 @@ export default function BattlePage() {
   const [problems, setProblems] = useState<BattleProblem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
-  const totalBattleSeconds = useMemo(
-    () => getTotalBattleSeconds(battleDiff, Math.max(1, problems.length || parseInt(battleCount, 10) || 5)),
-    [battleDiff, problems.length, battleCount],
-  );
-  const [remaining, setRemaining] = useState(() =>
-    getTotalBattleSeconds(battleDiff, Math.max(1, parseInt(battleCount, 10) || 5)),
-  );
+  const totalBattleSeconds = useMemo(() => {
+    const fromMatch = Number(battleMeta.roundSeconds);
+    if (Number.isInteger(fromMatch) && fromMatch > 0) return fromMatch;
+    return getTotalBattleSeconds(battleDiff, Math.max(1, problems.length || parseInt(battleCount, 10) || 5));
+  }, [battleMeta.roundSeconds, battleDiff, problems.length, battleCount]);
+  const [remaining, setRemaining] = useState(() => {
+    const fromMatch = Number(battleMeta.roundSeconds);
+    if (Number.isInteger(fromMatch) && fromMatch > 0) return fromMatch;
+    return getTotalBattleSeconds(battleDiff, Math.max(1, parseInt(battleCount, 10) || 5));
+  });
   const [elapsedSec, setElapsedSec] = useState(0);
   const [showGameOver, setShowGameOver] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -199,6 +219,8 @@ export default function BattlePage() {
   const initialSessionSaveQueuedRef = useRef(false);
   const lastTimedPersistRemainingRef = useRef(-1);
   const itemInventoryInitialized = useRef(false);
+  const answerSubmittingRef = useRef(false);
+  const matchResultSubmittedRef = useRef(false);
 
   const currentProblem = useMemo(
     () => normalizeBattleProblem(problems[currentIndex] || ({} as BattleProblem)),
@@ -435,6 +457,7 @@ export default function BattlePage() {
       persistBattleSubmission({
         roomId,
         sessionId,
+        matchId,
         problems,
         answers: nextAnswers,
         langKey,
@@ -460,6 +483,7 @@ export default function BattlePage() {
     [
       roomId,
       sessionId,
+      matchId,
       problems,
       langKey,
       roomMode,
@@ -576,8 +600,18 @@ export default function BattlePage() {
       roundSeconds: totalBattleSeconds,
       roomRoster,
     });
+    if (isLiveMatch) {
+      setBattleBots(
+        roster.map((bot) => ({
+          ...bot,
+          solvedProblems: [],
+          solveScheduleByProblem: problems.map(() => Number.POSITIVE_INFINITY),
+        })),
+      );
+      return;
+    }
     setBattleBots(roster);
-  }, [problems.length, sessionId, roomMode, maxPlayersParam, langKey, totalBattleSeconds, roomRoster]);
+  }, [problems.length, sessionId, roomMode, maxPlayersParam, langKey, totalBattleSeconds, roomRoster, isLiveMatch]);
 
   useEffect(() => {
     if (!demoIsVersusMany && battleBots.length === 1) {
@@ -729,8 +763,29 @@ export default function BattlePage() {
     saveRoomUsers(snapshotRoomUsers);
     doPersistSubmission(answers, currentIndex);
 
+    if (isLiveMatch && !matchResultSubmittedRef.current) {
+      matchResultSubmittedRef.current = true;
+      const problemResultsList = finalizeProblemResults(problemResultsRef.current, totalProblems);
+      const totalSolveTime = Object.values(solveTimes).reduce((sum, value) => sum + (Number(value) || 0), 0);
+      void submitMatchResult(matchId, {
+        ingameScore,
+        codes: answers,
+        blankAnswers,
+        selectedOptions: selectedOptionByProblem,
+        solveTimes,
+        problemResults: problemResultsList,
+        localSolvedProblems,
+        totalSolveTime,
+        finishedAtElapsedSec: Math.max(0, finishedAtElapsedSec),
+      }).catch((error) => {
+        console.error('매치 결과 제출 실패:', error);
+      });
+    }
+
     const t = setTimeout(() => {
-      navigate(`${ROUTES.RESULT}?roomId=${roomId}`);
+      const resultParams = new URLSearchParams({ roomId });
+      if (matchId) resultParams.set('matchId', matchId);
+      navigate(`${ROUTES.RESULT}?${resultParams.toString()}`);
     }, 3000);
     return () => clearTimeout(t);
   }, [
@@ -746,7 +801,62 @@ export default function BattlePage() {
     doPersistSession,
     doPersistSubmission,
     navigate,
+    matchId,
+    isLiveMatch,
+    ingameScore,
+    blankAnswers,
+    selectedOptionByProblem,
+    solveTimes,
+    localSolvedProblems,
+    finishedAtElapsedSec,
   ]);
+
+  useEffect(() => {
+    if (!isLiveMatch || !roomId) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await joinRoomSocket(roomId);
+        if (cancelled) return;
+        const client = getRoomSocket();
+        client.off(ROOM_SOCKET_EVENTS.ITEM_USED);
+        client.off(ROOM_SOCKET_EVENTS.GAME_ENDED);
+        client.on(ROOM_SOCKET_EVENTS.ITEM_USED, (payload: BattleItemUsedPayload) => {
+          const myId = getCurrentUserId();
+          if (String(payload.fromUserId) === String(myId)) return;
+          if (payload.itemType === 'timeReduce' && String(payload.targetUserId || '') === String(myId)) {
+            setRemaining((prev) => Math.max(0, prev - 15));
+          }
+          const roster = Array.isArray(battleMeta.roomRoster)
+            ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
+            : [];
+          const targetName = roster.find((player) => String(player.userId) === String(payload.targetUserId || ''))?.name;
+          const targetBot = battleBots.find((bot) => bot.name === targetName);
+          if (targetBot && (payload.itemType === 'paint' || payload.itemType === 'lightning' || payload.itemType === 'scribble')) {
+            applyAttackPanelEffect(targetBot.id, payload.itemType);
+          }
+        });
+        client.on(ROOM_SOCKET_EVENTS.GAME_ENDED, (_payload: BattleGameEndedPayload) => {
+          setBattleFinished(true);
+          setShowGameOver(true);
+        });
+      } catch {
+        // REST 매치는 소켓 없이도 진행
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try {
+        const client = getRoomSocket();
+        client.off(ROOM_SOCKET_EVENTS.ITEM_USED);
+        client.off(ROOM_SOCKET_EVENTS.GAME_ENDED);
+      } catch {
+        // ignore
+      }
+    };
+  }, [isLiveMatch, roomId, battleBots, battleMeta.roomRoster]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -890,37 +1000,70 @@ export default function BattlePage() {
     });
   };
 
-  const submitCurrentProblem = () => {
-    if (demoSpectating || spectatorLocked || problemSolved) return;
-    if (!hasCurrentAnswerAttempted()) return;
+  const submitCurrentProblem = async () => {
+    if (demoSpectating || spectatorLocked || problemSolved) return false;
+    if (!hasCurrentAnswerAttempted()) return false;
+    if (answerSubmittingRef.current) return false;
+    answerSubmittingRef.current = true;
 
-    const isCorrect = isCurrentAnswerCorrect();
     const elapsed = (Date.now() - problemStartTime) / 1000;
     const battleElapsed = Math.max(0, totalBattleSeconds - remaining);
+    let isCorrect = false;
 
-    setProblemResults((prev) => ({ ...prev, [currentIndex]: isCorrect }));
+    try {
+      if (isLiveMatch) {
+        const answersForProblem = (blankAnswers[currentIndex] || []).map((value) => String(value ?? ''));
+        const result = await submitMatchAnswer(matchId, {
+          problemIndex: currentIndex,
+          answers: answersForProblem,
+          selectedOption: selectedOption === null ? undefined : selectedOption,
+        });
+        isCorrect = Boolean(result.isCorrect);
+        setIngameScore(Number(result.score) || 0);
+      } else {
+        isCorrect = isCurrentAnswerCorrect();
+        if (isCorrect) {
+          setIngameScore((prev) => prev + BATTLE_CORRECT_SCORE);
+        }
+      }
 
-    if (isCorrect) {
-      setIngameScore((prev) => prev + BATTLE_CORRECT_SCORE);
-      setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
-      setLocalSolvedProblems((prev) => {
-        const next = Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b);
-        markProblemSubmitted(sessionId, next);
-        return next;
-      });
-      setFinishedAtElapsedSec(battleElapsed);
+      setProblemResults((prev) => ({ ...prev, [currentIndex]: isCorrect }));
+
+      if (isCorrect) {
+        setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
+        setLocalSolvedProblems((prev) => {
+          const next = Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b);
+          markProblemSubmitted(sessionId, next);
+          return next;
+        });
+        setFinishedAtElapsedSec(battleElapsed);
+      }
+
+      setProblemSolved(true);
+      return true;
+    } catch (error) {
+      if (isAlreadySubmittedError(error)) {
+        setProblemSolved(true);
+        return true;
+      }
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: 'SYSTEM', text: getMatchErrorMessage(error), time: '' },
+      ]);
+      return false;
+    } finally {
+      answerSubmittingRef.current = false;
     }
-
-    setProblemSolved(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (demoSpectating || spectatorLocked || problemSolved) return;
     if (!hasCurrentAnswerAttempted()) {
       setShowAnswerRequiredModal(true);
       return;
     }
-    submitCurrentProblem();
+    const submitted = await submitCurrentProblem();
+    if (!submitted) return;
 
     if (currentIndex >= problems.length - 1) {
       lockAndSpectate();
@@ -953,12 +1096,25 @@ export default function BattlePage() {
     setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: idx }));
   };
 
-  const handleUseSelfItem = (type: keyof ItemInventory) => {
+  const handleUseSelfItem = async (type: keyof ItemInventory) => {
     if (demoSpectating || spectatorLocked) return;
     if (!isItemMode || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
     if (!canUseItem(currentCaps, type)) return;
     const correct = resolveProblemAnswersWithFallback(currentProblem, langKey);
+
+    if (isLiveMatch) {
+      try {
+        await useMatchItem(matchId, {
+          problemIndex: currentIndex,
+          itemKey: type,
+        });
+      } catch (error) {
+        setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text: getMatchErrorMessage(error), time: '' }]);
+        return;
+      }
+    }
+
     if (type === 'revealLength') {
       if (correct.length === 0) {
         setRevealHint('(정보 없음)');
@@ -1085,12 +1241,37 @@ export default function BattlePage() {
     itemTargetBotIdRef.current = null;
   };
 
-  const handleSelectItemType = (type: keyof ItemInventory) => {
+  const handleSelectItemType = async (type: keyof ItemInventory) => {
     if (!canUseAttackItems || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
     if (!ATTACK_ITEM_KEYS.includes(type) && !canUseItem(currentCaps, type)) return;
     const botId = itemTargetBotIdRef.current || expandedOpponentId;
     if (!botId) return;
+
+    const targetBot = battleBots.find((bot) => bot.id === botId);
+    const roster = Array.isArray(battleMeta.roomRoster)
+      ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
+      : [];
+    const targetUserId = String(
+      roster.find((player) => player.name === targetBot?.name)?.userId || '',
+    );
+
+    if (isLiveMatch) {
+      try {
+        await useMatchItem(matchId, {
+          problemIndex: currentIndex,
+          itemKey: type,
+          targetUserId: targetUserId || undefined,
+        });
+        await emitBattleItemUsed(roomId, {
+          itemType: type,
+          targetUserId: targetUserId || undefined,
+        });
+      } catch (error) {
+        setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text: getMatchErrorMessage(error), time: '' }]);
+        return;
+      }
+    }
 
     itemTargetBotIdRef.current = botId;
     setExpandedOpponentId(botId);

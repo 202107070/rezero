@@ -39,9 +39,11 @@ import {
   startRoom as startRoomApi,
   takePendingJoinPassword,
 } from '../../services/roomService';
+import { getMatchErrorMessage, parseRoomTimeToSeconds, startMatch } from '../../services/matchService';
 import {
   clearRoomSession,
   prepareBattleStart,
+  applyMatchStart,
 } from '../../services/battlePrepService';
 import {
   disconnectRoomSocket,
@@ -428,23 +430,35 @@ export default function RoomPage() {
     try {
       const roomRoster = players.filter((player): player is RoomPlayer => player !== null);
       const localBotStart = hasLocalBots(players);
+      let matchId = '';
 
-      // 로컬 봇은 Redis 참가자가 아니므로 START API를 건너뛰고 배틀로 진입
       if (!localBotStart) {
         await startRoomApi(numericRoomId);
+        const match = await startMatch({
+          roomId: numericRoomId,
+          roundSeconds: parseRoomTimeToSeconds(settings.time),
+        });
+        matchId = match.matchId;
+        applyMatchStart({
+          match,
+          settingsDiff: settings.diff,
+          myLanguage,
+          selectedItems: isItemMode ? Array.from(selectedItems) : [],
+          roomRoster,
+        });
+      } else {
+        prepareBattleStart({
+          roomId,
+          settingsDiff: settings.diff,
+          settingsCount: settings.count,
+          settingsMaxPlayers: settings.maxPlayers,
+          myLanguage,
+          roomMode,
+          gameMode,
+          selectedItems: isItemMode ? Array.from(selectedItems) : [],
+          roomRoster,
+        });
       }
-
-      prepareBattleStart({
-        roomId,
-        settingsDiff: settings.diff,
-        settingsCount: settings.count,
-        settingsMaxPlayers: settings.maxPlayers,
-        myLanguage,
-        roomMode,
-        gameMode,
-        selectedItems: isItemMode ? Array.from(selectedItems) : [],
-        roomRoster,
-      });
 
       const battleParams = new URLSearchParams({
         fresh: '1',
@@ -455,10 +469,11 @@ export default function RoomPage() {
         maxPlayers: String(settings.maxPlayers || parsedMaxPlayers),
         gameMode,
       });
+      if (matchId) battleParams.set('matchId', matchId);
 
       navigate(`${ROUTES.BATTLE}?${battleParams.toString()}`);
     } catch (error) {
-      showStartAlert(getRoomErrorMessage(error));
+      showStartAlert(getMatchErrorMessage(error) || getRoomErrorMessage(error));
     } finally {
       setRoomBusy(false);
     }

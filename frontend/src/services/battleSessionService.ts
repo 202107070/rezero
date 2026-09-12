@@ -161,6 +161,7 @@ export function restoreBattleSession(params: {
 export function persistBattleSubmission(params: {
   roomId: string;
   sessionId: string;
+  matchId?: string;
   problems: BattleProblem[];
   answers: string[];
   langKey: string;
@@ -186,6 +187,7 @@ export function persistBattleSubmission(params: {
   setBattleSubmission({
     historyId: `${params.roomId || 'solo'}::${Date.now()}`,
     roomId: params.roomId,
+    matchId: params.matchId || '',
     problems: params.problems,
     answers: params.answers,
     lang: params.langKey,

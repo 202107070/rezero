@@ -8,6 +8,7 @@ import { getLangKey } from '../utils/battle/codeUtils';
 import { problemSupportsLang } from '../utils/problemTypeUtils';
 import { normalizeBattleProblem } from '../utils/battle/problemResultUtils';
 import { normalizeProblemVisual } from '../utils/problemVisualUtils';
+import type { MatchStartResponse } from './matchService';
 import { clearKickedCount } from './roomStore';
 import { clearBattleSessionForLeave, setBattleProblems, setBattleSettings } from './sessionStore';
 
@@ -37,6 +38,57 @@ function mapProblem(p: ProblemRecord) {
     explanation: p.explanation,
     visual: normalizeProblemVisual(p.visual ?? null),
   });
+}
+
+export function applyMatchStart(params: {
+  match: MatchStartResponse;
+  settingsDiff: string;
+  myLanguage: string;
+  selectedItems?: ItemKey[];
+  roomRoster?: RoomPlayer[];
+}): void {
+  const selectedProblems = params.match.problems.map((problem) =>
+    mapProblem({
+      id: String(problem.id || ''),
+      type: String(problem.type || 'fill_blank'),
+      difficulty: String(problem.difficulty || ''),
+      title: String(problem.title || ''),
+      question: String(problem.question || ''),
+      answer: problem.answer || {},
+      options: problem.options ?? null,
+      correctIndex: problem.correctIndex ?? null,
+      explanation: String(problem.explanation || ''),
+      visual: problem.visual ?? null,
+    }),
+  );
+
+  const sessionKey = params.match.roomId ? `battle-${params.match.roomId}` : 'battle-solo';
+
+  try {
+    clearBattleSessionForLeave(sessionKey);
+    setBattleProblems(selectedProblems);
+    setBattleSettings({
+      matchId: params.match.matchId,
+      roomId: String(params.match.roomId),
+      lang: params.myLanguage,
+      diff: params.settingsDiff,
+      count: String(selectedProblems.length || params.match.problemCount),
+      maxPlayers: String(params.match.maxPlayers),
+      roomMode: params.match.roomMode,
+      gameMode: params.match.gameMode || 'item',
+      roundSeconds: params.match.roundSeconds,
+      selectedItems: params.selectedItems || [],
+      roomRoster: (params.roomRoster || []).map((player) => ({
+        id: player.id,
+        name: player.name,
+        character: player.character,
+        isHost: player.isHost,
+        userId: player.userId,
+      })),
+    });
+  } catch (e) {
+    console.error('매치 시작 상태 저장 실패:', e);
+  }
 }
 
 export function prepareBattleStart(params: {

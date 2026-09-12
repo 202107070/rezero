@@ -18,13 +18,15 @@ import { checkNewTitles, type TitleDef } from '../../constants/titleTypes';
 import { ROUTES } from '../../constants/routes';
 import { ENABLE_RESULT_BOT_DEPARTURE, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
 import { useAuthUser } from '../../contexts/AuthContext';
-import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot } from '../../services/battleSessionService';
+import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot, saveFinalRankingSnapshot } from '../../services/battleSessionService';
 import {
   getBattleDemoState,
+  getBattleSettings,
   getBattleSubmission,
   getRoomUsers,
   updateRoomUsers,
 } from '../../services/sessionStore';
+import { fetchMatchRanking, isMatchResultNotReady } from '../../services/matchService';
 import { addGold, getGold, saveTitles, setNewTitleIds, getTitles } from '../../services/userService';
 import {
   addFriend,
@@ -43,6 +45,7 @@ import {
 import type { DemoBot } from '../../utils/battle/demoBots';
 import { normalizeCodeHistoryEntry, persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtils';
 import type { BattleProblem } from '../../types/battle';
+import type { FinalRankingSnapshot } from '../../utils/battle/rankUtils';
 import { getLangKey } from '../../utils/battle/codeUtils';
 import { buildResultPlayers, type ResultPlayer } from '../../utils/resultUtils';
 import { formatCorrectAnswer, getResultPlayerAnswer } from '../../utils/resultAnswerUtils';
@@ -110,12 +113,13 @@ export default function ResultPage() {
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('roomId') || '';
   const sessionId = getSessionId(roomId);
+  const matchId = searchParams.get('matchId') || String(getBattleSettings().matchId || '');
 
   const submission = useMemo((): BattleSubmission => getBattleSubmission<BattleSubmission>(), []);
 
   const demoState = useMemo((): DemoState | null => getBattleDemoState<DemoState>(sessionId), [sessionId]);
 
-  const rankingSnapshot = useMemo(() => readFinalRankingSnapshot(sessionId), [sessionId]);
+  const [rankingSnapshot, setRankingSnapshot] = useState(() => readFinalRankingSnapshot(sessionId));
 
   const roomUsers = useMemo(() => getRoomUsers(), []);
 
@@ -203,6 +207,55 @@ export default function ResultPage() {
   const botAcceptTimerRef = useRef<(() => void) | null>(null);
 
   const reviewSelectMode = reviewPhase === 'selecting';
+
+  useEffect(() => {
+    if (!matchId) return;
+    let cancelled = false;
+
+    let timer = 0;
+    const loadRanking = async () => {
+      try {
+        const ranking = await fetchMatchRanking(matchId);
+        if (cancelled || !Array.isArray(ranking.players)) return;
+        const snapshot: FinalRankingSnapshot = {
+          sessionId,
+          roomId: roomId || String(ranking.matchId || ''),
+          finalizedAt: ranking.finalizedAt || new Date().toISOString(),
+          elapsedSec: Number(ranking.elapsedSec) || 0,
+          roundSeconds: Number(ranking.roundSeconds) || 0,
+          totalProblems: Number(ranking.totalProblems) || 0,
+          players: ranking.players.map((player) => ({
+            id: String(player.id),
+            name: player.name,
+            avatar: player.avatar || '',
+            ingameScore: Number(player.ingameScore) || 0,
+            ratingScore: Number(player.ratingScore) || 1000,
+            totalSolveTime: Number(player.totalSolveTime) || 0,
+            completionTime: Number(player.completionTime) || 0,
+            solvedProblems: Array.isArray(player.solvedProblems) ? player.solvedProblems : [],
+            problemResults: Array.isArray(player.problemResults) ? player.problemResults : [],
+            rank: Number(player.rank) || 0,
+          })),
+        };
+        setRankingSnapshot(snapshot);
+        saveFinalRankingSnapshot(snapshot);
+        if (timer) window.clearInterval(timer);
+      } catch (error) {
+        if (!isMatchResultNotReady(error)) {
+          console.error('랭킹 조회 실패:', error);
+        }
+      }
+    };
+
+    void loadRanking();
+    timer = window.setInterval(() => {
+      void loadRanking();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [matchId, sessionId, roomId]);
 
   const mySubmissionCodes = Array.isArray(submission.codes)
     ? submission.codes
