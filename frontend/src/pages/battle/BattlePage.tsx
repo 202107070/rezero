@@ -18,7 +18,7 @@ type ItemKey,
 } from '../../constants/itemTypes';
 import { BATTLE_CORRECT_SCORE } from '../../constants/battleConstants';
 import { ROUTES } from '../../constants/routes';
-import { getBattleProblems, getBattleSettings } from '../../services/sessionStore';
+import { getBattleProblems, getBattleSettings, setBattleSettings } from '../../services/sessionStore';
 import {
   clearBattleAndLeave,
   getSessionId,
@@ -33,6 +33,7 @@ import {
 import {
   isAlreadySubmittedError,
   getMatchErrorMessage,
+  fetchActiveMatch,
   submitMatchAnswer,
   submitMatchResult,
   useMatchItem,
@@ -41,9 +42,14 @@ import {
   emitBattleItemUsed,
   getRoomSocket,
   joinRoomSocket,
+  sendRoomMessage,
+  disconnectRoomSocket,
   ROOM_SOCKET_EVENTS,
   type BattleGameEndedPayload,
   type BattleItemUsedPayload,
+  type ChatMessagePayload,
+  type GameStateUpdatePayload,
+  type UserReconnectedPayload,
 } from '../../services/roomSocket';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
@@ -777,9 +783,23 @@ export default function BattlePage() {
         localSolvedProblems,
         totalSolveTime,
         finishedAtElapsedSec: Math.max(0, finishedAtElapsedSec),
-      }).catch((error) => {
-        console.error('매치 결과 제출 실패:', error);
-      });
+      })
+        .then((result) => {
+          setBattleSettings({
+            ...getBattleSettings(),
+            matchSubmitResult: {
+              resultReady: result.resultReady,
+              earnedGold: result.earnedGold,
+              ratingDelta: result.ratingDelta,
+              newTitleIds: result.newTitleIds,
+              waitingForUserIds: result.waitingForUserIds,
+            },
+          });
+        })
+        .catch((error) => {
+          console.error('매치 결과 제출 실패:', error);
+          matchResultSubmittedRef.current = false;
+        });
     }
 
     const t = setTimeout(() => {
@@ -822,6 +842,10 @@ export default function BattlePage() {
         const client = getRoomSocket();
         client.off(ROOM_SOCKET_EVENTS.ITEM_USED);
         client.off(ROOM_SOCKET_EVENTS.GAME_ENDED);
+        client.off(ROOM_SOCKET_EVENTS.GAME_STATE_UPDATE);
+        client.off(ROOM_SOCKET_EVENTS.USER_RECONNECTED);
+        client.off(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE);
+
         client.on(ROOM_SOCKET_EVENTS.ITEM_USED, (payload: BattleItemUsedPayload) => {
           const myId = getCurrentUserId();
           if (String(payload.fromUserId) === String(myId)) return;
@@ -837,9 +861,58 @@ export default function BattlePage() {
             applyAttackPanelEffect(targetBot.id, payload.itemType);
           }
         });
-        client.on(ROOM_SOCKET_EVENTS.GAME_ENDED, (_payload: BattleGameEndedPayload) => {
+
+        client.on(ROOM_SOCKET_EVENTS.GAME_ENDED, (payload: BattleGameEndedPayload) => {
+          if (payload.matchId) {
+            setBattleSettings({
+              ...getBattleSettings(),
+              matchSubmitResult: {
+                ...(getBattleSettings().matchSubmitResult as object),
+                resultReady: true,
+                rewards: payload.rewards,
+              },
+            });
+          }
           setBattleFinished(true);
           setShowGameOver(true);
+        });
+
+        client.on(ROOM_SOCKET_EVENTS.GAME_STATE_UPDATE, (payload: GameStateUpdatePayload) => {
+          if (!Array.isArray(payload.scores) || payload.scores.length === 0) return;
+          const summary = payload.scores
+            .map((item) => `${item.userId}:${item.score}`)
+            .join(', ');
+          setChatMessages((prev) => [
+            ...prev,
+            { sender: 'SYSTEM', text: `점수 갱신 ${summary}`, time: '' },
+          ]);
+        });
+
+        client.on(ROOM_SOCKET_EVENTS.USER_RECONNECTED, (payload: UserReconnectedPayload) => {
+          if (!payload.matchId) return;
+          void fetchActiveMatch(roomId)
+            .then((match) => {
+              if (cancelled) return;
+              setBattleSettings({
+                ...getBattleSettings(),
+                matchId: match.matchId,
+                roundSeconds: match.roundSeconds,
+              });
+              setChatMessages((prev) => [
+                ...prev,
+                { sender: 'SYSTEM', text: '재접속 정보를 복구했습니다.', time: '' },
+              ]);
+            })
+            .catch(() => undefined);
+        });
+
+        client.on(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
+          const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
+          const text = String(payload.message || '');
+          if (!text) return;
+          const now = new Date();
+          const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          setChatMessages((prev) => [...prev, { sender: name, text, time: timeStr }]);
         });
       } catch {
         // REST 매치는 소켓 없이도 진행
@@ -852,6 +925,9 @@ export default function BattlePage() {
         const client = getRoomSocket();
         client.off(ROOM_SOCKET_EVENTS.ITEM_USED);
         client.off(ROOM_SOCKET_EVENTS.GAME_ENDED);
+        client.off(ROOM_SOCKET_EVENTS.GAME_STATE_UPDATE);
+        client.off(ROOM_SOCKET_EVENTS.USER_RECONNECTED);
+        client.off(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE);
       } catch {
         // ignore
       }
@@ -1309,15 +1385,29 @@ export default function BattlePage() {
   };
 
   const handleSendChat = () => {
-    if (!demoSpectating || !chatMsg.trim()) return;
+    if (!chatMsg.trim()) return;
+    const text = chatMsg.trim();
+    setChatMsg('');
+    if (isLiveMatch && roomId) {
+      void sendRoomMessage(roomId, text).then((result) => {
+        if (!result.success) {
+          setChatMessages((prev) => [
+            ...prev,
+            { sender: 'SYSTEM', text: result.message || '메시지 전송 실패', time: '' },
+          ]);
+        }
+      });
+      return;
+    }
+    if (!demoSpectating) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setChatMessages((prev) => [...prev, { sender: getCurrentUserName(), text: chatMsg, time: timeStr }]);
-    setChatMsg('');
+    setChatMessages((prev) => [...prev, { sender: getCurrentUserName(), text, time: timeStr }]);
   };
 
   const leaveBattle = () => {
     clearBattleAndLeave(sessionId, roomId);
+    disconnectRoomSocket(true);
     navigate(ROUTES.LOBBY);
   };
 

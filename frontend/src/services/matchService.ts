@@ -88,6 +88,10 @@ export function parseRoomTimeToSeconds(time: string): number | undefined {
   return value * 60;
 }
 
+export async function fetchActiveMatch(roomId: number | string): Promise<MatchStartResponse> {
+  return apiRequest<MatchStartResponse>(`/matches/active/${encodeURIComponent(String(roomId))}`);
+}
+
 export async function startMatch(params: {
   roomId: number;
   roundSeconds?: number;

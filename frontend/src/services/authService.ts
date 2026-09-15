@@ -1,4 +1,4 @@
-import { ApiError, apiRequest, setAccessToken } from './apiClient';
+import { ApiError, apiRequest, getAccessToken, setAccessToken } from './apiClient';
 import { applyUserProfile, clearUserSession, type UserProfilePayload } from './userService';
 
 export interface AuthUser {
@@ -20,10 +20,31 @@ interface AuthResponse {
 
 let currentUser: AuthUser | null = null;
 
+/** 앱 부트 시 세션 스토리지 토큰으로 /users/me 복구 */
+export async function restoreSession(): Promise<AuthUser | null> {
+  const token = getAccessToken();
+  if (!token) {
+    currentUser = null;
+    clearUserSession();
+    return null;
+  }
+
+  try {
+    const me = await fetchMeProfile();
+    applyUserProfile(me);
+    currentUser = toAuthUser(me);
+    return currentUser;
+  } catch {
+    currentUser = null;
+    setAccessToken(null);
+    clearUserSession();
+    return null;
+  }
+}
+
+/** @deprecated 동기 초기화는 비움. AuthProvider는 restoreSession 사용 */
 export function initAuth(): AuthUser | null {
   currentUser = null;
-  setAccessToken(null);
-  clearUserSession();
   return null;
 }
 

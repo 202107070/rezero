@@ -1,12 +1,15 @@
 export const SOCKET_EVENTS = {
   JOIN_ROOM: "join_room",
   USER_JOINED: "user_joined",
+  USER_LEFT: "user_left",
   SEND_MESSAGE: "send_message",
   RECEIVE_MESSAGE: "receive_message",
   CHAT_ERROR: "chat_error",
   TOGGLE_READY: "toggle_ready",
   READY_CHANGED: "ready_changed",
   REQUEST_GAME_START: "request_game_start",
+  GAME_START_NOTICE: "game_start_notice",
+  GAME_STARTED: "game_started",
 
   SUBMIT_CODE: "submit_code",
   USE_ITEM: "use_item",

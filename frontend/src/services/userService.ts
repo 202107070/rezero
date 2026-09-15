@@ -85,6 +85,30 @@ export function getRatingScore(): number {
   return ratingScore;
 }
 
+export function setRatingScore(value: number): void {
+  ratingScore = Math.max(0, Number(value) || 0);
+}
+
+export function applyMatchRewards(params: {
+  earnedGold?: number;
+  ratingDelta?: number;
+  newTitleIds?: string[];
+}): void {
+  if (typeof params.earnedGold === 'number') {
+    addGold(params.earnedGold);
+  }
+  if (typeof params.ratingDelta === 'number') {
+    ratingScore = Math.max(0, ratingScore + params.ratingDelta);
+  }
+  if (Array.isArray(params.newTitleIds) && params.newTitleIds.length > 0) {
+    const prev = getTitles();
+    const owned = new Set(prev.owned);
+    params.newTitleIds.forEach((id) => owned.add(id));
+    saveTitles({ ...prev, owned: [...owned] });
+    setNewTitleIds(params.newTitleIds);
+  }
+}
+
 export function getNewTitleIds(): string[] {
   return [...newTitleIds];
 }

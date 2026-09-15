@@ -39,7 +39,7 @@ import {
   startRoom as startRoomApi,
   takePendingJoinPassword,
 } from '../../services/roomService';
-import { getMatchErrorMessage, parseRoomTimeToSeconds, startMatch } from '../../services/matchService';
+import { getMatchErrorMessage, parseRoomTimeToSeconds, startMatch, type MatchStartResponse } from '../../services/matchService';
 import {
   clearRoomSession,
   prepareBattleStart,
@@ -50,7 +50,11 @@ import {
   joinRoomSocket,
   ROOM_SOCKET_EVENTS,
   toggleReadySocket,
+  sendRoomMessage,
   type RoomReadyStatePayload,
+  type ChatMessagePayload,
+  type GameStartedPayload,
+  type UserLeftPayload,
   getRoomSocket,
 } from '../../services/roomSocket';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
@@ -120,6 +124,15 @@ export default function RoomPage() {
 
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
   const botReadyTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const battleNavLockRef = useRef(false);
+  const playersRef = useRef(players);
+  const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
+  const myLanguageRef = useRef(myLanguage);
+  const selectedItemsRef = useRef(selectedItems);
+  const isItemModeRef = useRef(true);
+  playersRef.current = players;
+  myLanguageRef.current = myLanguage;
+  selectedItemsRef.current = selectedItems;
 
   useEffect(() => {
     const timers = botReadyTimersRef.current;
@@ -169,6 +182,13 @@ export default function RoomPage() {
   const gameMode = (roomDetail?.gameMode || fallbackGameMode) as GameMode;
   const isItemMode = gameMode === 'item';
   const roomQuery = searchParams.toString() || `id=${roomId}`;
+  settingsRef.current = {
+    diff: settings.diff,
+    count: settings.count,
+    maxPlayers: settings.maxPlayers,
+    time: settings.time,
+  };
+  isItemModeRef.current = isItemMode;
 
   const applyRoom = useCallback((room: Room) => {
     setRoomDetail(room);
@@ -233,9 +253,56 @@ export default function RoomPage() {
         if (!cancelled) {
           applyRoom(room);
           try {
-            await joinRoomSocket(numericRoomId);
+            const joinResult = await joinRoomSocket(numericRoomId);
+            if (joinResult.recentMessages?.length) {
+              setMessages((prev) => {
+                const seeded = joinResult.recentMessages!.map((item: ChatMessagePayload) => ({
+                  type: 'user' as const,
+                  name: item.sender?.displayName || item.sender?.username || 'UNKNOWN',
+                  text: String(item.message || ''),
+                }));
+                return prev.length <= 2 ? [...prev, ...seeded] : prev;
+              });
+            }
+
             const client = getRoomSocket();
-            client.off(ROOM_SOCKET_EVENTS.READY_CHANGED);
+            const clearRoomListeners = () => {
+              client.off(ROOM_SOCKET_EVENTS.READY_CHANGED);
+              client.off(ROOM_SOCKET_EVENTS.USER_JOINED);
+              client.off(ROOM_SOCKET_EVENTS.USER_LEFT);
+              client.off(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE);
+              client.off(ROOM_SOCKET_EVENTS.CHAT_ERROR);
+              client.off(ROOM_SOCKET_EVENTS.GAME_START_NOTICE);
+              client.off(ROOM_SOCKET_EVENTS.GAME_STARTED);
+            };
+            clearRoomListeners();
+
+            const enterBattleFromMatch = (matchLike: GameStartedPayload) => {
+              if (battleNavLockRef.current || cancelled) return;
+              if (!matchLike?.matchId || !Array.isArray(matchLike.problems)) return;
+              battleNavLockRef.current = true;
+              const match = matchLike as unknown as MatchStartResponse;
+              const roster = playersRef.current.filter((player): player is RoomPlayer => player !== null);
+              applyMatchStart({
+                match,
+                settingsDiff: settingsRef.current.diff,
+                myLanguage: myLanguageRef.current,
+                selectedItems: isItemModeRef.current ? Array.from(selectedItemsRef.current) : [],
+                roomRoster: roster,
+              });
+              const battleParams = new URLSearchParams({
+                fresh: '1',
+                roomId: String(match.roomId || roomId),
+                lang: myLanguageRef.current || 'java',
+                mode: String(match.roomMode || roomMode),
+                count: String(match.problemCount || settingsRef.current.count || '5'),
+                maxPlayers: String(match.maxPlayers || settingsRef.current.maxPlayers || parsedMaxPlayers),
+                gameMode: String(match.gameMode || gameMode),
+                matchId: match.matchId,
+              });
+              navigate(`${ROUTES.BATTLE}?${battleParams.toString()}`);
+            };
+
             client.on(ROOM_SOCKET_EVENTS.READY_CHANGED, (payload: RoomReadyStatePayload) => {
               const states = payload.roomReadyStates || [
                 { userId: String(payload.userId), isReady: Boolean(payload.isReady) },
@@ -253,10 +320,63 @@ export default function RoomPage() {
                   };
                 }),
               );
-              const myId = getCurrentUserId();
-              if (readyMap.has(String(myId))) {
-                setIsReady(readyMap.get(String(myId)) === true);
+              const myReadyId = getCurrentUserId();
+              if (readyMap.has(String(myReadyId))) {
+                setIsReady(readyMap.get(String(myReadyId)) === true);
               }
+            });
+
+            client.on(ROOM_SOCKET_EVENTS.USER_JOINED, (payload?: { user?: { displayName?: string; username?: string } }) => {
+              const name = payload?.user?.displayName || payload?.user?.username;
+              if (name) {
+                setMessages((prev) => [...prev, { type: 'sys', text: `>> [${name}] 님이 입장하셨습니다.` }]);
+              }
+              void fetchRoom(numericRoomId)
+                .then((nextRoom) => {
+                  if (!cancelled) applyRoom(nextRoom);
+                })
+                .catch(() => undefined);
+            });
+
+            client.on(ROOM_SOCKET_EVENTS.USER_LEFT, (payload: UserLeftPayload) => {
+              if (payload.roomClosed) {
+                setAlertMessage('방이 종료되었습니다.');
+                setShowAlertModal(true);
+                navigate(ROUTES.LOBBY);
+                return;
+              }
+              setMessages((prev) => [
+                ...prev,
+                { type: 'sys', text: `>> 유저(${payload.userId}) 님이 퇴장했습니다.` },
+              ]);
+              void fetchRoom(numericRoomId)
+                .then((nextRoom) => {
+                  if (!cancelled) applyRoom(nextRoom);
+                })
+                .catch(() => undefined);
+            });
+
+            client.on(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
+              const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
+              const text = String(payload.message || '');
+              if (!text) return;
+              setMessages((prev) => [...prev, { type: 'user', name, text, mode: '[전체]' }]);
+            });
+
+            client.on(ROOM_SOCKET_EVENTS.CHAT_ERROR, (payload?: { message?: string }) => {
+              if (payload?.message) {
+                setMessages((prev) => [...prev, { type: 'sys', text: `>> ${payload.message}` }]);
+              }
+            });
+
+            client.on(ROOM_SOCKET_EVENTS.GAME_START_NOTICE, (payload?: { message?: string }) => {
+              if (payload?.message) {
+                setMessages((prev) => [...prev, { type: 'sys', text: `>> ${payload.message}` }]);
+              }
+            });
+
+            client.on(ROOM_SOCKET_EVENTS.GAME_STARTED, (payload: GameStartedPayload) => {
+              enterBattleFromMatch(payload);
             });
           } catch {
             // 소켓 연결 실패 시에도 REST 입장 상태는 유지
@@ -276,12 +396,18 @@ export default function RoomPage() {
       try {
         const client = getRoomSocket();
         client.off(ROOM_SOCKET_EVENTS.READY_CHANGED);
+        client.off(ROOM_SOCKET_EVENTS.USER_JOINED);
+        client.off(ROOM_SOCKET_EVENTS.USER_LEFT);
+        client.off(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE);
+        client.off(ROOM_SOCKET_EVENTS.CHAT_ERROR);
+        client.off(ROOM_SOCKET_EVENTS.GAME_START_NOTICE);
+        client.off(ROOM_SOCKET_EVENTS.GAME_STARTED);
       } catch {
         // ignore
       }
-      disconnectRoomSocket();
+      // Room→Battle 이동 시 소켓 유지 (로비 퇴장 시에만 force disconnect)
     };
-  }, [applyRoom, navigate, numericRoomId]);
+  }, [applyRoom, navigate, numericRoomId, roomId, roomMode, gameMode, parsedMaxPlayers]);
 
   const appendSystemMessage = (text: string) => {
     setMessages((prev) => [...prev, { type: 'sys', text: `>> ${text}` }]);
@@ -366,16 +492,21 @@ export default function RoomPage() {
   const maxOccupancy = displayMaxPlayers;
   const canInviteMore = isMeHost && occupiedCount < maxOccupancy && DEMO_BOT_POOL.length > 0;
 
-  const handleSendChat = () => {
+  const handleSendChat = async () => {
     if (!chatMsg.trim()) return;
-    const modeLabel =
-      chatMode === 'WHISPER' && whisperTarget
-        ? `[귓속말:${whisperTarget}]`
-        : chatMode === 'ALL'
-          ? '[전체]'
-          : '[친구]';
-    setMessages((prev) => [...prev, { type: 'user', name: getCurrentUserName(), text: chatMsg, mode: modeLabel }]);
+    const text = chatMsg.trim();
     setChatMsg('');
+    try {
+      const result = await sendRoomMessage(numericRoomId, text);
+      if (!result.success) {
+        setMessages((prev) => [
+          ...prev,
+          { type: 'sys', text: `>> ${result.message || '메시지 전송 실패'}` },
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [...prev, { type: 'sys', text: '>> 채팅 서버에 연결할 수 없습니다.' }]);
+    }
   };
 
   const handleMyReadyToggle = async () => {
@@ -471,8 +602,10 @@ export default function RoomPage() {
       });
       if (matchId) battleParams.set('matchId', matchId);
 
+      battleNavLockRef.current = true;
       navigate(`${ROUTES.BATTLE}?${battleParams.toString()}`);
     } catch (error) {
+      battleNavLockRef.current = false;
       showStartAlert(getMatchErrorMessage(error) || getRoomErrorMessage(error));
     } finally {
       setRoomBusy(false);
@@ -490,6 +623,7 @@ export default function RoomPage() {
       showStartAlert(getRoomErrorMessage(error));
     } finally {
       clearRoomSession(roomId);
+      disconnectRoomSocket(true);
       setRoomBusy(false);
       navigate(ROUTES.LOBBY);
     }

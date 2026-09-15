@@ -6,8 +6,6 @@ function toPublicProblem(problem) {
     title: problem.title,
     question: problem.question,
     options: problem.options,
-    correctIndex: problem.correctIndex,
-    explanation: problem.explanation,
     description: problem.description,
     input: problem.input,
     output: problem.output,

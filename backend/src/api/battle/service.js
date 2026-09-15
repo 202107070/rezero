@@ -5,6 +5,10 @@ import * as roomModel from "../room/model.js";
 import { judgeProblemAnswer, selectProblems } from "../problem/service.js";
 import { AppError } from "#utils/appError.js";
 import { redisClient } from "#config/redisConfig.js";
+import { getSocket } from "#config/socketConfig.js";
+import { SOCKET_EVENTS } from "#constants/socketEvents.js";
+import { toMatchStartResponse } from "./dto/matchStartResponseDto.js";
+import { socketGameService } from "#service/socketService.js";
 
 const DEFAULT_ROUND_SECONDS = 2700;
 const CORRECT_ANSWER_SCORE = 100;
@@ -79,7 +83,72 @@ export async function createBattle(roomId, userId, options = {}) {
   });
 
   const match = await battleModel.findMatchById(matchId);
+  const matchPayload = {
+    ...match,
+    problems,
+  };
 
+  await redisClient.hSet(`room:${room.id}:state`, {
+    status: "STARTED",
+    matchId,
+    currentProblemIndex: "0",
+    timeLimit: String(roundSeconds),
+    language: room.language,
+    difficulty: room.difficulty,
+    updatedAt: new Date().toISOString(),
+  });
+
+  const io = getSocket();
+  if (io) {
+    const publicMatch = toMatchStartResponse(matchPayload);
+    const roomIdStr = String(room.id);
+    io.to(roomIdStr).emit(SOCKET_EVENTS.GAME_START_NOTICE, {
+      message: "배틀이 곧 시작됩니다! 준비하세요.",
+      roomId: roomIdStr,
+      matchId,
+    });
+    io.to(roomIdStr).emit(SOCKET_EVENTS.GAME_STARTED, {
+      ...publicMatch,
+      message: "배틀이 곧 시작됩니다! 준비하세요.",
+      participants: await redisClient.sMembers(`room:${room.id}:participants`),
+    });
+  }
+
+  return matchPayload;
+}
+
+export async function getActiveMatchForRoom(roomId, userId) {
+  const room = await roomModel.findRoomById(roomId);
+  if (!room) {
+    throw new AppError(404, "ROOM_NOT_FOUND", "방을 찾을 수 없습니다.");
+  }
+
+  const participants = await roomModel.findRoomParticipants(roomId);
+  const isMember = participants.some(
+    (participant) => String(participant.userId) === String(userId),
+  );
+  if (!isMember) {
+    throw new AppError(
+      403,
+      "MATCH_PARTICIPANT_REQUIRED",
+      "해당 방의 참가자만 경기 정보를 조회할 수 있습니다.",
+    );
+  }
+
+  const state = await redisClient.hGetAll(`room:${roomId}:state`);
+  let matchId = state?.matchId || null;
+  let match = matchId ? await battleModel.findMatchById(matchId) : null;
+
+  if (!match || match.status !== "IN_PROGRESS") {
+    match = await battleModel.findActiveMatchByRoomId(roomId);
+    matchId = match?.id || null;
+  }
+
+  if (!match) {
+    throw new AppError(404, "MATCH_NOT_FOUND", "진행 중인 경기가 없습니다.");
+  }
+
+  const problems = await battleModel.findMatchProblems(match.id);
   return {
     ...match,
     problems,
@@ -407,6 +476,29 @@ export async function submitBattleAnswer(input) {
     .hSet(scoreKey(input.matchId), String(input.userId), String(score))
     .expire(scoreKey(input.matchId), 60 * 60)
     .exec();
+
+  const io = getSocket();
+  if (io && matchProblem.roomId) {
+    const scoreMap = await redisClient.hGetAll(scoreKey(input.matchId));
+    const scores = Object.entries(scoreMap || {}).map(([userId, value]) => ({
+      userId,
+      score: Number(value) || 0,
+    }));
+    socketGameService.broadcastGameState(io, String(matchProblem.roomId), {
+      roomId: String(matchProblem.roomId),
+      question: { index: input.problemIndex },
+      remainingTime: null,
+      scores,
+      submitStatuses: [
+        {
+          userId: String(input.userId),
+          problemIndex: input.problemIndex,
+          isSubmitted: true,
+          isCorrect,
+        },
+      ],
+    });
+  }
 
   return {
     matchId: input.matchId,

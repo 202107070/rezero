@@ -3,6 +3,8 @@ import { toRoomResponse } from "./dto/roomResponseDto.js";
 import { redisClient } from "#config/redisConfig.js";
 import { AppError } from "#utils/appError.js";
 import { comparePassword, hashPassword } from "#utils/cryptoUtils.js";
+import { getSocket } from "#config/socketConfig.js";
+import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 
 function roomStateKey(roomId) {
   return `room:${roomId}:state`;
@@ -216,6 +218,16 @@ export async function leaveRoom(roomId, userId) {
   }
 
   await saveLeftRoomState(roomId, userId, result);
+
+  const io = getSocket();
+  if (io) {
+    io.to(String(roomId)).emit(SOCKET_EVENTS.USER_LEFT, {
+      roomId: String(roomId),
+      userId: String(userId),
+      roomClosed: Boolean(result.roomClosed),
+      newHostUserId: result.newHostUserId ? String(result.newHostUserId) : null,
+    });
+  }
 
   if (result.roomClosed) {
     return {

@@ -6,7 +6,8 @@ import { ROOM_STATUS } from "#config/manageRoomConfig.js";
 import { lockService } from "#infra/redis/lockService.js";
 
 class GameStartService {
-  async checkCanStart(roomId, io) {
+  async checkCanStart(roomId, io, options = {}) {
+    const dryRun = options.dryRun === true;
     const roomQuery =
       "SELECT id, status, mode, host_user_id FROM rooms WHERE id = ?";
     const roomRows = await pool.query(roomQuery, [roomId]);
@@ -97,6 +98,17 @@ class GameStartService {
         roomId: roomId,
         canStart: false,
         reason: "방장을 제외한 모든 참가자가 Ready 상태여야 합니다.",
+        totalPlayers: totalPlayers,
+        nonHostPlayers: nonHostPlayersCount,
+        readyNonHostPlayers: readyNonHostPlayersCount,
+      }).toJSON();
+    }
+
+    if (dryRun) {
+      return new GameStartDto({
+        roomId: roomId,
+        canStart: true,
+        reason: "시작 조건을 충족했습니다.",
         totalPlayers: totalPlayers,
         nonHostPlayers: nonHostPlayersCount,
         readyNonHostPlayers: readyNonHostPlayersCount,

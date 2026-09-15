@@ -27,7 +27,14 @@ import {
   updateRoomUsers,
 } from '../../services/sessionStore';
 import { fetchMatchRanking, isMatchResultNotReady } from '../../services/matchService';
-import { addGold, getGold, saveTitles, setNewTitleIds, getTitles } from '../../services/userService';
+import {
+  addGold,
+  applyMatchRewards,
+  getGold,
+  saveTitles,
+  setNewTitleIds,
+  getTitles,
+} from '../../services/userService';
 import {
   addFriend,
   getFollowRoomPath,
@@ -139,7 +146,16 @@ export default function ResultPage() {
   );
 
   const myScore = allPlayers.find((p) => p.id === myUserId)?.ingameScore || 0;
-  const earnedGold = myScore;
+  const isLiveMatch = Boolean(matchId);
+  const storedSubmit = (getBattleSettings().matchSubmitResult || {}) as {
+    earnedGold?: number;
+    ratingDelta?: number;
+    newTitleIds?: string[];
+  };
+  const [apiRewardGold, setApiRewardGold] = useState<number | null>(
+    typeof storedSubmit.earnedGold === 'number' ? storedSubmit.earnedGold : null,
+  );
+  const earnedGold = isLiveMatch ? (apiRewardGold ?? 0) : myScore;
   const myRank = allPlayers.findIndex((p) => p.id === myUserId) + 1;
   const rankBorderColor =
     myRank === 1 ? 'var(--px-warning)' : myRank === allPlayers.length ? 'var(--px-danger)' : 'var(--px-success)';
@@ -211,6 +227,7 @@ export default function ResultPage() {
   useEffect(() => {
     if (!matchId) return;
     let cancelled = false;
+    const rewardsAppliedRef = { current: false };
 
     let timer = 0;
     const loadRanking = async () => {
@@ -239,6 +256,40 @@ export default function ResultPage() {
         };
         setRankingSnapshot(snapshot);
         saveFinalRankingSnapshot(snapshot);
+
+        if (!rewardsAppliedRef.current) {
+          const mine =
+            (ranking.rewards || []).find(
+              (reward) => String(reward.userId || reward.id) === String(myUserId),
+            ) || null;
+          const earned =
+            typeof mine?.earnedGold === 'number'
+              ? mine.earnedGold
+              : typeof storedSubmit.earnedGold === 'number'
+                ? storedSubmit.earnedGold
+                : undefined;
+          const ratingDelta =
+            typeof mine?.ratingDelta === 'number'
+              ? mine.ratingDelta
+              : typeof storedSubmit.ratingDelta === 'number'
+                ? storedSubmit.ratingDelta
+                : undefined;
+          const newTitleIds = Array.isArray(mine?.newTitleIds)
+            ? mine.newTitleIds
+            : storedSubmit.newTitleIds;
+
+          if (earned !== undefined || ratingDelta !== undefined || newTitleIds?.length) {
+            applyMatchRewards({
+              earnedGold: earned,
+              ratingDelta,
+              newTitleIds,
+            });
+            if (typeof earned === 'number') setApiRewardGold(earned);
+            setTotalGold(getGold());
+            rewardsAppliedRef.current = true;
+          }
+        }
+
         if (timer) window.clearInterval(timer);
       } catch (error) {
         if (!isMatchResultNotReady(error)) {
@@ -255,7 +306,7 @@ export default function ResultPage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [matchId, sessionId, roomId]);
+  }, [matchId, sessionId, roomId, myUserId, storedSubmit.earnedGold, storedSubmit.ratingDelta, storedSubmit.newTitleIds]);
 
   const mySubmissionCodes = Array.isArray(submission.codes)
     ? submission.codes
@@ -272,11 +323,13 @@ export default function ResultPage() {
   const losers = allPlayers.slice(Math.ceil(allPlayers.length / 2));
 
   useEffect(() => {
+    if (isLiveMatch) return;
     const newGold = addGold(earnedGold);
     setTotalGold(newGold);
-  }, [earnedGold]);
+  }, [earnedGold, isLiveMatch]);
 
   useEffect(() => {
+    if (isLiveMatch) return;
     const prev = getTitles();
     const newStats = { ...prev.stats };
     newStats.totalGames += 1;
@@ -325,6 +378,28 @@ export default function ResultPage() {
     setResultPopup({ show: true, mainMsg, detailLines, newTitles });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!isLiveMatch || allPlayers.length === 0) return;
+    const totalPlayers = allPlayers.length;
+    let mainMsg = '';
+    if (myRank === totalPlayers) {
+      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
+    } else if (myRank === 1) {
+      mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
+    } else {
+      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등입니다.`;
+    }
+    const detailLines: string[] = [];
+    if (totalProblemCount > 0) {
+      detailLines.push(`${totalProblemCount}문제 중 ${myCorrectCount}문제를 맞췄습니다.`);
+    }
+    setResultPopup((prev) =>
+      prev.show
+        ? prev
+        : { show: true, mainMsg, detailLines, newTitles: [] },
+    );
+  }, [isLiveMatch, allPlayers.length, myRank, totalProblemCount, myCorrectCount]);
 
   useEffect(() => {
     try {

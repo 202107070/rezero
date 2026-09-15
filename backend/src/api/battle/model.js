@@ -85,6 +85,60 @@ export async function findMatchById(matchId) {
   return rows[0];
 }
 
+export async function findActiveMatchByRoomId(roomId) {
+  const rows = await pool.query(
+    `SELECT
+       id,
+       room_id AS roomId,
+       status,
+       lang AS language,
+       difficulty,
+       problem_count AS problemCount,
+       max_players AS maxPlayers,
+       room_mode AS roomMode,
+       game_mode AS gameMode,
+       round_seconds AS roundSeconds,
+       started_at AS startedAt,
+       finished_at AS finishedAt
+     FROM matches
+     WHERE room_id = ?
+       AND status = 'IN_PROGRESS'
+     ORDER BY started_at DESC
+     LIMIT 1`,
+    [roomId],
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return rows[0];
+}
+
+export async function findMatchProblems(matchId) {
+  const rows = await pool.query(
+    `SELECT
+       problem_index AS problemIndex,
+       problem_snapshot AS problemSnapshot
+     FROM match_problems
+     WHERE match_id = ?
+     ORDER BY problem_index ASC`,
+    [matchId],
+  );
+
+  return rows.map((row) => {
+    let snapshot = row.problemSnapshot;
+    if (typeof snapshot === "string") {
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch {
+        snapshot = {};
+      }
+    }
+    return snapshot;
+  });
+}
+
 export async function findMatchProblem(matchId, problemIndex) {
   const rows = await pool.query(
     `SELECT

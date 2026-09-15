@@ -2,6 +2,7 @@ import { pool as dbPool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
 import { lockService } from "#infra/redis/lockService.js";
 import { ROOM_CONFIG } from "#docker/config/roomConfig.js";
+import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 
 function toSafeHashObject(obj) {
   const result = {};
@@ -88,12 +89,12 @@ class PrepareInfoService {
       if (io) {
         const targetRoom = String(roomId);
 
-        io.to(targetRoom).emit("game_start_notice", {
+        io.to(targetRoom).emit(SOCKET_EVENTS.GAME_START_NOTICE, {
           message: "배틀이 곧 시작됩니다! 준비하세요.",
           roomId: targetRoom,
         });
 
-        io.to(targetRoom).emit("game_started", socketPayload);
+        io.to(targetRoom).emit(SOCKET_EVENTS.GAME_STARTED, socketPayload);
       }
 
       console.log(`[PrepareInfoService] 연산 완료 (Match ID: ${matchId})`);

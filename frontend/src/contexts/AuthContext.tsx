@@ -1,17 +1,27 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   getCurrentUser,
-  initAuth,
   login as authLogin,
   logout as authLogout,
+  restoreSession,
   signup as authSignup,
   type AuthResult,
   type AuthUser,
 } from '../services/authService';
+import { disconnectRoomSocket } from '../services/roomSocket';
 
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
+  authReady: boolean;
   login: (username: string, password: string) => Promise<AuthResult>;
   signup: (username: string, password: string, displayName?: string) => Promise<AuthResult>;
   logout: () => void;
@@ -20,7 +30,20 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => initAuth());
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void restoreSession().then((restored) => {
+      if (cancelled) return;
+      setUser(restored);
+      setAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const login = useCallback(async (username: string, password: string) => {
     const result = await authLogin(username, password);
@@ -40,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     authLogout();
+    disconnectRoomSocket(true);
     setUser(null);
   }, []);
 
@@ -47,11 +71,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isAuthenticated: user !== null,
+      authReady,
       login,
       signup,
       logout,
     }),
-    [user, login, signup, logout],
+    [user, authReady, login, signup, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

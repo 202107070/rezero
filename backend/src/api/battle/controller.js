@@ -5,6 +5,7 @@ import { parseUseItemRequest } from "./dto/useItemRequestDto.js";
 import { parseSubmitMatchResultRequest } from "./dto/submitMatchResultRequestDto.js";
 import {
   createBattle,
+  getActiveMatchForRoom,
   getMatchResult,
   submitBattleAnswer,
   submitMatchResult,
@@ -13,6 +14,7 @@ import {
 import { getSocket } from "#config/socketConfig.js";
 import { socketGameService } from "#service/socketService.js";
 import { sendSuccess } from "#utils/responseHelper.js";
+import { AppError } from "#utils/appError.js";
 
 export async function start(req, res, next) {
   try {
@@ -22,6 +24,19 @@ export async function start(req, res, next) {
     });
 
     return sendSuccess(res, toMatchStartResponse(match), 201);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getActive(req, res, next) {
+  try {
+    const roomId = Number(req.params.roomId);
+    if (!Number.isInteger(roomId) || roomId < 1) {
+      throw new AppError(400, "INVALID_ROOM_ID", "올바른 방 ID가 필요합니다.");
+    }
+    const match = await getActiveMatchForRoom(roomId, req.user.id);
+    return sendSuccess(res, toMatchStartResponse(match));
   } catch (error) {
     return next(error);
   }
@@ -70,16 +85,12 @@ export async function submitResult(req, res, next) {
       const io = getSocket();
 
       if (io) {
-        await socketGameService.broadcastGameEnded(
-          io,
-          String(result.roomId),
-          {
-            roomId: result.roomId,
-            matchId: input.matchId,
-            ranking: result.ranking.players,
-            rewards: result.ranking.rewards,
-          },
-        );
+        await socketGameService.broadcastGameEnded(io, String(result.roomId), {
+          roomId: result.roomId,
+          matchId: input.matchId,
+          ranking: result.ranking.players,
+          rewards: result.ranking.rewards,
+        });
       }
     }
 

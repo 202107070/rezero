@@ -3,7 +3,9 @@ import { ROUTES } from '../../constants/routes';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
+
+  if (!authReady) return null;
 
   if (!isAuthenticated) {
     return <Navigate to={ROUTES.LOGIN} replace />;

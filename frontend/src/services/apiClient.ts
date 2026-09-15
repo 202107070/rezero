@@ -1,12 +1,33 @@
 const API_PREFIX = '/api/v1';
+const TOKEN_STORAGE_KEY = 'rezero_access_token';
 
 let accessToken: string | null = null;
 
+function readStoredToken(): string | null {
+  try {
+    return sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredToken(token: string | null): void {
+  try {
+    if (token) sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+    else sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+  writeStoredToken(token);
 }
 
 export function getAccessToken(): string | null {
+  if (accessToken) return accessToken;
+  accessToken = readStoredToken();
   return accessToken;
 }
 
