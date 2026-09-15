@@ -48,14 +48,15 @@ import {
 import {
   disconnectRoomSocket,
   joinRoomSocket,
+  onRoomEvent,
   ROOM_SOCKET_EVENTS,
   toggleReadySocket,
   sendRoomMessage,
+  setActiveRoomId,
   type RoomReadyStatePayload,
   type ChatMessagePayload,
   type GameStartedPayload,
   type UserLeftPayload,
-  getRoomSocket,
 } from '../../services/roomSocket';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
@@ -125,6 +126,7 @@ export default function RoomPage() {
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
   const botReadyTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const battleNavLockRef = useRef(false);
+  const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
   const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
   const myLanguageRef = useRef(myLanguage);
@@ -276,18 +278,7 @@ export default function RoomPage() {
               });
             }
 
-            const client = getRoomSocket();
-            const clearRoomListeners = () => {
-              client.off(ROOM_SOCKET_EVENTS.READY_CHANGED);
-              client.off(ROOM_SOCKET_EVENTS.USER_JOINED);
-              client.off(ROOM_SOCKET_EVENTS.USER_LEFT);
-              client.off(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE);
-              client.off(ROOM_SOCKET_EVENTS.CHAT_ERROR);
-              client.off(ROOM_SOCKET_EVENTS.GAME_START_NOTICE);
-              client.off(ROOM_SOCKET_EVENTS.GAME_STARTED);
-            };
-            clearRoomListeners();
-
+            const unsubs: Array<() => void> = [];
             const enterBattleFromMatch = (matchLike: GameStartedPayload) => {
               if (battleNavLockRef.current || cancelled) return;
               if (!matchLike?.matchId || !Array.isArray(matchLike.problems)) return;
@@ -314,81 +305,103 @@ export default function RoomPage() {
               navigate(`${ROUTES.BATTLE}?${battleParams.toString()}`);
             };
 
-            client.on(ROOM_SOCKET_EVENTS.READY_CHANGED, (payload: RoomReadyStatePayload) => {
-              const states = payload.roomReadyStates || [
-                { userId: String(payload.userId), isReady: Boolean(payload.isReady) },
-              ];
-              const readyMap = new Map(states.map((item) => [String(item.userId), Boolean(item.isReady)]));
-              setPlayers((prev) =>
-                prev.map((player) => {
-                  if (!player?.userId) return player;
-                  if (!readyMap.has(String(player.userId))) return player;
-                  const nextReady = readyMap.get(String(player.userId)) === true;
-                  return {
-                    ...player,
-                    isReady: player.isHost ? false : nextReady,
-                    status: player.isHost ? 'HOST' : nextReady ? 'READY' : 'WAITING',
-                  };
-                }),
-              );
-              const myReadyId = getCurrentUserId();
-              if (readyMap.has(String(myReadyId))) {
-                setIsReady(readyMap.get(String(myReadyId)) === true);
-              }
-            });
+            unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.READY_CHANGED, (payload: RoomReadyStatePayload) => {
+                const states = payload.roomReadyStates || [
+                  { userId: String(payload.userId), isReady: Boolean(payload.isReady) },
+                ];
+                const readyMap = new Map(states.map((item) => [String(item.userId), Boolean(item.isReady)]));
+                setPlayers((prev) =>
+                  prev.map((player) => {
+                    if (!player?.userId) return player;
+                    if (!readyMap.has(String(player.userId))) return player;
+                    const nextReady = readyMap.get(String(player.userId)) === true;
+                    return {
+                      ...player,
+                      isReady: player.isHost ? false : nextReady,
+                      status: player.isHost ? 'HOST' : nextReady ? 'READY' : 'WAITING',
+                    };
+                  }),
+                );
+                const myReadyId = getCurrentUserId();
+                if (readyMap.has(String(myReadyId))) {
+                  setIsReady(readyMap.get(String(myReadyId)) === true);
+                }
+              }),
+            );
 
-            client.on(ROOM_SOCKET_EVENTS.USER_JOINED, (payload?: { user?: { displayName?: string; username?: string } }) => {
-              const name = payload?.user?.displayName || payload?.user?.username;
-              if (name) {
-                setMessages((prev) => [...prev, { type: 'sys', text: `>> [${name}] 님이 입장하셨습니다.` }]);
-              }
-              void fetchRoom(numericRoomId)
-                .then((nextRoom) => {
-                  if (!cancelled) applyRoom(nextRoom);
-                })
-                .catch(() => undefined);
-            });
+            unsubs.push(
+              onRoomEvent(
+                ROOM_SOCKET_EVENTS.USER_JOINED,
+                (payload?: { user?: { displayName?: string; username?: string } }) => {
+                  const name = payload?.user?.displayName || payload?.user?.username;
+                  if (name) {
+                    setMessages((prev) => [...prev, { type: 'sys', text: `>> [${name}] 님이 입장하셨습니다.` }]);
+                  }
+                  void fetchRoom(numericRoomId)
+                    .then((nextRoom) => {
+                      if (!cancelled) applyRoom(nextRoom);
+                    })
+                    .catch(() => undefined);
+                },
+              ),
+            );
 
-            client.on(ROOM_SOCKET_EVENTS.USER_LEFT, (payload: UserLeftPayload) => {
-              if (payload.roomClosed) {
-                setAlertMessage('방이 종료되었습니다.');
-                setShowAlertModal(true);
-                navigate(ROUTES.LOBBY);
-                return;
-              }
-              setMessages((prev) => [
-                ...prev,
-                { type: 'sys', text: `>> 유저(${payload.userId}) 님이 퇴장했습니다.` },
-              ]);
-              void fetchRoom(numericRoomId)
-                .then((nextRoom) => {
-                  if (!cancelled) applyRoom(nextRoom);
-                })
-                .catch(() => undefined);
-            });
+            unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.USER_LEFT, (payload: UserLeftPayload) => {
+                if (payload.roomClosed) {
+                  setAlertMessage('방이 종료되었습니다.');
+                  setShowAlertModal(true);
+                  navigate(ROUTES.LOBBY);
+                  return;
+                }
+                setMessages((prev) => [
+                  ...prev,
+                  { type: 'sys', text: `>> 유저가 퇴장했습니다.` },
+                ]);
+                void fetchRoom(numericRoomId)
+                  .then((nextRoom) => {
+                    if (!cancelled) applyRoom(nextRoom);
+                  })
+                  .catch(() => undefined);
+              }),
+            );
 
-            client.on(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
-              const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
-              const text = String(payload.message || '');
-              if (!text) return;
-              setMessages((prev) => [...prev, { type: 'user', name, text, mode: '[전체]' }]);
-            });
+            unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
+                const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
+                const text = String(payload.message || '');
+                if (!text) return;
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.type === 'user' && last.name === name && last.text === text) return prev;
+                  return [...prev, { type: 'user', name, text, mode: '[전체]' }];
+                });
+              }),
+            );
 
-            client.on(ROOM_SOCKET_EVENTS.CHAT_ERROR, (payload?: { message?: string }) => {
-              if (payload?.message) {
-                setMessages((prev) => [...prev, { type: 'sys', text: `>> ${payload.message}` }]);
-              }
-            });
+            unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.CHAT_ERROR, (payload?: { message?: string }) => {
+                if (payload?.message) {
+                  setMessages((prev) => [...prev, { type: 'sys', text: `>> ${payload.message}` }]);
+                }
+              }),
+            );
 
-            client.on(ROOM_SOCKET_EVENTS.GAME_START_NOTICE, (payload?: { message?: string }) => {
-              if (payload?.message) {
-                setMessages((prev) => [...prev, { type: 'sys', text: `>> ${payload.message}` }]);
-              }
-            });
+            unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.GAME_START_NOTICE, (payload?: { message?: string }) => {
+                if (payload?.message) {
+                  setMessages((prev) => [...prev, { type: 'sys', text: `>> ${payload.message}` }]);
+                }
+              }),
+            );
 
-            client.on(ROOM_SOCKET_EVENTS.GAME_STARTED, (payload: GameStartedPayload) => {
+            unsubs.push(onRoomEvent(ROOM_SOCKET_EVENTS.GAME_STARTED, (payload: GameStartedPayload) => {
               enterBattleFromMatch(payload);
-            });
+            }));
+
+            socketUnsubsRef.current = unsubs;
+            setActiveRoomId(numericRoomId);
           } catch {
             // 소켓 연결 실패 시에도 REST 입장 상태는 유지
           }
@@ -404,18 +417,14 @@ export default function RoomPage() {
     void enterRoom();
     return () => {
       cancelled = true;
-      try {
-        const client = getRoomSocket();
-        client.off(ROOM_SOCKET_EVENTS.READY_CHANGED);
-        client.off(ROOM_SOCKET_EVENTS.USER_JOINED);
-        client.off(ROOM_SOCKET_EVENTS.USER_LEFT);
-        client.off(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE);
-        client.off(ROOM_SOCKET_EVENTS.CHAT_ERROR);
-        client.off(ROOM_SOCKET_EVENTS.GAME_START_NOTICE);
-        client.off(ROOM_SOCKET_EVENTS.GAME_STARTED);
-      } catch {
-        // ignore
-      }
+      socketUnsubsRef.current.forEach((unsub) => {
+        try {
+          unsub();
+        } catch {
+          // ignore
+        }
+      });
+      socketUnsubsRef.current = [];
       // Room→Battle 이동 시 소켓 유지 (로비 퇴장 시에만 force disconnect)
     };
   }, [applyRoom, navigate, numericRoomId, roomId, roomMode, gameMode, parsedMaxPlayers]);
@@ -506,7 +515,9 @@ export default function RoomPage() {
   const handleSendChat = async () => {
     if (!chatMsg.trim()) return;
     const text = chatMsg.trim();
+    const myName = getCurrentDisplayName() || getCurrentUserName() || 'ME';
     setChatMsg('');
+    setMessages((prev) => [...prev, { type: 'user', name: myName, text, mode: '[전체]' }]);
     try {
       const result = await sendRoomMessage(numericRoomId, text);
       if (!result.success) {

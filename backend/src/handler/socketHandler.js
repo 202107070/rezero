@@ -336,11 +336,34 @@ export function registerSocketHandlers(io, socket) {
     },
   );
 
-  socket.on("disconnect", function () {
+  socket.on("disconnect", async function () {
     console.log(
       "[Socket 연결 종료] " +
         socket.user.displayName +
-        " - Valkey 데이터는 유지됩니다.",
+        " - 대기실인 경우만 퇴장 처리합니다.",
     );
+
+    try {
+      const { leaveRoom } = await import("../api/room/service.js");
+      const roomModel = await import("../api/room/model.js");
+      const joinedRooms = [...socket.rooms].filter(function (room) {
+        return room !== socket.id;
+      });
+
+      for (let i = 0; i < joinedRooms.length; i++) {
+        const roomId = Number(joinedRooms[i]);
+        if (!Number.isInteger(roomId) || roomId < 1) continue;
+        try {
+          const room = await roomModel.findRoomById(roomId);
+          // 게임 중 순간 끊김으로 유령/조기종료가 나지 않도록 WAITING만 퇴장
+          if (!room || room.status !== "WAITING") continue;
+          await leaveRoom(roomId, socket.user.id);
+        } catch (leaveError) {
+          // 이미 나간 방이면 무시
+        }
+      }
+    } catch (error) {
+      console.error("[disconnect leaveRoom] " + error.message);
+    }
   });
 }

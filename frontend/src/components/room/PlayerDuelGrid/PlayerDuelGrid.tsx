@@ -37,7 +37,7 @@ function DuelSide({
       }}
     >
       <div className="duel-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
-        {player ? (isHostSide ? myCharIcon : player.character) : <span className="duel-empty-mark">?</span>}
+        {player ? player.character || myCharIcon : <span className="duel-empty-mark">?</span>}
       </div>
       <div className="duel-name">
         {player ? (

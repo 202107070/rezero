@@ -36,7 +36,7 @@ export function PlayerSlot({
       }}
     >
       <div className="slot-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
-        {player ? (index === 0 ? myCharIcon : player.character) : <span className="status-empty">X</span>}
+        {player ? player.character || myCharIcon : <span className="status-empty">X</span>}
       </div>
       <div className="slot-name" style={{ color: player ? '#ddd' : '#555' }}>
         {player ? (

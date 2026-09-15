@@ -51,6 +51,7 @@ export interface BattleRoomPlayer {
   name: string;
   character: string;
   isHost: boolean;
+  userId?: string;
 }
 
 function buildBotFromProfile(
@@ -81,8 +82,14 @@ export function createDemoOpponentRoster(
   _maxPlayers: string,
   _roomId: string,
   roomRoster?: BattleRoomPlayer[],
+  myUserId?: string,
 ): Omit<DemoBot, 'solveScheduleByProblem' | 'blankAnswersByProblem' | 'scoreBonusByProblem'>[] {
-  const roomOpponents = (roomRoster || []).filter((player) => !player.isHost);
+  const roster = roomRoster || [];
+  // 본인(userId) 제외 — 호스트/게스트 모두 상대를 올바르게 보게 함 (!isHost만 쓰면 게스트에게 호스트가 안 보임)
+  const roomOpponents = myUserId
+    ? roster.filter((player) => String(player.userId || '') !== String(myUserId))
+    : roster.filter((player) => !player.isHost);
+
   if (roomOpponents.length > 0) {
     const botCount = roomOpponents.length;
     return roomOpponents.map((player, index) =>
@@ -92,7 +99,7 @@ export function createDemoOpponentRoster(
         GENERIC_OPPONENT_PROFILE,
         player.name,
         player.character,
-        `player-${player.id}`,
+        player.userId ? `player-${player.userId}` : `player-${player.id}`,
       ),
     );
   }
@@ -202,9 +209,16 @@ export function createDemoBattleRoster(params: {
   problems: ProblemLike[];
   roundSeconds: number;
   roomRoster?: BattleRoomPlayer[];
+  myUserId?: string;
 }): DemoBot[] {
   const roomId = params.sessionId ? String(params.sessionId).replace('battle-', '') : '';
-  const baseBots = createDemoOpponentRoster(params.roomMode, params.maxPlayers, roomId, params.roomRoster);
+  const baseBots = createDemoOpponentRoster(
+    params.roomMode,
+    params.maxPlayers,
+    roomId,
+    params.roomRoster,
+    params.myUserId,
+  );
   const plansByProblem = params.problems.map((problem, problemIndex) =>
     buildDemoRoundPlan({
       sessionId: params.sessionId,
@@ -246,6 +260,10 @@ export function getBotSolveDelay(
   roundSeconds: number,
 ): number {
   const scheduleRemaining = getBotSchedule(bot, problemIndex);
+  // 음수/비정상 스케줄 = 자동 풀이 없음 (라이브 상대)
+  if (!Number.isFinite(scheduleRemaining) || scheduleRemaining < 0) {
+    return Number.POSITIVE_INFINITY;
+  }
   return Math.max(0, roundSeconds - scheduleRemaining);
 }
 

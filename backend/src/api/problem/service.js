@@ -53,6 +53,19 @@ function getAnswersForLanguage(answer, language) {
     return answer[normalizedLanguage];
   }
 
+  // C++ ↔ CPP
+  if (normalizedLanguage === "CPP" && Array.isArray(answer["C++"])) {
+    return answer["C++"];
+  }
+  if (normalizedLanguage === "C++" && Array.isArray(answer.CPP)) {
+    return answer.CPP;
+  }
+
+  // 언어가 지정된 경우 다른 언어 정답으로 폴백하지 않음
+  if (normalizedLanguage && normalizedLanguage !== "RANDOM") {
+    return [];
+  }
+
   for (const values of Object.values(answer)) {
     if (Array.isArray(values) && values.length > 0) {
       return values;
@@ -85,6 +98,20 @@ function shuffleProblems(problems, random) {
   return shuffled;
 }
 
+function answerHasLanguage(answer, normalizedLanguage) {
+  if (!answer || typeof answer !== "object") return false;
+  if (Object.prototype.hasOwnProperty.call(answer, normalizedLanguage)) {
+    return Array.isArray(answer[normalizedLanguage]);
+  }
+  if (normalizedLanguage === "CPP" && Object.prototype.hasOwnProperty.call(answer, "C++")) {
+    return Array.isArray(answer["C++"]);
+  }
+  if (normalizedLanguage === "C++" && Object.prototype.hasOwnProperty.call(answer, "CPP")) {
+    return Array.isArray(answer.CPP);
+  }
+  return false;
+}
+
 export function chooseProblems(problemPool, language, count, random = Math.random) {
   const normalizedLanguage = normalizeLanguage(language);
   const normalizedProblems = problemPool.map(normalizeProblem);
@@ -93,55 +120,34 @@ export function chooseProblems(problemPool, language, count, random = Math.rando
     if (normalizedLanguage === "RANDOM") {
       return true;
     }
-    // 객관식은 언어 키가 없을 수 있음
-    if (problem.type === "multiple_choice") {
-      return true;
-    }
     const answer = problem.answer || {};
-    if (Object.prototype.hasOwnProperty.call(answer, normalizedLanguage)) {
-      return true;
-    }
-    // C++ ↔ CPP 등
-    if (normalizedLanguage === "CPP" && Object.prototype.hasOwnProperty.call(answer, "C++")) {
-      return true;
-    }
-    if (normalizedLanguage === "C++" && Object.prototype.hasOwnProperty.call(answer, "CPP")) {
+    // 객관식/단답도 answer 키(JAVA/CSS/HTML…)로 언어를 구분한다
+    if (answerHasLanguage(answer, normalizedLanguage)) {
       return true;
     }
     return false;
   }
 
-  let candidates = normalizedProblems.filter(matchesLanguage);
-
-  // 언어 필터로 비면 같은 난이도(풀) 전체로 완화
-  if (candidates.length === 0) {
-    candidates = normalizedProblems.filter(function (problem) {
-      const answer = problem.answer || {};
-      return (
-        problem.type === "multiple_choice" ||
-        Object.keys(answer).length > 0 ||
-        Boolean(problem.question)
-      );
-    });
-  }
+  const candidates = normalizedProblems.filter(matchesLanguage);
 
   if (candidates.length === 0) {
     throw new AppError(
       404,
       "PROBLEMS_NOT_FOUND",
-      "선택한 조건에 맞는 문제가 없습니다.",
+      "선택한 언어/난이도에 맞는 문제가 없습니다. 문제 은행을 동기화해 주세요.",
     );
   }
 
-  const selectedProblems = [];
-
-  while (selectedProblems.length < count) {
-    const shuffled = shuffleProblems(candidates, random);
-    const remainingCount = count - selectedProblems.length;
-    selectedProblems.push(...shuffled.slice(0, remainingCount));
+  if (candidates.length < count) {
+    throw new AppError(
+      404,
+      "PROBLEMS_NOT_ENOUGH",
+      `선택한 조건의 문제가 ${candidates.length}개뿐입니다. (요청: ${count}개, 중복 출제 없음)`,
+    );
   }
 
-  return selectedProblems;
+  // 중복 없이 한 번만 섞어서 선택
+  return shuffleProblems(candidates, random).slice(0, count);
 }
 
 export async function selectProblems(input) {

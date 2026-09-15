@@ -143,6 +143,7 @@ export function prepareBattleStart(params: {
         name: player.name,
         character: player.character,
         isHost: player.isHost,
+        userId: player.userId,
       })),
     });
 

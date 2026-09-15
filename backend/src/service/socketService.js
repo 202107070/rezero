@@ -2,6 +2,7 @@ import { pool as dbPool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
 import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { socketDto } from "#dto/socketDto.js";
+import * as roomModel from "../api/room/model.js";
 
 export const saveInfoService = {
   async saveGameResult(params) {
@@ -228,6 +229,47 @@ export async function cleanupRoomValkeyData(roomId) {
   }
 }
 
+/** 매치 종료 후 방을 WAITING으로 되돌리고 참가자 Valkey 상태를 복구합니다. */
+export async function resetRoomAfterMatch(roomId) {
+  try {
+    await roomModel.markRoomWaiting(roomId);
+    const room = await roomModel.findRoomById(roomId);
+    if (!room) {
+      await cleanupRoomValkeyData(roomId);
+      return;
+    }
+
+    const participants = await roomModel.findRoomParticipants(roomId);
+    const id = String(roomId);
+
+    await redisClient.del([
+      "room:" + id + ":ready",
+      "room:" + id + ":problems",
+      "room:" + id + ":state",
+      "room:" + id + ":participants",
+    ]);
+
+    const multi = redisClient.multi();
+    for (let i = 0; i < participants.length; i++) {
+      multi.sAdd("room:" + id + ":participants", String(participants[i].userId));
+    }
+    multi.hSet("room:" + id + ":state", {
+      status: "WAITING",
+      hostUserId: String(room.hostUserId),
+      currentPlayers: String(participants.length),
+      maxPlayers: String(room.maxPlayers),
+      updatedAt: new Date().toISOString(),
+    });
+    await multi.exec();
+
+    console.log(
+      "[socketService] 매치 종료 후 방 WAITING 복구 (roomId: " + roomId + ", players: " + participants.length + ")",
+    );
+  } catch (err) {
+    console.error("[resetRoomAfterMatch] Error: " + err.message);
+  }
+}
+
 export const socketGameService = {
   broadcastGameState(io, roomId, gameStateData) {
     const payload = socketDto.toGameStateResponse(gameStateData);
@@ -250,7 +292,7 @@ export const socketGameService = {
   },
 
   async broadcastGameEnded(io, roomId, resultData) {
-    io.to(roomId).emit(SOCKET_EVENTS.GAME_ENDED, resultData);
-    await cleanupRoomValkeyData(roomId);
+    io.to(String(roomId)).emit(SOCKET_EVENTS.GAME_ENDED, resultData);
+    await resetRoomAfterMatch(roomId);
   },
 };

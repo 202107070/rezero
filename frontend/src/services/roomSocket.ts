@@ -100,8 +100,33 @@ export interface UserReconnectedPayload {
   problemId?: string;
 }
 
+type AnyHandler = (...args: never[]) => void;
+
 let socket: Socket | null = null;
 let intentionalDisconnect = false;
+let activeRoomId: string | null = null;
+
+const ACTIVE_ROOM_KEY = 'rezero_active_room_id';
+
+export function setActiveRoomId(roomId: string | number | null): void {
+  activeRoomId = roomId == null ? null : String(roomId);
+  try {
+    if (activeRoomId) sessionStorage.setItem(ACTIVE_ROOM_KEY, activeRoomId);
+    else sessionStorage.removeItem(ACTIVE_ROOM_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function getActiveRoomId(): string | null {
+  if (activeRoomId) return activeRoomId;
+  try {
+    activeRoomId = sessionStorage.getItem(ACTIVE_ROOM_KEY);
+  } catch {
+    activeRoomId = null;
+  }
+  return activeRoomId;
+}
 
 export function getRoomSocket(): Socket {
   const token = getAccessToken();
@@ -131,7 +156,7 @@ export function getRoomSocket(): Socket {
   return socket;
 }
 
-/** Room→Battle 이동 시에는 disconnect 하지 않음 */
+/** Room→Battle 이동 시에는 disconnect 하지 않음 (force=true 일 때만 종료) */
 export function disconnectRoomSocket(force = false): void {
   if (!socket) return;
   if (!force) return;
@@ -139,16 +164,27 @@ export function disconnectRoomSocket(force = false): void {
   socket.removeAllListeners();
   socket.disconnect();
   socket = null;
+  setActiveRoomId(null);
+}
+
+export function onRoomEvent<T extends AnyHandler>(event: string, handler: T): () => void {
+  const client = getRoomSocket();
+  client.on(event, handler as AnyHandler);
+  return () => {
+    client.off(event, handler as AnyHandler);
+  };
 }
 
 export function joinRoomSocket(
   roomId: string | number,
 ): Promise<{ success: boolean; message?: string; recentMessages?: ChatMessagePayload[] }> {
   const client = getRoomSocket();
+  const id = String(roomId);
+  setActiveRoomId(id);
   return new Promise((resolve) => {
     client.emit(
       ROOM_SOCKET_EVENTS.JOIN_ROOM,
-      { roomId: String(roomId) },
+      { roomId: id },
       (response?: {
         success?: boolean;
         message?: string;

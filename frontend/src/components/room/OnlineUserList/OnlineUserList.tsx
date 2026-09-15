@@ -70,7 +70,7 @@ export function OnlineUserList({ players, myCharacter, onPlayerClick, expanded =
             (p, idx) =>
               p && (
                 <div className="online-user-row" key={idx} onClick={() => onPlayerClick(p, idx)}>
-                  <div className="online-user-avatar">{idx === 0 ? myCharIcon : p.character}</div>
+                  <div className="online-user-avatar">{p.character || myCharIcon}</div>
                   <div className="online-user-info">
                     <div className="online-user-name">
                       <span style={idx === 0 ? { fontWeight: 'bold', color: 'var(--px-warning)' } : undefined}>

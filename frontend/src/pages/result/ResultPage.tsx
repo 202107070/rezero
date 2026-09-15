@@ -19,6 +19,8 @@ import { ROUTES } from '../../constants/routes';
 import { ENABLE_RESULT_BOT_DEPARTURE, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
 import { useAuthUser } from '../../contexts/AuthContext';
 import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot, saveFinalRankingSnapshot } from '../../services/battleSessionService';
+import { fetchRoom, leaveRoom } from '../../services/roomService';
+import { disconnectRoomSocket, getActiveRoomId, joinRoomSocket, setActiveRoomId } from '../../services/roomSocket';
 import {
   getBattleDemoState,
   getBattleSettings,
@@ -692,14 +694,35 @@ export default function ResultPage() {
     setAiInput('');
   };
 
-  const replayToRoom = () => {
+  const replayToRoom = async () => {
     removeMyPresence(myUserId);
-    navigate(roomId ? `${ROUTES.ROOM}?id=${roomId}` : ROUTES.LOBBY);
+    if (!roomId) {
+      navigate(ROUTES.LOBBY);
+      return;
+    }
+    try {
+      setActiveRoomId(roomId);
+      await joinRoomSocket(roomId);
+      await fetchRoom(Number(roomId));
+    } catch {
+      // RoomPage에서 재입장/재조회
+    }
+    navigate(`${ROUTES.ROOM}?id=${roomId}`);
   };
 
-  const clearSessionAndNavigateLobby = () => {
+  const clearSessionAndNavigateLobby = async () => {
     clearBattleAndLeave(sessionId, roomId);
     removeMyPresence(myUserId);
+    const activeId = roomId || getActiveRoomId();
+    const numericRoomId = activeId ? Number(activeId) : NaN;
+    if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
+      try {
+        await leaveRoom(numericRoomId);
+      } catch {
+        // ignore
+      }
+    }
+    disconnectRoomSocket(true);
     navigate(ROUTES.LOBBY);
   };
 

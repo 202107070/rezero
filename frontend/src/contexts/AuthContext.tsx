@@ -16,7 +16,8 @@ import {
   type AuthResult,
   type AuthUser,
 } from '../services/authService';
-import { disconnectRoomSocket } from '../services/roomSocket';
+import { leaveRoom } from '../services/roomService';
+import { disconnectRoomSocket, getActiveRoomId } from '../services/roomSocket';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -62,6 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    const roomId = getActiveRoomId();
+    const numericRoomId = roomId ? Number(roomId) : NaN;
+    if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
+      void leaveRoom(numericRoomId).catch(() => undefined);
+    }
     authLogout();
     disconnectRoomSocket(true);
     setUser(null);

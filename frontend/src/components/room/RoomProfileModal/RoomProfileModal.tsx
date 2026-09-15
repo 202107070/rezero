@@ -24,7 +24,8 @@ export function RoomProfileModal({
   const { shaking, triggerShake } = useModalShake();
   if (!open || !player) return null;
 
-  const charIcon = player.isHost ? CHARACTERS.find((c) => c.id === myCharacter)?.icon : player.character;
+  const charIcon =
+    player.character || CHARACTERS.find((c) => c.id === myCharacter)?.icon;
 
   return (
     <div className="problem-modal-overlay" onClick={triggerShake}>
