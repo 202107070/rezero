@@ -184,7 +184,9 @@ function toRoomPlayer(participant: RoomParticipant): RoomPlayer {
   const character =
     CHARACTERS.find((item) => item.id === participant.character)?.icon || participant.character || '🤺';
   const name =
+    String(participant.displayName || '').trim() ||
     String(participant.name || '').trim() ||
+    String(participant.username || '').trim() ||
     String(participant.userId || '').trim() ||
     'UNKNOWN';
 

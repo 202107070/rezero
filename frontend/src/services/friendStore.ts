@@ -37,14 +37,37 @@ export function loadFriends(): FriendEntry[] {
   return readFriends();
 }
 
-export function addFriend(name: string): boolean {
+export function addFriend(name: string, userId?: string): boolean {
   const trimmed = name.trim();
   if (!trimmed) return false;
   const friends = readFriends();
-  if (friends.some((f) => f.name === trimmed)) return false;
-  friends.push({ name: trimmed, addedAt: Date.now() });
+  const existing = friends.find((f) => f.name === trimmed);
+  if (existing) {
+    if (userId && !existing.userId) {
+      existing.userId = userId;
+      writeFriends(friends);
+    }
+    return false;
+  }
+  friends.push({ name: trimmed, userId: userId || undefined, addedAt: Date.now() });
   writeFriends(friends);
   return true;
+}
+
+export function getFriendUserIds(onlineUsers?: Array<{ name?: string; userId?: string }>): string[] {
+  const friends = readFriends();
+  const ids = new Set<string>();
+  for (const friend of friends) {
+    if (friend.userId) {
+      ids.add(String(friend.userId));
+      continue;
+    }
+    const online = (onlineUsers || []).find(
+      (user) => user.name === friend.name || user.userId === friend.userId,
+    );
+    if (online?.userId) ids.add(String(online.userId));
+  }
+  return [...ids];
 }
 
 export function removeFriend(name: string) {

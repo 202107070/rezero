@@ -13,6 +13,7 @@ export function toParticipantResponse(participant) {
     id: Number(participant.id),
     userId: participant.userId,
     name: displayName,
+    displayName,
     username: participant.username ? String(participant.username) : undefined,
     slotIndex: Number(participant.slotIndex),
     isHost: Boolean(participant.isHost),

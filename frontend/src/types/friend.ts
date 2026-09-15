@@ -11,5 +11,6 @@ export interface FriendPresence {
 
 export interface FriendEntry {
   name: string;
+  userId?: string;
   addedAt: number;
 }

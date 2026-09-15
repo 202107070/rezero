@@ -183,6 +183,9 @@ export async function saveAndFormatMessage(params) {
   const roomId = params.roomId;
   const sender = params.sender;
   const message = params.message;
+  const mode = params.mode || "ALL";
+  const targetUserId = params.targetUserId || null;
+  const targetUserName = params.targetUserName || "";
 
   const chatData = {
     roomId: roomId,
@@ -193,15 +196,21 @@ export async function saveAndFormatMessage(params) {
         sender.displayName || sender.username || String(sender.id || "UNKNOWN"),
     },
     message: message,
+    mode,
+    targetUserId,
+    targetUserName,
     timestamp: new Date().toISOString(),
   };
 
-  try {
-    const key = "room:" + roomId + ":messages";
-    await redisClient.rPush(key, JSON.stringify(chatData));
-    await redisClient.lTrim(key, -50, -1);
-  } catch (error) {
-    console.error("[getRecentMessages] Redis Error: " + error.message);
+  // 전체 채팅만 방 히스토리에 저장 (친구/귓속말은 개인 전달)
+  if (mode === "ALL") {
+    try {
+      const key = "room:" + roomId + ":messages";
+      await redisClient.rPush(key, JSON.stringify(chatData));
+      await redisClient.lTrim(key, -50, -1);
+    } catch (error) {
+      console.error("[getRecentMessages] Redis Error: " + error.message);
+    }
   }
 
   return chatData;

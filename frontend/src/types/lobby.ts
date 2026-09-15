@@ -4,6 +4,8 @@ export interface RoomParticipant {
   id: number;
   userId: string;
   name: string;
+  displayName?: string;
+  username?: string;
   slotIndex: number;
   isHost: boolean;
   isReady: boolean;

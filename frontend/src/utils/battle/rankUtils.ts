@@ -1,6 +1,6 @@
 import type { RoomUser } from '../../types/battle';
 import { BATTLE_CORRECT_SCORE } from '../../constants/battleConstants';
-import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
+import { getCurrentUserId, getCurrentUserName, getCurrentDisplayName } from '../../services/authService';
 import type { DemoBot } from './demoBots';
 import { getBotSolveDelay } from './demoBots';
 
@@ -24,15 +24,23 @@ export function computeBotRankScore(solvedCount: number): number {
 
 export function normalizeBattlePlayerId(id: string, name?: string): string {
   const myId = getCurrentUserId();
-  const myName = getCurrentUserName();
-  if (id === 'me' || id === myId || name === myName) return myId;
-  return id;
+  const myName = getCurrentDisplayName() || getCurrentUserName();
+  const raw = String(id || '');
+  if (raw === 'me' || raw === myId || raw === `player-${myId}` || name === myName) return myId;
+  if (raw.startsWith('player-')) return raw.slice('player-'.length);
+  return raw;
 }
 
 export function isBattleMe(id: string, name?: string): boolean {
   const myId = getCurrentUserId();
-  const myName = getCurrentUserName();
-  return id === 'me' || id === myId || name === myName;
+  const myName = getCurrentDisplayName() || getCurrentUserName();
+  const raw = String(id || '');
+  return (
+    raw === 'me' ||
+    raw === myId ||
+    raw === `player-${myId}` ||
+    Boolean(myName && name === myName)
+  );
 }
 
 export function getUserRankMetrics(
@@ -152,7 +160,7 @@ export function rankingSnapshotToResultPlayers(
     const raw = String(p.avatar || '').trim();
     const avatar = iconById[raw] || (raw.length <= 4 ? raw : '🤺') || '😎';
     return {
-      id: p.id,
+      id: normalizeBattlePlayerId(p.id, p.name),
       name: p.name,
       avatar,
       ingameScore: p.ingameScore,

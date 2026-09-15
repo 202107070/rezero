@@ -44,6 +44,7 @@ import {
   addFriend,
   getFollowRoomPath,
   getFriendNames,
+  getFriendUserIds,
   isFriend,
   removeFriend,
   setUserPresence,
@@ -156,10 +157,16 @@ export default function LobbyPage() {
             if (!text) return;
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const modeLabel =
+              payload.mode === 'WHISPER'
+                ? `[귓속말${payload.targetUserName ? `:${payload.targetUserName}` : ''}]`
+                : payload.mode === 'FRIEND'
+                  ? '[친구]'
+                  : '[전체]';
             setChatMessages((prev) => {
               const last = prev[prev.length - 1];
               if (last?.sender === name && last.text === text) return prev;
-              return [...prev, { sender: name, text, time: timeStr, mode: '[전체]' }];
+              return [...prev, { sender: name, text, time: timeStr, mode: modeLabel }];
             });
           }),
         );
@@ -179,12 +186,14 @@ export default function LobbyPage() {
         unsubs.push(
           onRoomEvent(
             ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
-            (payload?: { fromUserName?: string; accepted?: boolean }) => {
+            (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
               if (!payload) return;
               const now = new Date();
               const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
               if (payload.accepted) {
-                if (payload.fromUserName) addFriend(payload.fromUserName);
+                if (payload.fromUserName) {
+                  addFriend(payload.fromUserName, payload.fromUserId);
+                }
                 setFriendNames(getFriendNames());
                 setChatMessages((prev) => [
                   ...prev,
@@ -346,10 +355,19 @@ export default function LobbyPage() {
           ? '[전체]'
           : '[친구]';
     const senderName = authUser.displayName || authUser.username;
+    const whisperUser = users.find((user) => user.name === whisperTarget);
+    const friendUserIds = getFriendUserIds(
+      users.map((user) => ({ name: user.name, userId: user.userId })),
+    );
     setChatMsg('');
     setChatMessages((prev) => [...prev, { sender: senderName, text, time: timeStr, mode: modeLabel }]);
     try {
-      const result = await sendRoomMessage(LOBBY_ROOM_ID, text);
+      const result = await sendRoomMessage(LOBBY_ROOM_ID, text, {
+        mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
+        targetUserId: whisperUser?.userId,
+        targetUserName: whisperTarget || undefined,
+        friendUserIds,
+      });
       if (!result.success) {
         setChatMessages((prev) => [
           ...prev,
@@ -379,13 +397,7 @@ export default function LobbyPage() {
           setFriendNames(getFriendNames());
           appendSystemChat(`${user.name} 님을 친구 목록에서 삭제했습니다.`);
         } else {
-          const added = addFriend(user.name);
-          if (added) {
-            setFriendNames(getFriendNames());
-            appendSystemChat(`${user.name} 님에게 친구 요청을 보냈습니다.`);
-          } else {
-            appendSystemChat(`${user.name} 님은 이미 친구 목록에 있습니다.`);
-          }
+          appendSystemChat(`${user.name} 님에게 친구 요청을 보냈습니다.`);
           if (user.userId) {
             void emitFriendRequest(user.userId, user.name).catch(() => undefined);
           } else {
@@ -779,7 +791,7 @@ export default function LobbyPage() {
                 type="button"
                 className="pixel-btn pixel-btn-primary review-modal-btn"
                 onClick={() => {
-                  addFriend(pendingFriendRequest.fromUserName);
+                  addFriend(pendingFriendRequest.fromUserName, pendingFriendRequest.fromUserId);
                   setFriendNames(getFriendNames());
                   void emitFriendRequestResult(pendingFriendRequest.fromUserId, true);
                   setPendingFriendRequest(null);

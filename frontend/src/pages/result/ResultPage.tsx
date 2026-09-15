@@ -57,6 +57,7 @@ import {
 import {
   addFriend,
   getFollowRoomPath,
+  getFriendUserIds,
   getUserPresence,
   isFriend,
   removeFriend,
@@ -173,7 +174,11 @@ export default function ResultPage() {
     [rankingSnapshot, roomUsers, demoBots, submission, demoState],
   );
 
-  const myScore = allPlayers.find((p) => p.id === myUserId)?.ingameScore || 0;
+  const myPlayer =
+    allPlayers.find((p) => p.id === myUserId) ||
+    allPlayers.find((p) => p.id === `player-${myUserId}`) ||
+    allPlayers.find((p) => p.name === myUserName);
+  const myScore = myPlayer?.ingameScore || 0;
   const isLiveMatch = Boolean(matchId);
   const storedSubmit = (getBattleSettings().matchSubmitResult || {}) as {
     earnedGold?: number;
@@ -184,23 +189,27 @@ export default function ResultPage() {
     typeof storedSubmit.earnedGold === 'number' ? storedSubmit.earnedGold : null,
   );
   const earnedGold = isLiveMatch ? (apiRewardGold ?? 0) : myScore;
-  const myRank = allPlayers.findIndex((p) => p.id === myUserId) + 1;
-  const rankBorderColor =
-    myRank === 1 ? 'var(--px-warning)' : myRank === allPlayers.length ? 'var(--px-danger)' : 'var(--px-success)';
-  const rankGlow =
-    myRank === 1
-      ? '0 0 0 4px #000, 0 0 30px rgba(247,213,29,0.3)'
-      : myRank === allPlayers.length
-        ? '0 0 0 4px #000, 0 0 30px rgba(231,110,85,0.3)'
-        : '0 0 0 4px #000, 0 0 30px rgba(146,204,65,0.3)';
-  const isWin = myRank <= Math.ceil(allPlayers.length / 2);
+  const myRank = myPlayer?.rank || (myPlayer ? allPlayers.indexOf(myPlayer) + 1 : 0);
+  const totalPlayersForRank = Math.max(1, allPlayers.length);
+  const isLastPlace = myRank > 0 && myRank === totalPlayersForRank && totalPlayersForRank > 1;
+  const isFirstPlace = myRank === 1;
+  const rankBorderColor = isFirstPlace
+    ? 'var(--px-warning)'
+    : isLastPlace
+      ? 'var(--px-danger)'
+      : 'var(--px-primary)';
+  const rankGlow = isFirstPlace
+    ? '0 0 0 4px #000, 0 0 30px rgba(247,213,29,0.35)'
+    : isLastPlace
+      ? '0 0 0 4px #000, 0 0 30px rgba(231,110,85,0.35)'
+      : '0 0 0 4px #000, 0 0 30px rgba(32,156,238,0.3)';
+  const isWin = myRank > 0 && myRank <= Math.ceil(allPlayers.length / 2);
   const totalProblemCount =
     submission.problemResults?.length ||
     submission.problems?.length ||
-    allPlayers.find((p) => p.id === myUserId)?.problemResults?.length ||
+    myPlayer?.problemResults?.length ||
     0;
-  const myCorrectCount =
-    allPlayers.find((p) => p.id === myUserId)?.problemResults?.filter(Boolean).length ?? 0;
+  const myCorrectCount = myPlayer?.problemResults?.filter(Boolean).length ?? 0;
 
   const [totalGold, setTotalGold] = useState(() => getGold());
 
@@ -267,14 +276,42 @@ export default function ResultPage() {
             const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
             const text = String(payload.message || '');
             if (!text) return;
+            // 더미/봇 멘트를 결과 채팅에 표시하지 않음
+            if (name === '알고리즘깎는노인' || text === '수고하셨습니다.' || text === '고생하셨습니다!') {
+              return;
+            }
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const modeLabel =
+              payload.mode === 'WHISPER'
+                ? `[귓속말${payload.targetUserName ? `:${payload.targetUserName}` : ''}]`
+                : payload.mode === 'FRIEND'
+                  ? '[친구]'
+                  : '[전체]';
             setChatMessages((prev) => {
               const last = prev[prev.length - 1];
               if (last?.sender === name && last.text === text) return prev;
-              return [...prev, { sender: name, text, type: 'user' as const, mode: '[전체]', time: timeStr }];
+              return [...prev, { sender: name, text, type: 'user' as const, mode: modeLabel, time: timeStr }];
             });
           }),
+        );
+
+        unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
+            (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
+              if (!payload?.accepted || !payload.fromUserName) return;
+              addFriend(payload.fromUserName, payload.fromUserId);
+              setChatMessages((prev) => [
+                ...prev,
+                {
+                  sender: 'SYSTEM',
+                  text: `${payload.fromUserName}님이 친구 요청을 수락했습니다.`,
+                  type: 'sys',
+                },
+              ]);
+            },
+          ),
         );
 
         unsubs.push(
@@ -452,10 +489,12 @@ export default function ResultPage() {
     saveTitles(updated);
     setNewTitleIds(newTitles.map((t) => t.id));
 
-    const totalPlayers = allPlayers.length;
+    const totalPlayers = Math.max(1, allPlayers.length);
     let mainMsg = '';
 
-    if (myRank === totalPlayers) {
+    if (myRank <= 0) {
+      mainMsg = '매치 결과를 집계했습니다.';
+    } else if (myRank === totalPlayers && totalPlayers > 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
     } else if (myRank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
@@ -484,10 +523,10 @@ export default function ResultPage() {
   }, []);
 
   useEffect(() => {
-    if (!isLiveMatch || allPlayers.length === 0) return;
-    const totalPlayers = allPlayers.length;
+    if (!isLiveMatch || allPlayers.length === 0 || myRank <= 0) return;
+    const totalPlayers = Math.max(1, allPlayers.length);
     let mainMsg = '';
-    if (myRank === totalPlayers) {
+    if (myRank === totalPlayers && totalPlayers > 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
     } else if (myRank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
@@ -775,6 +814,10 @@ export default function ResultPage() {
         : chatMode === 'ALL'
           ? '[전체]'
           : '[친구]';
+    const whisperUser = allPlayers.find((p) => p.name === whisperTarget);
+    const friendUserIds = getFriendUserIds(
+      allPlayers.map((p) => ({ name: p.name, userId: p.id })),
+    );
     setChatInput('');
     setChatMessages((prev) => [
       ...prev,
@@ -782,7 +825,12 @@ export default function ResultPage() {
     ]);
     if (roomId) {
       try {
-        const result = await sendRoomMessage(roomId, text);
+        const result = await sendRoomMessage(roomId, text, {
+          mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
+          targetUserId: whisperUser?.id,
+          targetUserName: whisperTarget || undefined,
+          friendUserIds,
+        });
         if (!result.success) {
           setChatMessages((prev) => [
             ...prev,
@@ -828,12 +876,7 @@ export default function ResultPage() {
           removeFriend(userName);
           appendSystemChat(`${userName} 님을 친구 목록에서 삭제했습니다.`);
         } else {
-          const added = addFriend(userName);
-          appendSystemChat(
-            added
-              ? `${userName} 님에게 친구 요청을 보냈습니다.`
-              : `${userName} 님은 이미 친구입니다.`,
-          );
+          appendSystemChat(`${userName} 님에게 친구 요청을 보냈습니다.`);
           const target = allPlayers.find((p) => p.name === userName);
           if (target?.id) {
             void emitFriendRequest(String(target.id), userName).catch(() => undefined);

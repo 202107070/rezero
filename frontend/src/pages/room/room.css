@@ -964,13 +964,15 @@
 .room-item-grid {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   padding: 2px;
-  overscroll-behavior: none;
-  touch-action: none;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
 }
 
 .room-item-slot {

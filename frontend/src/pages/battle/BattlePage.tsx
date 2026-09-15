@@ -196,6 +196,10 @@ export default function BattlePage() {
   const [breakingBlanks, setBreakingBlanks] = useState<Record<string, boolean>>({});
   const [itemCastState, setItemCastState] = useState<{ type: string; ts: number } | null>(null);
   const [panelHit, setPanelHit] = useState<Record<string, boolean>>({});
+  const [selfPanelEffect, setSelfPanelEffect] = useState<{
+    type: 'paint' | 'lightning' | 'scribble';
+    expiresAt: number;
+  } | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
   const [opponentEffects, setOpponentEffects] = useState<
     Record<string, Record<number, { panelEffect?: { type: string; expiresAt: number } }>>
@@ -678,6 +682,13 @@ export default function BattlePage() {
   useEffect(() => {
     const pruneExpiredEffects = () => {
       const now = Date.now();
+      setSelfPanelEffect((prev) => {
+        if (!prev) return prev;
+        if (now < prev.expiresAt) return prev;
+        if (prev.type === 'paint') clearPaintCanvas('self');
+        if (prev.type === 'scribble') clearScribbleCanvas('self');
+        return null;
+      });
       setOpponentEffects((prev) => {
         let changed = false;
         const next: typeof prev = {};
@@ -880,16 +891,59 @@ export default function BattlePage() {
           onRoomEvent(ROOM_SOCKET_EVENTS.ITEM_USED, (payload: BattleItemUsedPayload) => {
             const myId = getCurrentUserId();
             if (String(payload.fromUserId) === String(myId)) return;
-            if (payload.itemType === 'timeReduce' && String(payload.targetUserId || '') === String(myId)) {
+
+            const targetId = String(payload.targetUserId || '');
+            const isTargetMe =
+              Boolean(targetId) &&
+              (targetId === String(myId) || targetId === `player-${myId}`);
+
+            if (payload.itemType === 'timeReduce' && isTargetMe) {
               setRemaining((prev) => Math.max(0, prev - 15));
+              return;
             }
+
+            if (
+              isTargetMe &&
+              (payload.itemType === 'paint' ||
+                payload.itemType === 'lightning' ||
+                payload.itemType === 'scribble')
+            ) {
+              const effectType = payload.itemType;
+              setSelfPanelEffect({
+                type: effectType,
+                expiresAt: Date.now() + ITEM_PANEL_EFFECT_MS,
+              });
+              if (effectType === 'paint' || effectType === 'scribble') {
+                const tryRun = (attempts = 0) => {
+                  const panelEl = document.querySelector('.code-card .fill-blank-code, .code-card .fill-blank-area');
+                  if (panelEl) {
+                    if (effectType === 'paint') startPaintCanvas(panelEl as HTMLElement, 'self');
+                    else startScribbleCanvas(panelEl as HTMLElement, 'self', ITEM_PANEL_EFFECT_MS);
+                    return;
+                  }
+                  if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+                };
+                tryRun();
+              }
+              return;
+            }
+
             const roster = Array.isArray(battleMeta.roomRoster)
               ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
               : [];
-            const targetName = roster.find((player) => String(player.userId) === String(payload.targetUserId || ''))?.name;
+            const targetName =
+              roster.find((player) => String(player.userId) === targetId)?.name ||
+              roster.find((player) => `player-${player.userId}` === targetId)?.name;
             setBattleBots((prev) => {
-              const targetBot = prev.find((bot) => bot.name === targetName);
-              if (targetBot && (payload.itemType === 'paint' || payload.itemType === 'lightning' || payload.itemType === 'scribble')) {
+              const targetBot =
+                prev.find((bot) => bot.id === `player-${targetId}` || bot.id === targetId) ||
+                prev.find((bot) => bot.name === targetName);
+              if (
+                targetBot &&
+                (payload.itemType === 'paint' ||
+                  payload.itemType === 'lightning' ||
+                  payload.itemType === 'scribble')
+              ) {
                 applyAttackPanelEffect(targetBot.id, payload.itemType);
               }
               return prev;
@@ -1008,10 +1062,16 @@ export default function BattlePage() {
             if (!text) return;
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const modeLabel =
+              payload.mode === 'WHISPER'
+                ? `[귓속말${payload.targetUserName ? `:${payload.targetUserName}` : ''}]`
+                : payload.mode === 'FRIEND'
+                  ? '[친구]'
+                  : '[전체]';
             setChatMessages((prev) => {
               const last = prev[prev.length - 1];
               if (last?.sender === name && last.text === text) return prev;
-              return [...prev, { sender: name, text, time: timeStr }];
+              return [...prev, { sender: name, text, time: timeStr, mode: modeLabel }];
             });
           }),
         );
@@ -1502,7 +1562,9 @@ export default function BattlePage() {
       ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
       : [];
     const targetUserId = String(
-      roster.find((player) => player.name === targetBot?.name)?.userId || '',
+      (targetBot?.id || '').replace(/^player-/, '') ||
+        roster.find((player) => player.name === targetBot?.name)?.userId ||
+        '',
     );
 
     if (isLiveMatch) {
@@ -1546,7 +1608,7 @@ export default function BattlePage() {
       applyAttackPanelEffect(botId, 'lightning');
       setItemInventory((prev) => ({ ...prev, lightning: prev.lightning - 1 }));
     } else if (type === 'timeReduce') {
-      setRemaining((prev) => Math.max(0, prev - 15));
+      // 상대 시간 감소는 상대 클라이언트에서 적용 (로컬 남은 시간은 건드리지 않음)
       setItemInventory((prev) => ({ ...prev, timeReduce: prev.timeReduce - 1 }));
     } else if (type === 'scribble') {
       applyAttackPanelEffect(botId, 'scribble');
@@ -1714,7 +1776,14 @@ export default function BattlePage() {
 
   const mainColumn = (
     <div className={`battle-main-column${demoSpectating ? ' is-spectator-my' : ''}`}>
-      <div className={`pixel-card code-card${itemCastState ? ' casting-item' : ''}`} style={{ position: 'relative' }}>
+      <div
+        className={`pixel-card code-card${itemCastState ? ' casting-item' : ''}${
+          selfPanelEffect?.type === 'paint' ? ' paint-marked' : ''
+        }${selfPanelEffect?.type === 'lightning' ? ' lightning-struck' : ''}${
+          selfPanelEffect?.type === 'scribble' ? ' scribble-marked' : ''
+        }`}
+        style={{ position: 'relative' }}
+      >
               <div className="pixel-card-header code-card-header-centered">
                 <div className="code-card-header-center">
                   <span style={{ color: 'var(--px-primary)' }}>MY CODE</span>

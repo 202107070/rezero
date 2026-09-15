@@ -117,12 +117,30 @@ export function registerSocketHandlers(io, socket) {
         roomId: validatedData.roomId,
         sender: socket.user,
         message: validatedData.message,
+        mode: validatedData.mode,
+        targetUserId: validatedData.targetUserId,
+        targetUserName: validatedData.targetUserName,
       });
 
-      io.to(validatedData.roomId).emit(
-        SOCKET_EVENTS.RECEIVE_MESSAGE,
-        chatMessage,
-      );
+      if (validatedData.mode === "WHISPER" && validatedData.targetUserId) {
+        const targetRoom = "user:" + String(validatedData.targetUserId);
+        io.to(targetRoom).emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
+        socket.emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
+      } else if (validatedData.mode === "FRIEND") {
+        const friendIds = validatedData.friendUserIds || [];
+        for (let i = 0; i < friendIds.length; i++) {
+          io.to("user:" + String(friendIds[i])).emit(
+            SOCKET_EVENTS.RECEIVE_MESSAGE,
+            chatMessage,
+          );
+        }
+        socket.emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
+      } else {
+        io.to(validatedData.roomId).emit(
+          SOCKET_EVENTS.RECEIVE_MESSAGE,
+          chatMessage,
+        );
+      }
 
       if (typeof callback === "function") {
         callback({ success: true });

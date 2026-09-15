@@ -23,8 +23,23 @@ export function ResultPopup({
 
   return (
     <div className="result-popup-overlay" onClick={triggerShake}>
-      <div className={`result-popup-box${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ borderColor: rankBorderColor }}>
-        <div className="result-popup-msg" style={mainMsg.includes('꼴등') ? { color: 'var(--px-danger)' } : {}}>
+      <div
+        className={`result-popup-box${shaking ? ' modal-shake-error' : ''}${
+          mainMsg.includes('1등') ? ' is-first' : mainMsg.includes('꼴등') ? ' is-last' : ' is-mid'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+        style={{ borderColor: rankBorderColor }}
+      >
+        <div
+          className="result-popup-msg"
+          style={
+            mainMsg.includes('꼴등')
+              ? { color: 'var(--px-danger)' }
+              : mainMsg.includes('1등')
+                ? { color: 'var(--px-warning)' }
+                : { color: 'var(--px-primary)' }
+          }
+        >
           {mainMsg}
         </div>
         {detailLines.length > 0 && (

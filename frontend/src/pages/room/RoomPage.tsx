@@ -66,6 +66,7 @@ import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/R
 import {
   addFriend,
   getFollowRoomPath,
+  getFriendUserIds,
   getUserPresence,
   isFriend,
   removeFriend,
@@ -195,7 +196,7 @@ export default function RoomPage() {
   };
   isItemModeRef.current = isItemMode;
 
-  const applyRoom = useCallback((room: Room) => {
+  const applyRoom = useCallback((room: Room, options?: { resetChat?: boolean }) => {
     setRoomDetail(room);
     const myId = getCurrentUserId();
     const myParticipant = (room.participants || []).find(
@@ -212,10 +213,13 @@ export default function RoomPage() {
     const mapped = mapParticipantsToPlayers(room).map((player) => {
       if (!player) return player;
       const resolvedName =
-        (player.name && player.name !== 'UNKNOWN' ? player.name : '') ||
+        (player.name && player.name !== 'UNKNOWN' && !/^[0-9a-f-]{16,}$/i.test(player.name)
+          ? player.name
+          : '') ||
         (String(player.userId) === String(myId)
           ? getCurrentDisplayName() || getCurrentUserName() || player.userId
           : '') ||
+        player.name ||
         player.userId ||
         'UNKNOWN';
       return {
@@ -232,7 +236,9 @@ export default function RoomPage() {
       count: room.count || '5',
       maxPlayers: Math.max(2, Math.min(8, room.maxPlayers || parsedMaxPlayers)),
     });
-    setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapped));
+    if (options?.resetChat) {
+      setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapped));
+    }
   }, [parsedMaxPlayers, urlTimeRaw]);
 
   useEffect(() => {
@@ -282,7 +288,7 @@ export default function RoomPage() {
         }
 
         if (!cancelled) {
-          applyRoom(room);
+          applyRoom(room, { resetChat: true });
           try {
             await joinRoomSocket(numericRoomId);
 
@@ -341,14 +347,26 @@ export default function RoomPage() {
             unsubs.push(
               onRoomEvent(
                 ROOM_SOCKET_EVENTS.USER_JOINED,
-                (payload?: { user?: { displayName?: string; username?: string } }) => {
+                (payload?: {
+                  user?: { id?: string; displayName?: string; username?: string };
+                }) => {
                   const name = payload?.user?.displayName || payload?.user?.username;
+                  const joinedUserId = payload?.user?.id ? String(payload.user.id) : '';
                   if (name) {
                     setMessages((prev) => [...prev, { type: 'sys', text: `>> [${name}] 님이 입장하셨습니다.` }]);
+                    if (joinedUserId) {
+                      setPlayers((prev) =>
+                        prev.map((player) =>
+                          player && String(player.userId) === joinedUserId
+                            ? { ...player, name }
+                            : player,
+                        ),
+                      );
+                    }
                   }
                   void fetchRoom(numericRoomId)
                     .then((nextRoom) => {
-                      if (!cancelled) applyRoom(nextRoom);
+                      if (!cancelled) applyRoom(nextRoom, { resetChat: false });
                     })
                     .catch(() => undefined);
                 },
@@ -369,7 +387,7 @@ export default function RoomPage() {
                 ]);
                 void fetchRoom(numericRoomId)
                   .then((nextRoom) => {
-                    if (!cancelled) applyRoom(nextRoom);
+                    if (!cancelled) applyRoom(nextRoom, { resetChat: false });
                   })
                   .catch(() => undefined);
               }),
@@ -380,12 +398,35 @@ export default function RoomPage() {
                 const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
                 const text = String(payload.message || '');
                 if (!text) return;
+                const modeLabel =
+                  payload.mode === 'WHISPER'
+                    ? `[귓속말${payload.targetUserName ? `:${payload.targetUserName}` : ''}]`
+                    : payload.mode === 'FRIEND'
+                      ? '[친구]'
+                      : '[전체]';
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
                   if (last?.type === 'user' && last.name === name && last.text === text) return prev;
-                  return [...prev, { type: 'user', name, text, mode: '[전체]' }];
+                  return [...prev, { type: 'user', name, text, mode: modeLabel }];
                 });
               }),
+            );
+
+            unsubs.push(
+              onRoomEvent(
+                ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
+                (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
+                  if (!payload?.accepted || !payload.fromUserName) return;
+                  addFriend(payload.fromUserName, payload.fromUserId);
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      type: 'sys',
+                      text: `>> ${payload.fromUserName}님이 친구 요청을 수락했습니다.`,
+                    },
+                  ]);
+                },
+              ),
             );
 
             unsubs.push(
@@ -513,15 +554,12 @@ export default function RoomPage() {
           removeFriend(userName);
           appendSystemMessage(`${userName} 님을 친구 목록에서 삭제했습니다.`);
         } else {
-          const added = addFriend(userName);
-          appendSystemMessage(
-            added
-              ? `${userName} 님에게 친구 요청을 보냈습니다.`
-              : `${userName} 님은 이미 친구 목록에 있습니다.`,
-          );
+          appendSystemMessage(`${userName} 님에게 친구 요청을 보냈습니다.`);
           const target = players.find((player) => player?.name === userName);
           if (target?.userId) {
             void emitFriendRequest(String(target.userId), userName).catch(() => undefined);
+          } else {
+            appendSystemMessage('상대 유저 ID를 찾을 수 없어 요청 알림은 전송되지 않았습니다.');
           }
         }
         break;
@@ -567,10 +605,27 @@ export default function RoomPage() {
     if (!chatMsg.trim()) return;
     const text = chatMsg.trim();
     const myName = getCurrentDisplayName() || getCurrentUserName() || 'ME';
+    const modeLabel =
+      chatMode === 'WHISPER' && whisperTarget
+        ? `[귓속말:${whisperTarget}]`
+        : chatMode === 'FRIEND'
+          ? '[친구]'
+          : '[전체]';
+    const whisperTargetPlayer = players.find((player) => player?.name === whisperTarget);
+    const friendUserIds = getFriendUserIds(
+      players
+        .filter((player): player is NonNullable<typeof player> => Boolean(player))
+        .map((player) => ({ name: player.name, userId: player.userId })),
+    );
     setChatMsg('');
-    setMessages((prev) => [...prev, { type: 'user', name: myName, text, mode: '[전체]' }]);
+    setMessages((prev) => [...prev, { type: 'user', name: myName, text, mode: modeLabel }]);
     try {
-      const result = await sendRoomMessage(numericRoomId, text);
+      const result = await sendRoomMessage(numericRoomId, text, {
+        mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
+        targetUserId: whisperTargetPlayer?.userId ? String(whisperTargetPlayer.userId) : undefined,
+        targetUserName: whisperTarget || undefined,
+        friendUserIds,
+      });
       if (!result.success) {
         setMessages((prev) => [
           ...prev,

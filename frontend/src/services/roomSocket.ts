@@ -92,6 +92,9 @@ export interface ChatMessagePayload {
   sender?: { id?: string; displayName?: string; username?: string };
   message?: string;
   timestamp?: string;
+  mode?: string;
+  targetUserId?: string | null;
+  targetUserName?: string;
 }
 
 export interface GameStartedPayload {
@@ -253,12 +256,25 @@ export function joinRoomSocket(
 export function sendRoomMessage(
   roomId: string | number,
   message: string,
+  options?: {
+    mode?: 'ALL' | 'FRIEND' | 'WHISPER';
+    targetUserId?: string;
+    targetUserName?: string;
+    friendUserIds?: string[];
+  },
 ): Promise<{ success: boolean; message?: string }> {
   const client = getRoomSocket();
   return new Promise((resolve) => {
     client.emit(
       ROOM_SOCKET_EVENTS.SEND_MESSAGE,
-      { roomId: String(roomId), message },
+      {
+        roomId: String(roomId),
+        message,
+        mode: options?.mode || 'ALL',
+        targetUserId: options?.targetUserId,
+        targetUserName: options?.targetUserName,
+        friendUserIds: options?.friendUserIds || [],
+      },
       (response?: { success?: boolean; message?: string }) => {
         resolve({
           success: Boolean(response?.success),

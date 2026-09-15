@@ -35,9 +35,23 @@ export function validateSendMessage(data) {
     );
   }
 
+  const rawMode = String(data.mode || "ALL").toUpperCase();
+  const mode =
+    rawMode === "FRIEND" || rawMode === "WHISPER" || rawMode === "ALL"
+      ? rawMode
+      : "ALL";
+
+  const friendUserIds = Array.isArray(data.friendUserIds)
+    ? data.friendUserIds.map(String).filter(Boolean)
+    : [];
+
   return {
     roomId: String(data.roomId).trim(),
     message: trimmedMessage,
+    mode,
+    targetUserId: data.targetUserId ? String(data.targetUserId) : null,
+    targetUserName: data.targetUserName ? String(data.targetUserName) : "",
+    friendUserIds,
   };
 }
 
