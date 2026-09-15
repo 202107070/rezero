@@ -12,7 +12,7 @@ export async function createUser(input) {
 
 export async function isUsernameTaken(username) {
   const rows = await pool.query(
-    "SELECT COUNT(*) AS count FROM users WHERE username = ?",
+    "SELECT COUNT(*) AS count FROM users WHERE LOWER(username) = LOWER(?)",
     [username],
   );
 
@@ -30,7 +30,7 @@ export async function findUserByUsername(username) {
        rating_score AS ratingScore,
        created_at AS createdAt
      FROM users
-     WHERE username = ?
+     WHERE LOWER(username) = LOWER(?)
      LIMIT 1`,
     [username],
   );

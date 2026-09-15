@@ -68,6 +68,11 @@ import { persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtil
 import { EMPTY_ROOM_FILTER } from '../../types/roomFilter';
 import type { RoomFilterState } from '../../types/roomFilter';
 import { getRoomFilterSummary, matchesRoomFilter } from '../../utils/roomFilterUtils';
+import {
+  formatMissingRoomCreateMessage,
+  getMissingRoomCreateFields,
+  type RoomCreateFieldKey,
+} from '../../utils/roomCreateValidation';
 import type { AudioSettings } from '../../types/audioSettings';
 import type { DisplayMode } from '../../types/electron';
 import { loadAudioSettings, saveAudioSettings } from '../../utils/audio/audioSettings';
@@ -100,6 +105,8 @@ export default function LobbyPage() {
   const [roomPwd, setRoomPwd] = useState('');
   const [problemCount, setProblemCount] = useState('');
   const [modalShake, setModalShake] = useState(false);
+  const [createMissingFields, setCreateMissingFields] = useState<RoomCreateFieldKey[]>([]);
+  const [createValidationMessage, setCreateValidationMessage] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatMsg, setChatMsg] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
@@ -508,18 +515,17 @@ export default function LobbyPage() {
     setRoomVisibility('public');
     setRoomPwd('');
     setProblemCount('');
+    setCreateMissingFields([]);
+    setCreateValidationMessage('');
   };
 
-  const isCreateFormValid = () =>
-    Boolean(
-      roomTitle.trim() &&
-        playerMode &&
-        difficulty &&
-        language &&
-        gameMode &&
-        problemCount &&
-        (roomVisibility === 'public' || roomPwd.trim()),
-    );
+  const clearCreateFieldError = (key: RoomCreateFieldKey) => {
+    setCreateMissingFields((prev) => {
+      const next = prev.filter((field) => field !== key);
+      setCreateValidationMessage(formatMissingRoomCreateMessage(next));
+      return next;
+    });
+  };
 
   const triggerModalShake = () => {
     setModalShake(true);
@@ -532,10 +538,26 @@ export default function LobbyPage() {
   };
 
   const handleConfirmCreate = async () => {
-    if (!isCreateFormValid()) {
+    const missing = getMissingRoomCreateFields({
+      playerMode,
+      gameMode,
+      roomTitle,
+      difficulty,
+      language,
+      roomVisibility,
+      roomPwd,
+      problemCount,
+    });
+
+    if (missing.length > 0) {
+      setCreateMissingFields(missing);
+      setCreateValidationMessage(formatMissingRoomCreateMessage(missing));
       triggerModalShake();
       return;
     }
+
+    setCreateMissingFields([]);
+    setCreateValidationMessage('');
     if (creatingRoom) return;
 
     setCreatingRoom(true);
@@ -555,6 +577,7 @@ export default function LobbyPage() {
       enterRoom(newRoom);
     } catch (error) {
       triggerModalShake();
+      setCreateValidationMessage(getRoomErrorMessage(error));
       appendSystemChat(getRoomErrorMessage(error));
     } finally {
       setCreatingRoom(false);
@@ -762,19 +785,45 @@ export default function LobbyPage() {
         roomPwd={roomPwd}
         problemCount={problemCount}
         shakeError={modalShake}
+        missingFields={createMissingFields}
+        validationMessage={createValidationMessage}
         onClose={() => {
           setShowModal(false);
           resetCreateForm();
         }}
         onConfirm={() => void handleConfirmCreate()}
-        onPlayerModeChange={setPlayerMode}
-        onGameModeChange={setGameMode}
-        onRoomTitleChange={setRoomTitle}
-        onDifficultyChange={setDifficulty}
-        onLanguageChange={setLanguage}
-        onRoomVisibilityChange={setRoomVisibility}
-        onRoomPwdChange={setRoomPwd}
-        onProblemCountChange={setProblemCount}
+        onPlayerModeChange={(mode) => {
+          setPlayerMode(mode);
+          clearCreateFieldError('playerMode');
+        }}
+        onGameModeChange={(mode) => {
+          setGameMode(mode);
+          clearCreateFieldError('gameMode');
+        }}
+        onRoomTitleChange={(value) => {
+          setRoomTitle(value);
+          clearCreateFieldError('roomTitle');
+        }}
+        onDifficultyChange={(value) => {
+          setDifficulty(value);
+          clearCreateFieldError('difficulty');
+        }}
+        onLanguageChange={(value) => {
+          setLanguage(value);
+          clearCreateFieldError('language');
+        }}
+        onRoomVisibilityChange={(value) => {
+          setRoomVisibility(value);
+          if (value === 'public') clearCreateFieldError('roomPwd');
+        }}
+        onRoomPwdChange={(value) => {
+          setRoomPwd(value);
+          clearCreateFieldError('roomPwd');
+        }}
+        onProblemCountChange={(value) => {
+          setProblemCount(value);
+          clearCreateFieldError('problemCount');
+        }}
       />
 
       <JoinRoomPasswordModal
