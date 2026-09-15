@@ -196,6 +196,7 @@ export async function findMatchParticipantsForResult(matchId) {
   return pool.query(
     `SELECT
        rp.user_id AS userId,
+       u.username AS username,
        u.display_name AS displayName,
        u.rating_score AS ratingScore,
        rp.\`character\` AS avatar

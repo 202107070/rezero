@@ -12,6 +12,11 @@ import {
   getRecentMessages,
   saveReadyState,
   socketGameService,
+  markUserOnline,
+  markUserOffline,
+  broadcastLobbyPresence,
+  listOnlineUsers,
+  LOBBY_ROOM_ID,
 } from "#service/socketService.js";
 import gameStartService from "#service/manageGameService.js";
 import { gameWorker } from "#docker/worker/gameWorker.js";
@@ -19,20 +24,42 @@ import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { pool as dbPool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
 
+function userLabel(user) {
+  return user?.displayName || user?.username || user?.id || "USER";
+}
+
 export function registerSocketHandlers(io, socket) {
-  console.log(
-    "[Socket 연결 완료] " + socket.user.displayName + " (" + socket.id + ")",
-  );
+  console.log("[Socket 연결 완료] " + userLabel(socket.user) + " (" + socket.id + ")");
+  void markUserOnline(socket.user).then(function () {
+    return broadcastLobbyPresence(io);
+  });
 
   socket.on(SOCKET_EVENTS.JOIN_ROOM, async function (data, callback) {
     try {
       const validatedRoom = validateJoinRoom(data);
       const roomId = validatedRoom.roomId;
 
+      // 게임방으로 들어가면 로비 채팅/프레즌스 룸에서는 나감
+      if (roomId !== LOBBY_ROOM_ID) {
+        socket.leave(LOBBY_ROOM_ID);
+      }
+
       socket.join(roomId);
-      console.log(
-        socket.user.displayName + " 님이 [" + roomId + "] 방에 입장함",
-      );
+      console.log(userLabel(socket.user) + " 님이 [" + roomId + "] 방에 입장함");
+
+      if (roomId === LOBBY_ROOM_ID) {
+        await markUserOnline(socket.user);
+        const recentMessages = await getRecentMessages(roomId);
+        await broadcastLobbyPresence(io);
+        if (typeof callback === "function") {
+          callback({
+            success: true,
+            recentMessages: recentMessages,
+            onlineUsers: await listOnlineUsers(),
+          });
+        }
+        return;
+      }
 
       // Valkey에서 게임 진행 상태 확인 후 재접속 복원 처리
       const roomStateKey = "room:" + roomId + ":state";
@@ -44,7 +71,7 @@ export function registerSocketHandlers(io, socket) {
       ) {
         console.log(
           "[재접속 복원] " +
-            socket.user.displayName +
+            userLabel(socket.user) +
             " 님이 진행 중인 게임에 재접속했습니다.",
         );
         socket.emit(SOCKET_EVENTS.USER_RECONNECTED, {
@@ -62,8 +89,12 @@ export function registerSocketHandlers(io, socket) {
       const recentMessages = await getRecentMessages(roomId);
 
       socket.to(roomId).emit(SOCKET_EVENTS.USER_JOINED, {
-        message: socket.user.displayName + " 님이 입장하셨습니다.",
-        user: socket.user,
+        message: userLabel(socket.user) + " 님이 입장하셨습니다.",
+        user: {
+          id: socket.user.id,
+          username: socket.user.username,
+          displayName: userLabel(socket.user),
+        },
       });
 
       if (typeof callback === "function") {
@@ -336,18 +367,78 @@ export function registerSocketHandlers(io, socket) {
     },
   );
 
+  socket.on(SOCKET_EVENTS.REVIEW_INVITE, function (data, callback) {
+    try {
+      const roomId = data?.roomId ? String(data.roomId) : "";
+      const toUserIds = Array.isArray(data?.toUserIds)
+        ? data.toUserIds.map(String)
+        : data?.toUserId
+          ? [String(data.toUserId)]
+          : [];
+      if (!roomId || toUserIds.length === 0) {
+        throw new Error("리뷰 초대 대상이 없습니다.");
+      }
+      const payload = {
+        id: data.id || "review-" + Date.now(),
+        roomId,
+        matchId: data.matchId || null,
+        sessionId: data.sessionId || null,
+        fromUserId: String(socket.user.id),
+        fromUserName: userLabel(socket.user),
+        toUserIds,
+        problemIndices: Array.isArray(data.problemIndices) ? data.problemIndices : [],
+        createdAt: Date.now(),
+      };
+      io.to(roomId).emit(SOCKET_EVENTS.REVIEW_INVITE, payload);
+      if (typeof callback === "function") {
+        callback({ success: true, invite: payload });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, function (data, callback) {
+    try {
+      const roomId = data?.roomId ? String(data.roomId) : "";
+      if (!roomId) throw new Error("roomId가 필요합니다.");
+      const payload = {
+        inviteId: data.inviteId || data.id,
+        roomId,
+        fromUserId: data.fromUserId,
+        toUserId: String(socket.user.id),
+        toUserName: userLabel(socket.user),
+        accepted: Boolean(data.accepted),
+        problemIndices: Array.isArray(data.problemIndices) ? data.problemIndices : [],
+      };
+      io.to(roomId).emit(SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, payload);
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
   socket.on("disconnect", async function () {
     console.log(
       "[Socket 연결 종료] " +
-        socket.user.displayName +
+        userLabel(socket.user) +
         " - 대기실인 경우만 퇴장 처리합니다.",
     );
 
     try {
+      await markUserOffline(socket.user?.id);
+      await broadcastLobbyPresence(io);
+
       const { leaveRoom } = await import("../api/room/service.js");
       const roomModel = await import("../api/room/model.js");
       const joinedRooms = [...socket.rooms].filter(function (room) {
-        return room !== socket.id;
+        return room !== socket.id && room !== LOBBY_ROOM_ID;
       });
 
       for (let i = 0; i < joinedRooms.length; i++) {

@@ -50,9 +50,10 @@ export function isInviterUser(userId: string): boolean {
   return userId === getCurrentUserId();
 }
 
-/** 실제 유저 매칭 전까지 봇/비-본인 유저는 자동 수락 대상 */
+/** 봇 ID만 자동 수락 (실제 유저는 소켓 초대) */
 export function shouldAutoAcceptReviewInvite(toUserId: string): boolean {
-  return toUserId !== getCurrentUserId();
+  const id = String(toUserId || '');
+  return id.startsWith('bot-') || id.includes('demo-bot');
 }
 
 export function scheduleReviewInviteResponse(

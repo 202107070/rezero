@@ -22,4 +22,10 @@ export const SOCKET_EVENTS = {
 
   GAME_ENDED: "game_ended",
   USER_RECONNECTED: "user_reconnected",
+
+  /** 로비 접속자 목록 */
+  LOBBY_PRESENCE: "lobby_presence",
+  /** 결과 화면 리뷰 초대 */
+  REVIEW_INVITE: "review_invite",
+  REVIEW_INVITE_RESPONSE: "review_invite_response",
 };

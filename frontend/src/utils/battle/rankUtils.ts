@@ -142,16 +142,26 @@ export function buildRankingSnapshotFromRoomUsers(params: {
 export function rankingSnapshotToResultPlayers(
   snapshot: FinalRankingSnapshot,
 ): import('../resultUtils').ResultPlayer[] {
-  return snapshot.players.map((p) => ({
-    id: p.id,
-    name: p.name,
-    avatar: p.avatar,
-    ingameScore: p.ingameScore,
-    ratingScore: p.ratingScore,
-    totalSolveTime: p.totalSolveTime,
-    completionTime: p.completionTime,
-    problemResults: p.problemResults,
-    delta: 0,
-    rank: p.rank,
-  }));
+  const iconById: Record<string, string> = {
+    char1: '🤺',
+    char2: '🧙',
+    char3: '🥷',
+    char4: '🤖',
+  };
+  return snapshot.players.map((p) => {
+    const raw = String(p.avatar || '').trim();
+    const avatar = iconById[raw] || (raw.length <= 4 ? raw : '🤺') || '😎';
+    return {
+      id: p.id,
+      name: p.name,
+      avatar,
+      ingameScore: p.ingameScore,
+      ratingScore: p.ratingScore,
+      totalSolveTime: p.totalSolveTime,
+      completionTime: p.completionTime,
+      problemResults: p.problemResults,
+      delta: 0,
+      rank: p.rank,
+    };
+  });
 }

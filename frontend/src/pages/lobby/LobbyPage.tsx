@@ -28,6 +28,16 @@ import {
   setPendingJoinPassword,
 } from '../../services/roomService';
 import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
+import { apiRequest } from '../../services/apiClient';
+import {
+  joinRoomSocket,
+  LOBBY_ROOM_ID,
+  onRoomEvent,
+  ROOM_SOCKET_EVENTS,
+  sendRoomMessage,
+  type ChatMessagePayload,
+  type LobbyPresencePayload,
+} from '../../services/roomSocket';
 import {
   addFriend,
   getFollowRoomPath,
@@ -100,11 +110,97 @@ export default function LobbyPage() {
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
   const [users, setUsers] = useState<LobbyUser[]>(loadInitialUsers);
 
+  const applyOnlineUsers = useCallback(
+    (online: Array<{ userId?: string; username?: string; displayName?: string }>) => {
+      const meName = authUser.displayName || authUser.username;
+      const mapped: LobbyUser[] = online.map((user) => ({
+        name: user.displayName || user.username || user.userId || 'USER',
+        rank: '-',
+        title: meName && (user.displayName === meName || user.username === authUser.username)
+          ? getEquippedTitleId()
+          : undefined,
+      }));
+      if (meName && !mapped.some((u) => u.name === meName)) {
+        mapped.unshift({ name: meName, rank: '-', title: getEquippedTitleId() });
+      }
+      setUsers(mapped);
+    },
+    [authUser.displayName, authUser.username],
+  );
+
   useEffect(() => {
-    const me = authUser.displayName || authUser.username;
-    if (!me) return;
-    setUsers([{ name: me, rank: '-', title: getEquippedTitleId() }]);
-  }, [authUser.displayName, authUser.username]);
+    let cancelled = false;
+    const unsubs: Array<() => void> = [];
+
+    void (async () => {
+      try {
+        const joinResult = await joinRoomSocket(LOBBY_ROOM_ID);
+        if (cancelled) return;
+        if (joinResult.onlineUsers?.length) {
+          applyOnlineUsers(joinResult.onlineUsers);
+        }
+        if (joinResult.recentMessages?.length) {
+          setChatMessages((prev) => {
+            const seeded = joinResult.recentMessages!.map((item) => ({
+              sender: item.sender?.displayName || item.sender?.username || 'UNKNOWN',
+              text: String(item.message || ''),
+              time: '',
+              mode: '[전체]',
+            }));
+            return prev.length <= 1 ? [...prev, ...seeded] : prev;
+          });
+        }
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.LOBBY_PRESENCE, (payload: LobbyPresencePayload) => {
+            applyOnlineUsers(payload.users || []);
+          }),
+        );
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
+            const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
+            const text = String(payload.message || '');
+            if (!text) return;
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            setChatMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.sender === name && last.text === text) return prev;
+              return [...prev, { sender: name, text, time: timeStr, mode: '[전체]' }];
+            });
+          }),
+        );
+      } catch {
+        // REST 폴백
+        try {
+          const data = await apiRequest<{ users?: Array<{ userId?: string; username?: string; displayName?: string }> }>(
+            '/users/online',
+          );
+          if (!cancelled) applyOnlineUsers(data.users || []);
+        } catch {
+          // ignore
+        }
+      }
+    })();
+
+    const poll = window.setInterval(() => {
+      void apiRequest<{ users?: Array<{ userId?: string; username?: string; displayName?: string }> }>('/users/online')
+        .then((data) => applyOnlineUsers(data.users || []))
+        .catch(() => undefined);
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      unsubs.forEach((unsub) => {
+        try {
+          unsub();
+        } catch {
+          // ignore
+        }
+      });
+    };
+  }, [applyOnlineUsers]);
 
   const [friendNames, setFriendNames] = useState<string[]>(() => getFriendNames());
   const [showRoulette, setShowRoulette] = useState(false);
@@ -195,8 +291,9 @@ export default function LobbyPage() {
     setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text, time: timeStr, mode: '[안내]' }]);
   };
 
-  const handleSendChat = () => {
+  const handleSendChat = async () => {
     if (!chatMsg.trim()) return;
+    const text = chatMsg.trim();
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const modeLabel =
@@ -205,8 +302,23 @@ export default function LobbyPage() {
         : chatMode === 'ALL'
           ? '[전체]'
           : '[친구]';
-    setChatMessages((prev) => [...prev, { sender: authUser.username, text: chatMsg, time: timeStr, mode: modeLabel }]);
+    const senderName = authUser.displayName || authUser.username;
     setChatMsg('');
+    setChatMessages((prev) => [...prev, { sender: senderName, text, time: timeStr, mode: modeLabel }]);
+    try {
+      const result = await sendRoomMessage(LOBBY_ROOM_ID, text);
+      if (!result.success) {
+        setChatMessages((prev) => [
+          ...prev,
+          { sender: 'SYSTEM', text: result.message || '채팅 전송 실패', time: timeStr, mode: '[안내]' },
+        ]);
+      }
+    } catch {
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: 'SYSTEM', text: '채팅 서버에 연결할 수 없습니다.', time: timeStr, mode: '[안내]' },
+      ]);
+    }
   };
 
   const handleUserMenuAction = (action: UserListMenuAction, user: LobbyUser) => {

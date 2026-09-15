@@ -186,6 +186,26 @@ function scoreKey(matchId) {
   return "battle:scores:" + matchId;
 }
 
+function progressKey(matchId, userId) {
+  return "battle:progress:" + matchId + ":" + userId;
+}
+
+const CHARACTER_ICONS = {
+  char1: "🤺",
+  char2: "🧙",
+  char3: "🥷",
+  char4: "🤖",
+};
+
+function resolveAvatarIcon(avatar) {
+  const key = String(avatar || "").trim();
+  if (!key) return "😎";
+  if (CHARACTER_ICONS[key]) return CHARACTER_ICONS[key];
+  // 이미 이모지면 그대로
+  if (key.length <= 4) return key;
+  return CHARACTER_ICONS.char1;
+}
+
 function parseJson(value, fallback) {
   if (value === null || value === undefined) {
     return fallback;
@@ -312,8 +332,8 @@ function toRankingPlayer(participant, submission, match) {
 
   return {
     id: participant.userId,
-    name: participant.displayName,
-    avatar: participant.avatar || "",
+    name: participant.displayName || participant.username || participant.userId,
+    avatar: resolveAvatarIcon(participant.avatar),
     ingameScore: numberOrZero(submitted.ingameScore),
     ratingScore: numberOrZero(participant.ratingScore) || 1000,
     totalSolveTime: numberOrZero(submitted.totalSolveTime),
@@ -486,6 +506,8 @@ export async function submitBattleAnswer(input) {
     .expire(key, 60 * 60)
     .hSet(scoreKey(input.matchId), String(input.userId), String(score))
     .expire(scoreKey(input.matchId), 60 * 60)
+    .sAdd(progressKey(input.matchId, input.userId), String(input.problemIndex))
+    .expire(progressKey(input.matchId, input.userId), 60 * 60)
     .exec();
 
   const io = getSocket();
@@ -495,19 +517,28 @@ export async function submitBattleAnswer(input) {
       userId,
       score: Number(value) || 0,
     }));
+
+    const participants = await battleModel.findMatchParticipantsForResult(input.matchId);
+    const submitStatuses = [];
+    for (let i = 0; i < participants.length; i++) {
+      const uid = String(participants[i].userId);
+      const solved = await redisClient.sMembers(progressKey(input.matchId, uid));
+      for (let j = 0; j < solved.length; j++) {
+        submitStatuses.push({
+          userId: uid,
+          problemIndex: Number(solved[j]),
+          isSubmitted: true,
+          isCorrect: true,
+        });
+      }
+    }
+
     socketGameService.broadcastGameState(io, String(matchProblem.roomId), {
       roomId: String(matchProblem.roomId),
       question: { index: input.problemIndex },
       remainingTime: null,
       scores,
-      submitStatuses: [
-        {
-          userId: String(input.userId),
-          problemIndex: input.problemIndex,
-          isSubmitted: true,
-          isCorrect,
-        },
-      ],
+      submitStatuses,
     });
   }
 

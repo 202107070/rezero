@@ -9,18 +9,34 @@ import { ResultRankingPanel } from '../../components/result/ResultRankingPanel/R
 import { ResultReviewFooter } from '../../components/result/ResultReviewFooter/ResultReviewFooter';
 import { ResultTeamPanel } from '../../components/result/ResultTeamPanel/ResultTeamPanel';
 import { ReviewInviteModal } from '../../components/result/ReviewInviteModal/ReviewInviteModal';
+import { ReviewIncomingInviteModal } from '../../components/result/ReviewIncomingInviteModal/ReviewIncomingInviteModal';
 import { ReviewProblemView } from '../../components/result/ReviewProblemView/ReviewProblemView';
 import {
   UserListContextMenu,
   type UserListMenuAction,
 } from '../../components/lobby/UserListContextMenu/UserListContextMenu';
+import { CHARACTERS } from '../../constants/roomConstants';
 import { checkNewTitles, type TitleDef } from '../../constants/titleTypes';
 import { ROUTES } from '../../constants/routes';
 import { ENABLE_RESULT_BOT_DEPARTURE, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
 import { useAuthUser } from '../../contexts/AuthContext';
 import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot, saveFinalRankingSnapshot } from '../../services/battleSessionService';
 import { fetchRoom, leaveRoom } from '../../services/roomService';
-import { disconnectRoomSocket, getActiveRoomId, joinRoomSocket, setActiveRoomId } from '../../services/roomSocket';
+import {
+  disconnectRoomSocket,
+  emitReviewInvite,
+  emitReviewInviteResponse,
+  getActiveRoomId,
+  joinRoomSocket,
+  onRoomEvent,
+  ROOM_SOCKET_EVENTS,
+  sendRoomMessage,
+  setActiveRoomId,
+  type ChatMessagePayload,
+  type ReviewInviteResponsePayload,
+  type ReviewInviteSocketPayload,
+} from '../../services/roomSocket';
+import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
 import {
   getBattleDemoState,
   getBattleSettings,
@@ -118,7 +134,16 @@ export default function ResultPage() {
   const navigate = useNavigate();
   const authUser = useAuthUser();
   const myUserId = authUser.id;
-  const myUserName = authUser.username;
+  const myUserName = authUser.displayName || authUser.username || getCurrentDisplayName() || getCurrentUserName();
+
+  const resolveAvatarIcon = (avatar?: string) => {
+    const key = String(avatar || '').trim();
+    if (!key) return '😎';
+    const mapped = CHARACTERS.find((c) => c.id === key)?.icon;
+    if (mapped) return mapped;
+    if (key.length <= 4) return key;
+    return '🤺';
+  };
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('roomId') || '';
   const sessionId = getSessionId(roomId);
@@ -223,8 +248,86 @@ export default function ResultPage() {
     player: ResultPlayer | null;
   }>({ open: false, x: 0, y: 0, player: null });
   const botAcceptTimerRef = useRef<(() => void) | null>(null);
+  const [incomingReviewInvite, setIncomingReviewInvite] = useState<ReviewInviteSocketPayload | null>(null);
+  const pendingInviteIdRef = useRef<string | null>(null);
 
   const reviewSelectMode = reviewPhase === 'selecting';
+
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    const unsubs: Array<() => void> = [];
+
+    void (async () => {
+      try {
+        await joinRoomSocket(roomId);
+        if (cancelled) return;
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
+            const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
+            const text = String(payload.message || '');
+            if (!text) return;
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            setChatMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.sender === name && last.text === text) return prev;
+              return [...prev, { sender: name, text, type: 'user' as const, mode: '[전체]', time: timeStr }];
+            });
+          }),
+        );
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.REVIEW_INVITE, (payload: ReviewInviteSocketPayload) => {
+            if (String(payload.fromUserId) === String(myUserId)) return;
+            if (!payload.toUserIds?.map(String).includes(String(myUserId))) return;
+            setIncomingReviewInvite(payload);
+          }),
+        );
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, (payload: ReviewInviteResponsePayload) => {
+            // 내가 보낸 초대에 대한 응답만 처리
+            if (String(payload.fromUserId || '') !== String(myUserId)) return;
+            if (payload.accepted) {
+              setInviteWaiting(false);
+              setShowInviteModal(false);
+              setReviewPartnerIds([String(payload.toUserId)]);
+              if (Array.isArray(payload.problemIndices) && payload.problemIndices.length > 0) {
+                setSelectedReviewProblems(new Set(payload.problemIndices));
+              }
+              setReviewPhase('reviewing');
+            } else {
+              setInviteWaiting(false);
+              setShowInviteModal(false);
+              setChatMessages((prev) => [
+                ...prev,
+                {
+                  sender: 'SYSTEM',
+                  text: `${payload.toUserName || '상대'}님이 리뷰 초대를 거절했습니다.`,
+                  type: 'sys',
+                },
+              ]);
+            }
+          }),
+        );
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubs.forEach((unsub) => {
+        try {
+          unsub();
+        } catch {
+          // ignore
+        }
+      });
+    };
+  }, [roomId, myUserId]);
 
   useEffect(() => {
     if (!matchId) return;
@@ -245,8 +348,8 @@ export default function ResultPage() {
           totalProblems: Number(ranking.totalProblems) || 0,
           players: ranking.players.map((player) => ({
             id: String(player.id),
-            name: player.name,
-            avatar: player.avatar || '',
+            name: player.name || String(player.id),
+            avatar: resolveAvatarIcon(player.avatar),
             ingameScore: Number(player.ingameScore) || 0,
             ratingScore: Number(player.ratingScore) || 1000,
             totalSolveTime: Number(player.totalSolveTime) || 0,
@@ -514,16 +617,30 @@ export default function ResultPage() {
       createdAt: Date.now(),
     };
     persistReviewInvite(invite);
+    pendingInviteIdRef.current = invite.id;
     setInviteWaiting(true);
 
-    if (targets.every(shouldAutoAcceptReviewInvite)) {
+    const botTargets = targets.filter((id) => shouldAutoAcceptReviewInvite(id));
+    const humanTargets = targets.filter((id) => !shouldAutoAcceptReviewInvite(id));
+
+    if (humanTargets.length > 0 && roomId) {
+      void emitReviewInvite(roomId, {
+        id: invite.id,
+        sessionId,
+        matchId: matchId || undefined,
+        toUserIds: humanTargets,
+        problemIndices: invite.problemIndices,
+      }).catch(() => undefined);
+    }
+
+    if (botTargets.length > 0 && humanTargets.length === 0) {
       botAcceptTimerRef.current?.();
       botAcceptTimerRef.current = scheduleReviewInviteResponse(
         sessionId,
         () => {
           setInviteWaiting(false);
           setShowInviteModal(false);
-          setReviewPartnerIds(targets);
+          setReviewPartnerIds(botTargets);
           setReviewPhase('reviewing');
         },
         () => {
@@ -534,6 +651,31 @@ export default function ResultPage() {
         true,
       );
     }
+  };
+
+  const handleAcceptIncomingReview = () => {
+    if (!incomingReviewInvite || !roomId) return;
+    void emitReviewInviteResponse(roomId, {
+      inviteId: incomingReviewInvite.id,
+      fromUserId: incomingReviewInvite.fromUserId,
+      accepted: true,
+      problemIndices: incomingReviewInvite.problemIndices,
+    });
+    setSelectedReviewProblems(new Set(incomingReviewInvite.problemIndices || []));
+    setReviewPartnerIds([incomingReviewInvite.fromUserId]);
+    setReviewPhase('reviewing');
+    setIncomingReviewInvite(null);
+  };
+
+  const handleRejectIncomingReview = () => {
+    if (!incomingReviewInvite || !roomId) return;
+    void emitReviewInviteResponse(roomId, {
+      inviteId: incomingReviewInvite.id,
+      fromUserId: incomingReviewInvite.fromUserId,
+      accepted: false,
+      problemIndices: incomingReviewInvite.problemIndices,
+    });
+    setIncomingReviewInvite(null);
   };
 
   const handleExitReview = () => {
@@ -614,8 +756,9 @@ export default function ResultPage() {
     .filter(Boolean)
     .join(', ');
 
-  const handleSendChat = () => {
+  const handleSendChat = async () => {
     if (!chatInput.trim()) return;
+    const text = chatInput.trim();
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const modeLabel =
@@ -624,11 +767,27 @@ export default function ResultPage() {
         : chatMode === 'ALL'
           ? '[전체]'
           : '[친구]';
+    setChatInput('');
     setChatMessages((prev) => [
       ...prev,
-      { sender: myUserName, text: chatInput, type: 'user', mode: modeLabel, time: timeStr },
+      { sender: myUserName, text, type: 'user', mode: modeLabel, time: timeStr },
     ]);
-    setChatInput('');
+    if (roomId) {
+      try {
+        const result = await sendRoomMessage(roomId, text);
+        if (!result.success) {
+          setChatMessages((prev) => [
+            ...prev,
+            { sender: 'SYSTEM', text: result.message || '채팅 전송 실패', type: 'sys' },
+          ]);
+        }
+      } catch {
+        setChatMessages((prev) => [
+          ...prev,
+          { sender: 'SYSTEM', text: '채팅 서버에 연결할 수 없습니다.', type: 'sys' },
+        ]);
+      }
+    }
   };
 
   const appendSystemChat = (text: string) => {
@@ -722,6 +881,8 @@ export default function ResultPage() {
         // ignore
       }
     }
+    setActiveRoomId(null);
+    // 로비에서 새 소켓을 붙일 수 있도록 강제 종료
     disconnectRoomSocket(true);
     navigate(ROUTES.LOBBY);
   };
@@ -846,9 +1007,17 @@ export default function ResultPage() {
         allowMultiple={isVersusMany}
         waiting={inviteWaiting}
         inviteTargetLabel={inviteTargetLabel}
-        onToggleTarget={toggleInviteTarget}
         onInvite={handleInvite}
+        onToggleTarget={toggleInviteTarget}
         onClose={handleCloseInviteModal}
+      />
+
+      <ReviewIncomingInviteModal
+        show={Boolean(incomingReviewInvite)}
+        fromUserName={incomingReviewInvite?.fromUserName || '상대'}
+        problemCount={incomingReviewInvite?.problemIndices?.length || 0}
+        onAccept={handleAcceptIncomingReview}
+        onReject={handleRejectIncomingReview}
       />
 
       <ResultPopup

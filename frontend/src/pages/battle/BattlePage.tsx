@@ -602,19 +602,31 @@ export default function BattlePage() {
       myUserId: myId || undefined,
     });
     if (isLiveMatch) {
-      // 라이브: 데모 자동풀이 비활성 (음수 스케줄 = 절대 자동 클리어 안 됨)
-      setBattleBots(
-        roster.map((bot) => ({
+      setBattleBots((prev) => {
+        // 이미 구성된 상대 목록이 있으면 진행률을 유지한 채 이름/캐릭터만 갱신
+        if (prev.length > 0) {
+          return prev.map((bot) => {
+            const next = roster.find((item) => item.id === bot.id);
+            if (!next) return bot;
+            return {
+              ...bot,
+              name: next.name || bot.name,
+              avatar: next.avatar || bot.avatar,
+              solveScheduleByProblem: problems.map(() => -1),
+            };
+          });
+        }
+        return roster.map((bot) => ({
           ...bot,
           solvedProblems: [],
           solveScheduleByProblem: problems.map(() => -1),
           status: 'playing',
-        })),
-      );
+        }));
+      });
       return;
     }
     setBattleBots(roster);
-  }, [problems.length, sessionId, roomMode, maxPlayersParam, langKey, totalBattleSeconds, roomRoster, isLiveMatch]);
+  }, [problems.length, sessionId, roomMode, maxPlayersParam, langKey, totalBattleSeconds, roomRoster, isLiveMatch, problems]);
 
   useEffect(() => {
     if (!demoIsVersusMany && battleBots.length === 1) {
@@ -913,24 +925,55 @@ export default function BattlePage() {
 
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.GAME_STATE_UPDATE, (payload: GameStateUpdatePayload) => {
-            if (!Array.isArray(payload.scores) || payload.scores.length === 0) return;
             const myId = getCurrentUserId();
+            const scores = Array.isArray(payload.scores) ? payload.scores : [];
+            const statuses = Array.isArray(payload.submitStatuses) ? payload.submitStatuses : [];
+
             setBattleBots((prev) =>
               prev.map((bot) => {
                 const userId = String(bot.id).replace(/^player-/, '');
-                const entry = payload.scores?.find(
-                  (item) => String(item.userId) === userId || String(item.userId) === String(bot.id),
+                const matchesUser = (uid: string) =>
+                  String(uid) === userId ||
+                  String(uid) === String(bot.id) ||
+                  `player-${uid}` === String(bot.id);
+
+                if (matchesUser(String(myId))) return bot;
+
+                const entry = scores.find((item) => matchesUser(String(item.userId)));
+                const mineStatuses = statuses.filter(
+                  (item) => matchesUser(String(item.userId)) && item.isSubmitted,
                 );
-                if (!entry || String(entry.userId) === String(myId)) return bot;
-                const score = Number(entry.score) || 0;
-                const approxSolved = Math.min(
-                  problems.length,
-                  Math.max(0, Math.floor(score / Math.max(1, BATTLE_CORRECT_SCORE))),
-                );
+                const fromStatus = mineStatuses
+                  .map((item) => Number(item.problemIndex))
+                  .filter((idx) => Number.isInteger(idx) && idx >= 0);
+
+                let solvedProblems = Array.isArray(bot.solvedProblems) ? [...bot.solvedProblems] : [];
+                fromStatus.forEach((idx) => {
+                  if (!solvedProblems.includes(idx)) solvedProblems.push(idx);
+                });
+                solvedProblems.sort((a, b) => a - b);
+
+                if (entry) {
+                  const score = Number(entry.score) || 0;
+                  const approxSolved = Math.min(
+                    problems.length,
+                    Math.max(0, Math.floor(score / Math.max(1, BATTLE_CORRECT_SCORE))),
+                  );
+                  if (approxSolved > solvedProblems.length) {
+                    solvedProblems = Array.from({ length: approxSolved }, (_, i) => i);
+                  }
+                  return {
+                    ...bot,
+                    score,
+                    solvedProblems,
+                    status: 'playing',
+                  };
+                }
+
+                if (fromStatus.length === 0) return bot;
                 return {
                   ...bot,
-                  score,
-                  solvedProblems: Array.from({ length: approxSolved }, (_, i) => i),
+                  solvedProblems,
                   status: 'playing',
                 };
               }),

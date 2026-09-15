@@ -83,7 +83,11 @@ export async function signupUser(input) {
 
   return {
     user: toSignupUserResponse(user),
-    token: createAccessToken(user.id),
+    token: createAccessToken({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName || user.username,
+    }),
   };
 }
 
@@ -107,7 +111,11 @@ export async function loginUser(input) {
 
   return {
     user: await getUserProfile(user),
-    token: createAccessToken(user.id),
+    token: createAccessToken({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName || user.username,
+    }),
   };
 }
 

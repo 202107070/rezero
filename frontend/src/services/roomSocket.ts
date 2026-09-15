@@ -22,7 +22,44 @@ export const ROOM_SOCKET_EVENTS = {
   EXEC_RESULT: 'exec_result',
   REQUEST_NEXT_QUESTION: 'request_next_question',
   NEXT_QUESTION_STARTED: 'next_question_started',
+  LOBBY_PRESENCE: 'lobby_presence',
+  REVIEW_INVITE: 'review_invite',
+  REVIEW_INVITE_RESPONSE: 'review_invite_response',
 } as const;
+
+export const LOBBY_ROOM_ID = 'lobby';
+
+export interface LobbyPresenceUser {
+  userId: string;
+  username?: string;
+  displayName?: string;
+}
+
+export interface LobbyPresencePayload {
+  users: LobbyPresenceUser[];
+}
+
+export interface ReviewInviteSocketPayload {
+  id: string;
+  roomId: string;
+  matchId?: string | null;
+  sessionId?: string | null;
+  fromUserId: string;
+  fromUserName: string;
+  toUserIds: string[];
+  problemIndices: number[];
+  createdAt: number;
+}
+
+export interface ReviewInviteResponsePayload {
+  inviteId?: string;
+  roomId: string;
+  fromUserId?: string;
+  toUserId: string;
+  toUserName?: string;
+  accepted: boolean;
+  problemIndices?: number[];
+}
 
 export interface BattleItemUsedPayload {
   fromUserId: string;
@@ -177,10 +214,16 @@ export function onRoomEvent<T extends AnyHandler>(event: string, handler: T): ()
 
 export function joinRoomSocket(
   roomId: string | number,
-): Promise<{ success: boolean; message?: string; recentMessages?: ChatMessagePayload[] }> {
+): Promise<{
+  success: boolean;
+  message?: string;
+  recentMessages?: ChatMessagePayload[];
+  onlineUsers?: LobbyPresenceUser[];
+}> {
   const client = getRoomSocket();
   const id = String(roomId);
-  setActiveRoomId(id);
+  // 숫자 방만 activeRoom 으로 추적 (lobby 는 leaveRoom 대상 아님)
+  if (/^\d+$/.test(id)) setActiveRoomId(id);
   return new Promise((resolve) => {
     client.emit(
       ROOM_SOCKET_EVENTS.JOIN_ROOM,
@@ -189,11 +232,13 @@ export function joinRoomSocket(
         success?: boolean;
         message?: string;
         recentMessages?: ChatMessagePayload[];
+        onlineUsers?: LobbyPresenceUser[];
       }) => {
         resolve({
           success: Boolean(response?.success),
           message: response?.message,
           recentMessages: response?.recentMessages || [],
+          onlineUsers: response?.onlineUsers || [],
         });
       },
     );
@@ -260,6 +305,68 @@ export function toggleReadySocket(
           success: Boolean(response?.success),
           message: response?.message,
           readyState: response?.readyState,
+        });
+      },
+    );
+  });
+}
+
+export function emitReviewInvite(
+  roomId: string | number,
+  params: {
+    id: string;
+    sessionId?: string;
+    matchId?: string;
+    toUserIds: string[];
+    problemIndices: number[];
+  },
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.REVIEW_INVITE,
+      {
+        roomId: String(roomId),
+        id: params.id,
+        sessionId: params.sessionId,
+        matchId: params.matchId,
+        toUserIds: params.toUserIds,
+        problemIndices: params.problemIndices,
+      },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitReviewInviteResponse(
+  roomId: string | number,
+  params: {
+    inviteId: string;
+    fromUserId?: string;
+    accepted: boolean;
+    problemIndices?: number[];
+  },
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.REVIEW_INVITE_RESPONSE,
+      {
+        roomId: String(roomId),
+        inviteId: params.inviteId,
+        fromUserId: params.fromUserId,
+        accepted: params.accepted,
+        problemIndices: params.problemIndices,
+      },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
         });
       },
     );

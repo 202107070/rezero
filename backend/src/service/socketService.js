@@ -4,6 +4,64 @@ import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { socketDto } from "#dto/socketDto.js";
 import * as roomModel from "../api/room/model.js";
 
+const ONLINE_SET_KEY = "presence:online";
+const ONLINE_META_PREFIX = "presence:meta:";
+export const LOBBY_ROOM_ID = "lobby";
+
+export async function markUserOnline(user) {
+  if (!user?.id) return;
+  const userId = String(user.id);
+  try {
+    await redisClient.sAdd(ONLINE_SET_KEY, userId);
+    await redisClient.hSet(ONLINE_META_PREFIX + userId, {
+      userId,
+      username: String(user.username || ""),
+      displayName: String(user.displayName || user.username || userId),
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("[markUserOnline] " + err.message);
+  }
+}
+
+export async function markUserOffline(userId) {
+  if (!userId) return;
+  const id = String(userId);
+  try {
+    await redisClient.sRem(ONLINE_SET_KEY, id);
+    await redisClient.del(ONLINE_META_PREFIX + id);
+  } catch (err) {
+    console.error("[markUserOffline] " + err.message);
+  }
+}
+
+export async function listOnlineUsers() {
+  try {
+    const ids = await redisClient.sMembers(ONLINE_SET_KEY);
+    const users = [];
+    for (let i = 0; i < ids.length; i++) {
+      const meta = await redisClient.hGetAll(ONLINE_META_PREFIX + ids[i]);
+      if (meta && meta.userId) {
+        users.push({
+          userId: meta.userId,
+          username: meta.username || "",
+          displayName: meta.displayName || meta.username || meta.userId,
+        });
+      }
+    }
+    return users;
+  } catch (err) {
+    console.error("[listOnlineUsers] " + err.message);
+    return [];
+  }
+}
+
+export async function broadcastLobbyPresence(io) {
+  if (!io) return;
+  const users = await listOnlineUsers();
+  io.to(LOBBY_ROOM_ID).emit(SOCKET_EVENTS.LOBBY_PRESENCE, { users });
+}
+
 export const saveInfoService = {
   async saveGameResult(params) {
     const matchId = params.matchId;
@@ -130,7 +188,9 @@ export async function saveAndFormatMessage(params) {
     roomId: roomId,
     sender: {
       id: sender.id,
-      displayName: sender.displayName,
+      username: sender.username || "",
+      displayName:
+        sender.displayName || sender.username || String(sender.id || "UNKNOWN"),
     },
     message: message,
     timestamp: new Date().toISOString(),

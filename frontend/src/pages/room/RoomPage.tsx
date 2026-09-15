@@ -196,14 +196,17 @@ export default function RoomPage() {
     setRoomDetail(room);
     const mapped = mapParticipantsToPlayers(room).map((player) => {
       if (!player) return player;
-      if (player.name && player.name !== 'UNKNOWN') return player;
-      if (String(player.userId) === String(getCurrentUserId())) {
-        return {
-          ...player,
-          name: getCurrentDisplayName() || getCurrentUserName() || player.userId || 'ME',
-        };
-      }
-      return player;
+      const resolvedName =
+        (player.name && player.name !== 'UNKNOWN' ? player.name : '') ||
+        (String(player.userId) === String(getCurrentUserId())
+          ? getCurrentDisplayName() || getCurrentUserName() || player.userId
+          : '') ||
+        player.userId ||
+        'UNKNOWN';
+      return {
+        ...player,
+        name: resolvedName,
+      };
     });
     setPlayers(mapped);
     setMyLanguage(LANG_MAP[room.lang] || 'java');

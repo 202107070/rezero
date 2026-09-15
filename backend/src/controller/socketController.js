@@ -1,7 +1,8 @@
 import jwt from "jsonwebtoken";
 import { authConfig } from "#config/authConfig.js";
+import * as userModel from "../api/user/model.js";
 
-export function socketAuthMiddleware(socket, next) {
+export async function socketAuthMiddleware(socket, next) {
   let token;
   if (socket.handshake.auth && socket.handshake.auth.token) {
     token = socket.handshake.auth.token;
@@ -25,11 +26,28 @@ export function socketAuthMiddleware(socket, next) {
     }
 
     const decoded = jwt.verify(actualToken, authConfig.jwtSecret);
+    const userId = decoded.id || decoded.sub;
+
+    let username = decoded.username;
+    let displayName = decoded.displayName;
+
+    // 기존 토큰(sub만 있음) / 클레임 누락 시 DB에서 닉네임 복구
+    if (!displayName || !username) {
+      try {
+        const user = await userModel.findUserById(userId);
+        if (user) {
+          username = username || user.username;
+          displayName = displayName || user.displayName || user.username;
+        }
+      } catch {
+        // ignore DB lookup failure
+      }
+    }
 
     socket.user = {
-      id: decoded.id || decoded.sub,
-      username: decoded.username,
-      displayName: decoded.displayName,
+      id: userId,
+      username: username || "",
+      displayName: displayName || username || String(userId || "USER"),
     };
 
     next();

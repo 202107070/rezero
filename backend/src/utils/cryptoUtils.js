@@ -21,8 +21,21 @@ export function comparePassword(password, passwordHash) {
   return bcrypt.compare(password, passwordHash);
 }
 
-export function createAccessToken(userId) {
-  return jwt.sign({ sub: userId }, getJwtSecret(), {
+/** @param {string|{id:string,username?:string,displayName?:string}} userOrId */
+export function createAccessToken(userOrId) {
+  if (typeof userOrId === "string") {
+    return jwt.sign({ sub: userOrId }, getJwtSecret(), {
+      expiresIn: env.jwtExpiresIn,
+    });
+  }
+
+  const payload = {
+    sub: userOrId.id,
+    username: userOrId.username || undefined,
+    displayName: userOrId.displayName || userOrId.username || undefined,
+  };
+
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: env.jwtExpiresIn,
   });
 }
