@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import mariadb from "mariadb";
 import bcrypt from "bcryptjs";
+import { createClient } from "redis";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
@@ -30,6 +31,32 @@ const pool = mariadb.createPool({
   connectionLimit: 2,
   connectTimeout: 8000,
 });
+
+async function clearPersistedChat() {
+  const redisClient = createClient({
+    socket: {
+      host: process.env.REDIS_HOST || "127.0.0.1",
+      port: Number(process.env.REDIS_PORT || 6379),
+    },
+    password: process.env.REDIS_PASSWORD || undefined,
+  });
+  try {
+    await redisClient.connect();
+    const messageKeys = await redisClient.keys("room:*:messages");
+    const legacyKeys = await redisClient.keys("chat:room:*:recent");
+    const keys = [...messageKeys, ...legacyKeys];
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+    console.log(`cleared persisted chat keys: ${keys.length}`);
+  } catch (error) {
+    console.warn("chat cache cleanup skipped:", error.message || error);
+  } finally {
+    if (redisClient.isOpen) {
+      await redisClient.quit();
+    }
+  }
+}
 
 async function main() {
   if (!process.env.DB_USER || !process.env.DB_NAME) {
@@ -132,6 +159,7 @@ async function main() {
     }
 
     await conn.commit();
+    await clearPersistedChat();
 
     const after = await conn.query(
       "SELECT id, title, status, mode FROM rooms WHERE status <> 'CLOSED' ORDER BY id",

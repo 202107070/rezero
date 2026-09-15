@@ -61,6 +61,7 @@ async function saveLeftRoomState(roomId, userId, result) {
       roomStateKey(roomId),
       roomParticipantsKey(roomId),
       roomReadyKey(roomId),
+      `room:${roomId}:messages`,
       `chat:room:${roomId}:recent`,
       `room:kicked:${roomId}`,
     ]);
@@ -83,6 +84,7 @@ async function clearRoomState(roomId) {
     roomStateKey(roomId),
     roomParticipantsKey(roomId),
     roomReadyKey(roomId),
+    `room:${roomId}:messages`,
     `chat:room:${roomId}:recent`,
     `room:kicked:${roomId}`,
   ]);

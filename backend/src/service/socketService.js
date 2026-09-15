@@ -224,6 +224,38 @@ export async function getRecentMessages(roomId) {
   }
 }
 
+/** 재입장 시 이전 대화를 보여주지 않도록 Redis에 쌓인 채팅을 비웁니다. */
+export async function clearRoomChatMessages(roomId) {
+  if (!roomId) return;
+  try {
+    await redisClient.del([
+      "room:" + roomId + ":messages",
+      "chat:room:" + roomId + ":recent",
+    ]);
+  } catch (error) {
+    console.error("[clearRoomChatMessages] Redis Error: " + error.message);
+  }
+}
+
+/** 서버 기동 시 남아 있는 채팅 캐시를 모두 제거합니다. */
+export async function clearAllPersistedChatMessages() {
+  try {
+    const messageKeys = await redisClient.keys("room:*:messages");
+    const legacyKeys = await redisClient.keys("chat:room:*:recent");
+    const keys = [...messageKeys, ...legacyKeys];
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+    if (keys.length > 0) {
+      console.log(
+        "[socketService] persisted chat cleared (" + keys.length + " keys)",
+      );
+    }
+  } catch (error) {
+    console.error("[clearAllPersistedChatMessages] Redis Error: " + error.message);
+  }
+}
+
 export async function saveReadyState(params) {
   const roomId = params.roomId;
   const userId = String(params.userId);
@@ -307,6 +339,8 @@ export async function resetRoomAfterMatch(roomId) {
       "room:" + id + ":problems",
       "room:" + id + ":state",
       "room:" + id + ":participants",
+      "room:" + id + ":messages",
+      "chat:room:" + id + ":recent",
     ]);
 
     const multi = redisClient.multi();

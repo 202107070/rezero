@@ -41,4 +41,8 @@ export async function connectRedis() {
   }
   await redisClient.ping();
   console.log("[Valkey] connected");
+  const { clearAllPersistedChatMessages } = await import(
+    "#service/socketService.js"
+  );
+  await clearAllPersistedChatMessages();
 }

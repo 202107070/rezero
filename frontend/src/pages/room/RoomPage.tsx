@@ -284,17 +284,7 @@ export default function RoomPage() {
         if (!cancelled) {
           applyRoom(room);
           try {
-            const joinResult = await joinRoomSocket(numericRoomId);
-            if (joinResult.recentMessages?.length) {
-              setMessages((prev) => {
-                const seeded = joinResult.recentMessages!.map((item: ChatMessagePayload) => ({
-                  type: 'user' as const,
-                  name: item.sender?.displayName || item.sender?.username || 'UNKNOWN',
-                  text: String(item.message || ''),
-                }));
-                return prev.length <= 2 ? [...prev, ...seeded] : prev;
-              });
-            }
+            await joinRoomSocket(numericRoomId);
 
             const unsubs: Array<() => void> = [];
             const enterBattleFromMatch = (matchLike: GameStartedPayload) => {

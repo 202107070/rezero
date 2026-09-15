@@ -215,8 +215,6 @@ export default function ResultPage() {
 
   const [chatMessages, setChatMessages] = useState([
     { sender: 'SYSTEM', text: '매치가 종료되었습니다.', type: 'sys' as const },
-    { sender: '알고리즘깎는노인', text: '수고하셨습니다.', type: 'user' as const },
-    { sender: myUserName, text: '고생하셨습니다!', type: 'user' as const },
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatMode, setChatMode] = useState('ALL');

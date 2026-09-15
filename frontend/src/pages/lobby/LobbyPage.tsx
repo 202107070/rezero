@@ -143,17 +143,6 @@ export default function LobbyPage() {
         if (joinResult.onlineUsers?.length) {
           applyOnlineUsers(joinResult.onlineUsers);
         }
-        if (joinResult.recentMessages?.length) {
-          setChatMessages((prev) => {
-            const seeded = joinResult.recentMessages!.map((item) => ({
-              sender: item.sender?.displayName || item.sender?.username || 'UNKNOWN',
-              text: String(item.message || ''),
-              time: '',
-              mode: '[전체]',
-            }));
-            return prev.length <= 1 ? [...prev, ...seeded] : prev;
-          });
-        }
 
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.LOBBY_PRESENCE, (payload: LobbyPresencePayload) => {

@@ -9,7 +9,6 @@ import {
 } from "#dto/socketDto.js";
 import {
   saveAndFormatMessage,
-  getRecentMessages,
   saveReadyState,
   socketGameService,
   markUserOnline,
@@ -57,12 +56,11 @@ export function registerSocketHandlers(io, socket) {
 
       if (roomId === LOBBY_ROOM_ID) {
         await markUserOnline(socket.user);
-        const recentMessages = await getRecentMessages(roomId);
         await broadcastLobbyPresence(io);
         if (typeof callback === "function") {
           callback({
             success: true,
-            recentMessages: recentMessages,
+            recentMessages: [],
             onlineUsers: await listOnlineUsers(),
           });
         }
@@ -92,8 +90,6 @@ export function registerSocketHandlers(io, socket) {
         });
       }
 
-      const recentMessages = await getRecentMessages(roomId);
-
       socket.to(roomId).emit(SOCKET_EVENTS.USER_JOINED, {
         message: userLabel(socket.user) + " 님이 입장하셨습니다.",
         user: {
@@ -104,7 +100,7 @@ export function registerSocketHandlers(io, socket) {
       });
 
       if (typeof callback === "function") {
-        callback({ success: true, recentMessages: recentMessages });
+        callback({ success: true, recentMessages: [] });
       }
     } catch (error) {
       if (typeof callback === "function") {
