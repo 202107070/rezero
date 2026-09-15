@@ -50,11 +50,22 @@ export async function createBattle(roomId, userId, options = {}) {
     );
   }
 
-  const problems = await selectProblems({
-    difficulty: room.difficulty,
-    language: room.language,
-    count: Number(room.problemCount),
-  });
+  let problems;
+  try {
+    problems = await selectProblems({
+      difficulty: room.difficulty,
+      language: room.language,
+      count: Number(room.problemCount),
+    });
+  } catch (error) {
+    // rooms/start 이후 매치 생성 실패 시 대기 상태로 되돌려 재시작 가능하게
+    await roomModel.markRoomWaiting(roomId);
+    await redisClient.hSet(`room:${roomId}:state`, {
+      status: "WAITING",
+      updatedAt: new Date().toISOString(),
+    });
+    throw error;
+  }
   const matchId = createMatchId(room.id);
   let roundSeconds = DEFAULT_ROUND_SECONDS;
 

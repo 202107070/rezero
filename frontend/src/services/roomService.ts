@@ -57,10 +57,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalizeParticipant(raw: unknown): RoomParticipant {
   const participant = asRecord(raw);
+  const name =
+    String(participant.name || '').trim() ||
+    String(participant.displayName || '').trim() ||
+    String(participant.username || '').trim() ||
+    String(participant.userId || '').trim();
   return {
     id: Number(participant.id) || 0,
     userId: String(participant.userId ?? ''),
-    name: String(participant.name || ''),
+    name,
     slotIndex: Number(participant.slotIndex) || 0,
     isHost: Boolean(participant.isHost),
     isReady: Boolean(participant.isReady),
@@ -178,12 +183,16 @@ export function emptyPlayerSlots(): (RoomPlayer | null)[] {
 function toRoomPlayer(participant: RoomParticipant): RoomPlayer {
   const character =
     CHARACTERS.find((item) => item.id === participant.character)?.icon || participant.character || '🤺';
+  const name =
+    String(participant.name || '').trim() ||
+    String(participant.userId || '').trim() ||
+    'UNKNOWN';
 
   return {
     id: participant.id,
     userId: participant.userId,
-    name: participant.name,
-    rank: getTierByUserName(participant.name),
+    name,
+    rank: getTierByUserName(name),
     isHost: participant.isHost,
     isReady: participant.isReady,
     language: participant.language,

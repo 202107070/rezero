@@ -4,10 +4,16 @@ function toTimestamp(value) {
 }
 
 export function toParticipantResponse(participant) {
+  const displayName =
+    (participant.displayName && String(participant.displayName).trim()) ||
+    (participant.username && String(participant.username).trim()) ||
+    String(participant.userId || "");
+
   return {
     id: Number(participant.id),
     userId: participant.userId,
-    name: participant.displayName,
+    name: displayName,
+    username: participant.username ? String(participant.username) : undefined,
     slotIndex: Number(participant.slotIndex),
     isHost: Boolean(participant.isHost),
     isReady: Boolean(participant.isReady),

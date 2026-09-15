@@ -27,7 +27,7 @@ import {
   getRoomErrorMessage,
   setPendingJoinPassword,
 } from '../../services/roomService';
-import { getCurrentUserName } from '../../services/authService';
+import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
 import {
   addFriend,
   getFollowRoomPath,
@@ -58,7 +58,7 @@ import './lobby.css';
 const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
 
 function loadInitialUsers(): LobbyUser[] {
-  const me = getCurrentUserName();
+  const me = getCurrentDisplayName() || getCurrentUserName();
   if (!me) return [];
   return [{ name: me, rank: '-', title: getEquippedTitleId() }];
 }
@@ -98,7 +98,14 @@ export default function LobbyPage() {
   const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
-  const [users] = useState<LobbyUser[]>(loadInitialUsers);
+  const [users, setUsers] = useState<LobbyUser[]>(loadInitialUsers);
+
+  useEffect(() => {
+    const me = authUser.displayName || authUser.username;
+    if (!me) return;
+    setUsers([{ name: me, rank: '-', title: getEquippedTitleId() }]);
+  }, [authUser.displayName, authUser.username]);
+
   const [friendNames, setFriendNames] = useState<string[]>(() => getFriendNames());
   const [showRoulette, setShowRoulette] = useState(false);
   const [showInventoryItemsModal, setShowInventoryItemsModal] = useState(false);
@@ -157,9 +164,22 @@ export default function LobbyPage() {
     const onPageShow = () => {
       void refreshRooms();
     };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshRooms();
+      }
+    };
+    const timer = window.setInterval(() => {
+      void refreshRooms();
+    }, 2500);
     window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('focus', onPageShow);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('focus', onPageShow);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [refreshRooms]);
 

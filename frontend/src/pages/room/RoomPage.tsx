@@ -192,7 +192,18 @@ export default function RoomPage() {
 
   const applyRoom = useCallback((room: Room) => {
     setRoomDetail(room);
-    setPlayers(mapParticipantsToPlayers(room));
+    const mapped = mapParticipantsToPlayers(room).map((player) => {
+      if (!player) return player;
+      if (player.name && player.name !== 'UNKNOWN') return player;
+      if (String(player.userId) === String(getCurrentUserId())) {
+        return {
+          ...player,
+          name: getCurrentDisplayName() || getCurrentUserName() || player.userId || 'ME',
+        };
+      }
+      return player;
+    });
+    setPlayers(mapped);
     setMyLanguage(LANG_MAP[room.lang] || 'java');
     setSettings({
       time: urlTimeRaw,
@@ -201,7 +212,7 @@ export default function RoomPage() {
       count: room.count || '5',
       maxPlayers: Math.max(2, Math.min(8, room.maxPlayers || parsedMaxPlayers)),
     });
-    setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapParticipantsToPlayers(room)));
+    setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapped));
   }, [parsedMaxPlayers, urlTimeRaw]);
 
   useEffect(() => {
@@ -565,18 +576,23 @@ export default function RoomPage() {
 
       if (!localBotStart) {
         await startRoomApi(numericRoomId);
-        const match = await startMatch({
-          roomId: numericRoomId,
-          roundSeconds: parseRoomTimeToSeconds(settings.time),
-        });
-        matchId = match.matchId;
-        applyMatchStart({
-          match,
-          settingsDiff: settings.diff,
-          myLanguage,
-          selectedItems: isItemMode ? Array.from(selectedItems) : [],
-          roomRoster,
-        });
+        try {
+          const match = await startMatch({
+            roomId: numericRoomId,
+            roundSeconds: parseRoomTimeToSeconds(settings.time),
+          });
+          matchId = match.matchId;
+          applyMatchStart({
+            match,
+            settingsDiff: settings.diff,
+            myLanguage,
+            selectedItems: isItemMode ? Array.from(selectedItems) : [],
+            roomRoster,
+          });
+        } catch (matchError) {
+          // 방 상태는 서버에서 WAITING으로 롤백됨. 호스트에게 원인 표시
+          throw matchError;
+        }
       } else {
         prepareBattleStart({
           roomId,

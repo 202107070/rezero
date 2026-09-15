@@ -140,6 +140,7 @@ export async function findRoomParticipants(roomId) {
     `SELECT
        rp.id,
        rp.user_id AS userId,
+       u.username AS username,
        u.display_name AS displayName,
        rp.slot_index AS slotIndex,
        rp.is_host AS isHost,
@@ -410,6 +411,18 @@ export async function markRoomStarted(roomId) {
      SET status = 'STARTED'
      WHERE id = ?
        AND status = 'WAITING'`,
+    [roomId],
+  );
+
+  return Number(result.affectedRows) > 0;
+}
+
+export async function markRoomWaiting(roomId) {
+  const result = await pool.query(
+    `UPDATE rooms
+     SET status = 'WAITING'
+     WHERE id = ?
+       AND status = 'STARTED'`,
     [roomId],
   );
 

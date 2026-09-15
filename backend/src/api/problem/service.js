@@ -87,18 +87,43 @@ function shuffleProblems(problems, random) {
 
 export function chooseProblems(problemPool, language, count, random = Math.random) {
   const normalizedLanguage = normalizeLanguage(language);
-  const candidates = problemPool
-    .map(normalizeProblem)
-    .filter(function (problem) {
-      if (normalizedLanguage === "RANDOM") {
-        return true;
-      }
+  const normalizedProblems = problemPool.map(normalizeProblem);
 
-      return Object.prototype.hasOwnProperty.call(
-        problem.answer,
-        normalizedLanguage,
+  function matchesLanguage(problem) {
+    if (normalizedLanguage === "RANDOM") {
+      return true;
+    }
+    // 객관식은 언어 키가 없을 수 있음
+    if (problem.type === "multiple_choice") {
+      return true;
+    }
+    const answer = problem.answer || {};
+    if (Object.prototype.hasOwnProperty.call(answer, normalizedLanguage)) {
+      return true;
+    }
+    // C++ ↔ CPP 등
+    if (normalizedLanguage === "CPP" && Object.prototype.hasOwnProperty.call(answer, "C++")) {
+      return true;
+    }
+    if (normalizedLanguage === "C++" && Object.prototype.hasOwnProperty.call(answer, "CPP")) {
+      return true;
+    }
+    return false;
+  }
+
+  let candidates = normalizedProblems.filter(matchesLanguage);
+
+  // 언어 필터로 비면 같은 난이도(풀) 전체로 완화
+  if (candidates.length === 0) {
+    candidates = normalizedProblems.filter(function (problem) {
+      const answer = problem.answer || {};
+      return (
+        problem.type === "multiple_choice" ||
+        Object.keys(answer).length > 0 ||
+        Boolean(problem.question)
       );
     });
+  }
 
   if (candidates.length === 0) {
     throw new AppError(
@@ -110,7 +135,6 @@ export function chooseProblems(problemPool, language, count, random = Math.rando
 
   const selectedProblems = [];
 
-  // 문제 후보를 모두 사용한 경우에만 다시 섞어서 재사용합니다.
   while (selectedProblems.length < count) {
     const shuffled = shuffleProblems(candidates, random);
     const remainingCount = count - selectedProblems.length;
@@ -140,7 +164,12 @@ export async function selectProblems(input) {
     );
   }
 
-  const problemPool = await problemModel.findProblemsByDifficulty(difficulty);
+  let problemPool = await problemModel.findProblemsByDifficulty(difficulty);
+  if (!problemPool.length) {
+    // DB 난이도 표기가 다른 경우를 대비해 전체 풀로 폴백
+    problemPool = await problemModel.findAllProblems();
+  }
+
   return chooseProblems(problemPool, input.language, count);
 }
 
