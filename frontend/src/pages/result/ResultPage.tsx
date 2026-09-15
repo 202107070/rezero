@@ -26,6 +26,7 @@ import {
   disconnectRoomSocket,
   emitReviewInvite,
   emitReviewInviteResponse,
+  emitFriendRequest,
   getActiveRoomId,
   joinRoomSocket,
   onRoomEvent,
@@ -624,12 +625,21 @@ export default function ResultPage() {
     const humanTargets = targets.filter((id) => !shouldAutoAcceptReviewInvite(id));
 
     if (humanTargets.length > 0 && roomId) {
+      const problemPreviews = invite.problemIndices.map((index) => {
+        const problem = resultProblems[index];
+        return {
+          index,
+          title: problem?.title || `Problem ${index + 1}`,
+          question: problem?.question || '',
+        };
+      });
       void emitReviewInvite(roomId, {
         id: invite.id,
         sessionId,
         matchId: matchId || undefined,
         toUserIds: humanTargets,
         problemIndices: invite.problemIndices,
+        problems: problemPreviews,
       }).catch(() => undefined);
     }
 
@@ -821,7 +831,15 @@ export default function ResultPage() {
           appendSystemChat(`${userName} 님을 친구 목록에서 삭제했습니다.`);
         } else {
           const added = addFriend(userName);
-          appendSystemChat(added ? `${userName} 님을 친구 목록에 추가했습니다.` : `${userName} 님은 이미 친구입니다.`);
+          appendSystemChat(
+            added
+              ? `${userName} 님에게 친구 요청을 보냈습니다.`
+              : `${userName} 님은 이미 친구입니다.`,
+          );
+          const target = allPlayers.find((p) => p.name === userName);
+          if (target?.id) {
+            void emitFriendRequest(String(target.id), userName).catch(() => undefined);
+          }
         }
         break;
       case 'whisper':
@@ -1016,6 +1034,15 @@ export default function ResultPage() {
         show={Boolean(incomingReviewInvite)}
         fromUserName={incomingReviewInvite?.fromUserName || '상대'}
         problemCount={incomingReviewInvite?.problemIndices?.length || 0}
+        problems={
+          incomingReviewInvite?.problems?.length
+            ? incomingReviewInvite.problems
+            : (incomingReviewInvite?.problemIndices || []).map((index) => ({
+                index,
+                title: resultProblems[index]?.title || `Problem ${index + 1}`,
+                question: resultProblems[index]?.question || '',
+              }))
+        }
         onAccept={handleAcceptIncomingReview}
         onReject={handleRejectIncomingReview}
       />

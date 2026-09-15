@@ -30,6 +30,8 @@ function userLabel(user) {
 
 export function registerSocketHandlers(io, socket) {
   console.log("[Socket 연결 완료] " + userLabel(socket.user) + " (" + socket.id + ")");
+  // 개인 룸: 친구 요청 등 1:1 이벤트용
+  socket.join("user:" + String(socket.user.id));
   void markUserOnline(socket.user).then(function () {
     return broadcastLobbyPresence(io);
   });
@@ -39,8 +41,14 @@ export function registerSocketHandlers(io, socket) {
       const validatedRoom = validateJoinRoom(data);
       const roomId = validatedRoom.roomId;
 
-      // 게임방으로 들어가면 로비 채팅/프레즌스 룸에서는 나감
-      if (roomId !== LOBBY_ROOM_ID) {
+      if (roomId === LOBBY_ROOM_ID) {
+        // 로비 입장 시 게임방 소켓 룸에서 나와야 로비 채팅이 양쪽에 보임
+        for (const joined of socket.rooms) {
+          if (joined !== socket.id && joined !== LOBBY_ROOM_ID && !String(joined).startsWith("user:")) {
+            socket.leave(joined);
+          }
+        }
+      } else if (roomId !== LOBBY_ROOM_ID) {
         socket.leave(LOBBY_ROOM_ID);
       }
 
@@ -62,13 +70,11 @@ export function registerSocketHandlers(io, socket) {
       }
 
       // Valkey에서 게임 진행 상태 확인 후 재접속 복원 처리
+      // STARTED만으로는 배틀 진입 join과 구분되지 않으므로 IN_GAME 만 재접속으로 취급
       const roomStateKey = "room:" + roomId + ":state";
       const roomState = await redisClient.hGetAll(roomStateKey);
 
-      if (
-        roomState &&
-        (roomState.status === "IN_GAME" || roomState.status === "STARTED")
-      ) {
+      if (roomState && roomState.status === "IN_GAME") {
         console.log(
           "[재접속 복원] " +
             userLabel(socket.user) +
@@ -387,6 +393,7 @@ export function registerSocketHandlers(io, socket) {
         fromUserName: userLabel(socket.user),
         toUserIds,
         problemIndices: Array.isArray(data.problemIndices) ? data.problemIndices : [],
+        problems: Array.isArray(data.problems) ? data.problems : [],
         createdAt: Date.now(),
       };
       io.to(roomId).emit(SOCKET_EVENTS.REVIEW_INVITE, payload);
@@ -414,6 +421,85 @@ export function registerSocketHandlers(io, socket) {
         problemIndices: Array.isArray(data.problemIndices) ? data.problemIndices : [],
       };
       io.to(roomId).emit(SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, payload);
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.UPDATE_CHARACTER, async function (data, callback) {
+    try {
+      const roomId = data?.roomId ? String(data.roomId) : "";
+      const character = data?.character ? String(data.character).trim() : "";
+      if (!roomId || !character) {
+        throw new Error("roomId와 character가 필요합니다.");
+      }
+      const roomModel = await import("../api/room/model.js");
+      const updated = await roomModel.updateParticipantCharacter(
+        Number(roomId),
+        socket.user.id,
+        character,
+      );
+      if (!updated) {
+        throw new Error("캐릭터를 변경할 수 없습니다.");
+      }
+      const payload = {
+        roomId,
+        userId: String(socket.user.id),
+        character,
+      };
+      io.to(roomId).emit(SOCKET_EVENTS.CHARACTER_CHANGED, payload);
+      if (typeof callback === "function") {
+        callback({ success: true, ...payload });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.FRIEND_REQUEST, async function (data, callback) {
+    try {
+      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      if (!toUserId) throw new Error("친구 요청 대상이 없습니다.");
+      if (toUserId === String(socket.user.id)) {
+        throw new Error("자기 자신에게 친구 요청을 보낼 수 없습니다.");
+      }
+      const payload = {
+        fromUserId: String(socket.user.id),
+        fromUserName: userLabel(socket.user),
+        fromUsername: socket.user.username || "",
+        toUserId,
+        toUserName: data?.toUserName || "",
+        createdAt: Date.now(),
+      };
+      io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REQUEST, payload);
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.FRIEND_REQUEST_RESULT, function (data, callback) {
+    try {
+      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      if (!toUserId) throw new Error("응답 대상이 없습니다.");
+      const payload = {
+        fromUserId: String(socket.user.id),
+        fromUserName: userLabel(socket.user),
+        toUserId,
+        accepted: Boolean(data?.accepted),
+      };
+      io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REQUEST_RESULT, payload);
       if (typeof callback === "function") {
         callback({ success: true });
       }

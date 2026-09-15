@@ -14,6 +14,7 @@ import { StartGameOverlay } from '../../components/room/StartGameOverlay/StartGa
 import {
   buildInitialMessages,
   BOT_READY_DELAY_MS,
+  CHARACTERS,
   DEMO_BOT_POOL,
   DIFF_MAP,
   LANG_MAP,
@@ -47,6 +48,8 @@ import {
 } from '../../services/battlePrepService';
 import {
   disconnectRoomSocket,
+  emitFriendRequest,
+  emitUpdateCharacter,
   joinRoomSocket,
   onRoomEvent,
   ROOM_SOCKET_EVENTS,
@@ -194,11 +197,23 @@ export default function RoomPage() {
 
   const applyRoom = useCallback((room: Room) => {
     setRoomDetail(room);
+    const myId = getCurrentUserId();
+    const myParticipant = (room.participants || []).find(
+      (participant) => String(participant.userId) === String(myId),
+    );
+    if (myParticipant?.character) {
+      const raw = String(myParticipant.character);
+      const matched =
+        CHARACTERS.find((item) => item.id === raw)?.id ||
+        CHARACTERS.find((item) => item.icon === raw)?.id;
+      if (matched) setMyCharacter(matched);
+    }
+
     const mapped = mapParticipantsToPlayers(room).map((player) => {
       if (!player) return player;
       const resolvedName =
         (player.name && player.name !== 'UNKNOWN' ? player.name : '') ||
-        (String(player.userId) === String(getCurrentUserId())
+        (String(player.userId) === String(myId)
           ? getCurrentDisplayName() || getCurrentUserName() || player.userId
           : '') ||
         player.userId ||
@@ -256,7 +271,7 @@ export default function RoomPage() {
             room = await joinRoom(numericRoomId, {
               password: takePendingJoinPassword(),
               language: room.lang,
-              character: 'char1',
+              character: myCharacter || 'char1',
             });
           } catch (error) {
             if (!isAlreadyJoinedError(error)) {
@@ -403,6 +418,28 @@ export default function RoomPage() {
               enterBattleFromMatch(payload);
             }));
 
+            unsubs.push(
+              onRoomEvent(
+                ROOM_SOCKET_EVENTS.CHARACTER_CHANGED,
+                (payload?: { userId?: string; character?: string }) => {
+                  if (!payload?.userId || !payload.character) return;
+                  const icon =
+                    CHARACTERS.find((item) => item.id === payload.character)?.icon || payload.character;
+                  setPlayers((prev) =>
+                    prev.map((player) =>
+                      player && String(player.userId) === String(payload.userId)
+                        ? { ...player, character: icon }
+                        : player,
+                    ),
+                  );
+                  if (String(payload.userId) === String(getCurrentUserId())) {
+                    const matched = CHARACTERS.find((item) => item.id === payload.character)?.id;
+                    if (matched) setMyCharacter(matched);
+                  }
+                },
+              ),
+            );
+
             socketUnsubsRef.current = unsubs;
             setActiveRoomId(numericRoomId);
           } catch {
@@ -431,6 +468,21 @@ export default function RoomPage() {
       // Room→Battle 이동 시 소켓 유지 (로비 퇴장 시에만 force disconnect)
     };
   }, [applyRoom, navigate, numericRoomId, roomId, roomMode, gameMode, parsedMaxPlayers]);
+
+  const handleSelectCharacter = (characterId: string) => {
+    setMyCharacter(characterId);
+    const icon = CHARACTERS.find((item) => item.id === characterId)?.icon || characterId;
+    setPlayers((prev) =>
+      prev.map((player) =>
+        player && String(player.userId) === String(getCurrentUserId())
+          ? { ...player, character: icon }
+          : player,
+      ),
+    );
+    if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
+      void emitUpdateCharacter(numericRoomId, characterId).catch(() => undefined);
+    }
+  };
 
   const appendSystemMessage = (text: string) => {
     setMessages((prev) => [...prev, { type: 'sys', text: `>> ${text}` }]);
@@ -473,8 +525,14 @@ export default function RoomPage() {
         } else {
           const added = addFriend(userName);
           appendSystemMessage(
-            added ? `${userName} 님을 친구 목록에 추가했습니다.` : `${userName} 님은 이미 친구 목록에 있습니다.`,
+            added
+              ? `${userName} 님에게 친구 요청을 보냈습니다.`
+              : `${userName} 님은 이미 친구 목록에 있습니다.`,
           );
+          const target = players.find((player) => player?.name === userName);
+          if (target?.userId) {
+            void emitFriendRequest(String(target.userId), userName).catch(() => undefined);
+          }
         }
         break;
       case 'whisper':
@@ -773,7 +831,7 @@ export default function RoomPage() {
 
           <div className="room-side-col">
             <div className={`pixel-card room-side-card ${isItemMode ? 'item-mode' : 'normal-mode'}`}>
-              <CharacterSelect myCharacter={myCharacter} onSelect={setMyCharacter} />
+              <CharacterSelect myCharacter={myCharacter} onSelect={handleSelectCharacter} />
               <BattleSettingsPanel myLanguage={myLanguage} settings={settings} />
               {isItemMode && (
                 <RoomItemLoadout

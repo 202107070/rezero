@@ -28,4 +28,8 @@ export const SOCKET_EVENTS = {
   /** 결과 화면 리뷰 초대 */
   REVIEW_INVITE: "review_invite",
   REVIEW_INVITE_RESPONSE: "review_invite_response",
+  UPDATE_CHARACTER: "update_character",
+  CHARACTER_CHANGED: "character_changed",
+  FRIEND_REQUEST: "friend_request",
+  FRIEND_REQUEST_RESULT: "friend_request_result",
 };

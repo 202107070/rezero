@@ -138,16 +138,9 @@ export function chooseProblems(problemPool, language, count, random = Math.rando
     );
   }
 
-  if (candidates.length < count) {
-    throw new AppError(
-      404,
-      "PROBLEMS_NOT_ENOUGH",
-      `선택한 조건의 문제가 ${candidates.length}개뿐입니다. (요청: ${count}개, 중복 출제 없음)`,
-    );
-  }
-
-  // 중복 없이 한 번만 섞어서 선택
-  return shuffleProblems(candidates, random).slice(0, count);
+  // 언어·난이도 풀이 부족해도 가능한 만큼 출제 (중복 없이). 방 설정 count보다 적을 수 있음.
+  const takeCount = Math.min(count, candidates.length);
+  return shuffleProblems(candidates, random).slice(0, takeCount);
 }
 
 export async function selectProblems(input) {

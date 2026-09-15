@@ -73,6 +73,43 @@ export async function findUserItems(userId) {
   );
 }
 
+const STARTER_ITEM_KEYS = [
+  "paint",
+  "revealLength",
+  "revealPrev",
+  "lightning",
+  "timeReduce",
+  "scribble",
+  "blankBreak",
+  "buildCharge",
+];
+
+/** 회원가입/시드용: 모든 아이템 quantity개 지급 */
+export async function grantStarterItems(userId, quantity = 5) {
+  for (let i = 0; i < STARTER_ITEM_KEYS.length; i++) {
+    const itemKey = STARTER_ITEM_KEYS[i];
+    await pool.query(
+      `INSERT INTO user_items (user_id, item_key, quantity)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE quantity = VALUES(quantity)`,
+      [userId, itemKey, quantity],
+    );
+  }
+}
+
+export async function grantStarterItemsByUsernames(usernames, quantity = 5) {
+  if (!Array.isArray(usernames) || usernames.length === 0) return 0;
+  const placeholders = usernames.map(() => "?").join(", ");
+  const users = await pool.query(
+    `SELECT id, username FROM users WHERE username IN (${placeholders})`,
+    usernames,
+  );
+  for (let i = 0; i < users.length; i++) {
+    await grantStarterItems(users[i].id, quantity);
+  }
+  return users.length;
+}
+
 export async function findUserTitleData(userId) {
   const rows = await pool.query(
     `SELECT

@@ -30,6 +30,8 @@ import {
 import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
 import { apiRequest } from '../../services/apiClient';
 import {
+  emitFriendRequest,
+  emitFriendRequestResult,
   joinRoomSocket,
   LOBBY_ROOM_ID,
   onRoomEvent,
@@ -116,16 +118,18 @@ export default function LobbyPage() {
       const mapped: LobbyUser[] = online.map((user) => ({
         name: user.displayName || user.username || user.userId || 'USER',
         rank: '-',
-        title: meName && (user.displayName === meName || user.username === authUser.username)
-          ? getEquippedTitleId()
-          : undefined,
+        title:
+          meName && (user.displayName === meName || user.username === authUser.username)
+            ? getEquippedTitleId()
+            : null,
+        userId: user.userId,
       }));
-      if (meName && !mapped.some((u) => u.name === meName)) {
-        mapped.unshift({ name: meName, rank: '-', title: getEquippedTitleId() });
+      if (meName && !mapped.some((u) => u.name === meName || u.userId === authUser.id)) {
+        mapped.unshift({ name: meName, rank: '-', title: getEquippedTitleId(), userId: authUser.id });
       }
       setUsers(mapped);
     },
-    [authUser.displayName, authUser.username],
+    [authUser.displayName, authUser.username, authUser.id],
   );
 
   useEffect(() => {
@@ -170,6 +174,52 @@ export default function LobbyPage() {
             });
           }),
         );
+        unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
+            (payload?: { fromUserId?: string; fromUserName?: string }) => {
+              if (!payload?.fromUserId) return;
+              if (String(payload.fromUserId) === String(authUser.id)) return;
+              setPendingFriendRequest({
+                fromUserId: String(payload.fromUserId),
+                fromUserName: payload.fromUserName || 'UNKNOWN',
+              });
+            },
+          ),
+        );
+        unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
+            (payload?: { fromUserName?: string; accepted?: boolean }) => {
+              if (!payload) return;
+              const now = new Date();
+              const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+              if (payload.accepted) {
+                if (payload.fromUserName) addFriend(payload.fromUserName);
+                setFriendNames(getFriendNames());
+                setChatMessages((prev) => [
+                  ...prev,
+                  {
+                    sender: 'SYSTEM',
+                    text: `${payload.fromUserName || '상대'}님이 친구 요청을 수락했습니다.`,
+                    time: timeStr,
+                    mode: '[안내]',
+                  },
+                ]);
+              } else {
+                setChatMessages((prev) => [
+                  ...prev,
+                  {
+                    sender: 'SYSTEM',
+                    text: `${payload.fromUserName || '상대'}님이 친구 요청을 거절했습니다.`,
+                    time: timeStr,
+                    mode: '[안내]',
+                  },
+                ]);
+              }
+            },
+          ),
+        );
       } catch {
         // REST 폴백
         try {
@@ -200,9 +250,13 @@ export default function LobbyPage() {
         }
       });
     };
-  }, [applyOnlineUsers]);
+  }, [applyOnlineUsers, authUser.id]);
 
   const [friendNames, setFriendNames] = useState<string[]>(() => getFriendNames());
+  const [pendingFriendRequest, setPendingFriendRequest] = useState<{
+    fromUserId: string;
+    fromUserName: string;
+  } | null>(null);
   const [showRoulette, setShowRoulette] = useState(false);
   const [showInventoryItemsModal, setShowInventoryItemsModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -339,9 +393,14 @@ export default function LobbyPage() {
           const added = addFriend(user.name);
           if (added) {
             setFriendNames(getFriendNames());
-            appendSystemChat(`${user.name} 님을 친구 목록에 추가했습니다.`);
+            appendSystemChat(`${user.name} 님에게 친구 요청을 보냈습니다.`);
           } else {
             appendSystemChat(`${user.name} 님은 이미 친구 목록에 있습니다.`);
+          }
+          if (user.userId) {
+            void emitFriendRequest(user.userId, user.name).catch(() => undefined);
+          } else {
+            appendSystemChat('상대 유저 ID를 찾을 수 없어 요청 알림은 전송되지 않았습니다.');
           }
         }
         break;
@@ -708,6 +767,42 @@ export default function LobbyPage() {
         onConfirm={() => void quitApp()}
         onCancel={() => setShowExitModal(false)}
       />
+
+      {pendingFriendRequest && (
+        <div className="review-modal-overlay" style={{ zIndex: 4000 }}>
+          <div className="review-modal-panel ranking-panel" style={{ width: 'min(420px, 92vw)', height: 'auto', minHeight: 180 }}>
+            <div className="rank-title">FRIEND REQUEST</div>
+            <div className="review-incoming-msg">
+              <strong>{pendingFriendRequest.fromUserName}</strong>님이 친구 요청을 보냈습니다.
+            </div>
+            <div className="review-modal-actions review-modal-actions-end">
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-secondary review-modal-btn"
+                onClick={() => {
+                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, false);
+                  setPendingFriendRequest(null);
+                }}
+              >
+                거절
+              </button>
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-primary review-modal-btn"
+                onClick={() => {
+                  addFriend(pendingFriendRequest.fromUserName);
+                  setFriendNames(getFriendNames());
+                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, true);
+                  setPendingFriendRequest(null);
+                  appendSystemChat(`${pendingFriendRequest.fromUserName} 님과 친구가 되었습니다.`);
+                }}
+              >
+                수락
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <MatchStoryModal
         open={showCodeModal}

@@ -729,6 +729,78 @@
   padding: 12px 8px 16px;
 }
 
+.review-incoming-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+.review-incoming-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 8px 12px;
+  max-height: 46vh;
+}
+
+.review-incoming-item {
+  border: 2px solid rgba(32, 156, 238, 0.45);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.review-incoming-item-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.review-incoming-no {
+  color: var(--px-warning);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.review-incoming-title {
+  color: #eee;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.review-incoming-question {
+  color: #c8d0d8;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.review-incoming-empty {
+  text-align: center;
+  color: #888;
+  padding: 24px 8px;
+}
+
+.review-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding: 12px 8px 4px;
+}
+
+.review-modal-actions-end {
+  justify-content: flex-end;
+}
+
+.review-modal-btn {
+  min-width: 96px;
+}
+
 .review-problem-panel {
   height: 100%;
   min-height: 0;

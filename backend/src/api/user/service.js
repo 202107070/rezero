@@ -81,6 +81,12 @@ export async function signupUser(input) {
     displayName: input.displayName,
   });
 
+  try {
+    await getModelFunction("grantStarterItems")(user.id, 5);
+  } catch (error) {
+    console.error("[signupUser] starter items grant failed:", error.message);
+  }
+
   return {
     user: toSignupUserResponse(user),
     token: createAccessToken({

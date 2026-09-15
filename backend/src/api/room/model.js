@@ -247,6 +247,18 @@ export async function addRoomParticipant(input) {
   }
 }
 
+export async function updateParticipantCharacter(roomId, userId, character) {
+  const result = await pool.query(
+    `UPDATE room_participants
+     SET \`character\` = ?
+     WHERE room_id = ?
+       AND user_id = ?
+       AND left_at IS NULL`,
+    [character, roomId, userId],
+  );
+  return Number(result.affectedRows) > 0;
+}
+
 export async function leaveRoomAndSelectRandomHost(roomId, userId) {
   const connection = await pool.getConnection();
 

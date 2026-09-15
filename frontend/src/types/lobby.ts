@@ -55,4 +55,5 @@ export interface LobbyUser {
   name: string;
   rank: string;
   title: string | null;
+  userId?: string;
 }

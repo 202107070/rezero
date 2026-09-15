@@ -25,6 +25,10 @@ export const ROOM_SOCKET_EVENTS = {
   LOBBY_PRESENCE: 'lobby_presence',
   REVIEW_INVITE: 'review_invite',
   REVIEW_INVITE_RESPONSE: 'review_invite_response',
+  UPDATE_CHARACTER: 'update_character',
+  CHARACTER_CHANGED: 'character_changed',
+  FRIEND_REQUEST: 'friend_request',
+  FRIEND_REQUEST_RESULT: 'friend_request_result',
 } as const;
 
 export const LOBBY_ROOM_ID = 'lobby';
@@ -48,6 +52,7 @@ export interface ReviewInviteSocketPayload {
   fromUserName: string;
   toUserIds: string[];
   problemIndices: number[];
+  problems?: Array<{ index: number; title?: string; question?: string }>;
   createdAt: number;
 }
 
@@ -319,6 +324,7 @@ export function emitReviewInvite(
     matchId?: string;
     toUserIds: string[];
     problemIndices: number[];
+    problems?: Array<{ index: number; title?: string; question?: string }>;
   },
 ): Promise<{ success: boolean; message?: string }> {
   const client = getRoomSocket();
@@ -332,7 +338,66 @@ export function emitReviewInvite(
         matchId: params.matchId,
         toUserIds: params.toUserIds,
         problemIndices: params.problemIndices,
+        problems: params.problems || [],
       },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitUpdateCharacter(
+  roomId: string | number,
+  character: string,
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.UPDATE_CHARACTER,
+      { roomId: String(roomId), character },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitFriendRequest(
+  toUserId: string,
+  toUserName?: string,
+): Promise<{ success: boolean; message?: string; autoAccepted?: boolean }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
+      { toUserId, toUserName },
+      (response?: { success?: boolean; message?: string; autoAccepted?: boolean }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+          autoAccepted: Boolean(response?.autoAccepted),
+        });
+      },
+    );
+  });
+}
+
+export function emitFriendRequestResult(
+  toUserId: string,
+  accepted: boolean,
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
+      { toUserId, accepted },
       (response?: { success?: boolean; message?: string }) => {
         resolve({
           success: Boolean(response?.success),
