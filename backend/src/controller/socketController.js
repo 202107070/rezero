@@ -28,20 +28,18 @@ export async function socketAuthMiddleware(socket, next) {
     const decoded = jwt.verify(actualToken, authConfig.jwtSecret);
     const userId = decoded.id || decoded.sub;
 
-    let username = decoded.username;
-    let displayName = decoded.displayName;
+    let username = decoded.username || "";
+    let displayName = decoded.displayName || "";
 
-    // 기존 토큰(sub만 있음) / 클레임 누락 시 DB에서 닉네임 복구
-    if (!displayName || !username) {
-      try {
-        const user = await userModel.findUserById(userId);
-        if (user) {
-          username = username || user.username;
-          displayName = displayName || user.displayName || user.username;
-        }
-      } catch {
-        // ignore DB lookup failure
+    // 항상 DB에서 최신 닉네임을 우선 사용 (JWT에 username만 있는 경우 방지)
+    try {
+      const user = await userModel.findUserById(userId);
+      if (user) {
+        username = user.username || username || "";
+        displayName = user.displayName || displayName || user.username || "";
       }
+    } catch {
+      // ignore DB lookup failure
     }
 
     socket.user = {

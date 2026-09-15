@@ -377,6 +377,88 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
   }
 }
 
+export async function kickRoomParticipant(roomId, hostUserId, targetUserId) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const roomRows = await connection.query(
+      `SELECT id, host_user_id AS hostUserId, status
+       FROM rooms
+       WHERE id = ?
+       FOR UPDATE`,
+      [roomId],
+    );
+
+    if (roomRows.length === 0) {
+      await connection.rollback();
+      return { success: false, reason: "ROOM_NOT_FOUND" };
+    }
+
+    const room = roomRows[0];
+    if (String(room.hostUserId) !== String(hostUserId)) {
+      await connection.rollback();
+      return { success: false, reason: "ROOM_KICK_FORBIDDEN" };
+    }
+    if (room.status !== "WAITING") {
+      await connection.rollback();
+      return { success: false, reason: "ROOM_ALREADY_STARTED" };
+    }
+    if (String(targetUserId) === String(hostUserId)) {
+      await connection.rollback();
+      return { success: false, reason: "ROOM_KICK_SELF" };
+    }
+
+    const targetRows = await connection.query(
+      `SELECT id, is_host AS isHost
+       FROM room_participants
+       WHERE room_id = ?
+         AND user_id = ?
+         AND left_at IS NULL
+       LIMIT 1
+       FOR UPDATE`,
+      [roomId, targetUserId],
+    );
+
+    if (targetRows.length === 0) {
+      await connection.rollback();
+      return { success: false, reason: "ROOM_NOT_JOINED" };
+    }
+
+    await connection.query(
+      `UPDATE room_participants
+       SET left_at = CURRENT_TIMESTAMP,
+           is_host = FALSE,
+           is_ready = FALSE,
+           status = 'LEFT'
+       WHERE id = ?`,
+      [targetRows[0].id],
+    );
+
+    const countRows = await connection.query(
+      `SELECT COUNT(*) AS count
+       FROM room_participants
+       WHERE room_id = ?
+         AND left_at IS NULL`,
+      [roomId],
+    );
+
+    await connection.commit();
+    return {
+      success: true,
+      currentPlayers: Number(countRows[0].count),
+      roomClosed: false,
+      newHostUserId: null,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function closeRoom(roomId) {
   const connection = await pool.getConnection();
 

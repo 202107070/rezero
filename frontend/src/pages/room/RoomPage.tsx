@@ -30,15 +30,17 @@ import { setKickedCount, getKickedCount } from '../../services/roomStore';
 import { ROUTES } from '../../constants/routes';
 import type { GameMode, Room } from '../../types/lobby';
 import {
+  clearPendingJoinPassword,
   emptyPlayerSlots,
   fetchRoom,
   getRoomErrorMessage,
   isAlreadyJoinedError,
   joinRoom,
+  kickRoomParticipant,
   leaveRoom,
   mapParticipantsToPlayers,
+  peekPendingJoinPassword,
   startRoom as startRoomApi,
-  takePendingJoinPassword,
 } from '../../services/roomService';
 import { getMatchErrorMessage, parseRoomTimeToSeconds, startMatch, type MatchStartResponse } from '../../services/matchService';
 import {
@@ -48,6 +50,7 @@ import {
 } from '../../services/battlePrepService';
 import {
   disconnectRoomSocket,
+  emitFriendRemove,
   emitFriendRequest,
   emitUpdateCharacter,
   joinRoomSocket,
@@ -65,11 +68,13 @@ import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
 import {
   addFriend,
+  findFriendUserId,
   getFollowRoomPath,
   getFriendUserIds,
   getUserPresence,
   isFriend,
   removeFriend,
+  removeFriendByUserId,
   setUserPresence,
 } from '../../services/friendStore';
 import { getStartBlockReason, hasLocalBots } from '../../utils/room/roomStartValidation';
@@ -242,15 +247,26 @@ export default function RoomPage() {
   }, [parsedMaxPlayers, urlTimeRaw]);
 
   useEffect(() => {
-    const me = getCurrentUserName();
+    const me = getCurrentDisplayName() || getCurrentUserName();
     setUserPresence(me, {
       status: 'room',
       roomId,
       roomTitle,
       roomQuery,
     });
+    // username 키도 함께 기록 (따라가기 호환)
+    const username = getCurrentUserName();
+    if (username && username !== me) {
+      setUserPresence(username, {
+        status: 'room',
+        roomId,
+        roomTitle,
+        roomQuery,
+      });
+    }
     return () => {
       setUserPresence(me, { status: 'lobby' });
+      if (username && username !== me) setUserPresence(username, { status: 'lobby' });
     };
   }, [roomId, roomTitle, roomQuery]);
 
@@ -265,6 +281,7 @@ export default function RoomPage() {
         return;
       }
 
+      let joinedThisAttempt = false;
       try {
         let room = await fetchRoom(numericRoomId);
         const myId = getCurrentUserId();
@@ -275,16 +292,22 @@ export default function RoomPage() {
         if (!alreadyIn) {
           try {
             room = await joinRoom(numericRoomId, {
-              password: takePendingJoinPassword(),
+              password: peekPendingJoinPassword(),
               language: room.lang,
               character: myCharacter || 'char1',
             });
+            joinedThisAttempt = true;
+            clearPendingJoinPassword();
           } catch (error) {
             if (!isAlreadyJoinedError(error)) {
+              clearPendingJoinPassword();
               throw error;
             }
+            clearPendingJoinPassword();
             room = await fetchRoom(numericRoomId);
           }
+        } else {
+          clearPendingJoinPassword();
         }
 
         if (!cancelled) {
@@ -398,6 +421,11 @@ export default function RoomPage() {
                 const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
                 const text = String(payload.message || '');
                 if (!text) return;
+                if (payload.mode === 'FRIEND') {
+                  const myId = String(getCurrentUserId());
+                  const senderId = String(payload.sender?.id || '');
+                  if (senderId !== myId && !isFriend(name)) return;
+                }
                 const modeLabel =
                   payload.mode === 'WHISPER'
                     ? `[귓속말${payload.targetUserName ? `:${payload.targetUserName}` : ''}]`
@@ -423,6 +451,23 @@ export default function RoomPage() {
                     {
                       type: 'sys',
                       text: `>> ${payload.fromUserName}님이 친구 요청을 수락했습니다.`,
+                    },
+                  ]);
+                },
+              ),
+            );
+
+            unsubs.push(
+              onRoomEvent(
+                ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
+                (payload?: { fromUserId?: string; fromUserName?: string }) => {
+                  if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
+                  if (payload?.fromUserName) removeFriend(payload.fromUserName);
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      type: 'sys',
+                      text: `>> ${payload?.fromUserName || '상대'}님이 친구 목록에서 나를 삭제했습니다.`,
                     },
                   ]);
                 },
@@ -471,6 +516,20 @@ export default function RoomPage() {
               ),
             );
 
+            unsubs.push(
+              onRoomEvent(
+                ROOM_SOCKET_EVENTS.USER_KICKED,
+                (payload?: { userId?: string; roomId?: string }) => {
+                  if (String(payload?.userId || '') !== String(getCurrentUserId())) return;
+                  setAlertMessage('방에서 강퇴되었습니다.');
+                  setShowAlertModal(true);
+                  clearRoomSession(roomId);
+                  disconnectRoomSocket(true);
+                  navigate(ROUTES.LOBBY);
+                },
+              ),
+            );
+
             socketUnsubsRef.current = unsubs;
             setActiveRoomId(numericRoomId);
           } catch {
@@ -479,6 +538,14 @@ export default function RoomPage() {
         }
       } catch (error) {
         if (cancelled) return;
+        if (joinedThisAttempt) {
+          try {
+            await leaveRoom(numericRoomId);
+          } catch {
+            // ignore
+          }
+        }
+        clearPendingJoinPassword();
         setAlertMessage(getRoomErrorMessage(error));
         setShowAlertModal(true);
         navigate(ROUTES.LOBBY);
@@ -528,8 +595,17 @@ export default function RoomPage() {
   };
 
   const openUserContextMenu = (event: MouseEvent, userName: string) => {
-    const myUserName = getCurrentUserName();
-    if (!userName || userName === myUserName) return;
+    const myNames = new Set(
+      [getCurrentDisplayName(), getCurrentUserName()].filter(Boolean).map(String),
+    );
+    const target = players.find((player) => player?.name === userName);
+    if (
+      !userName ||
+      myNames.has(userName) ||
+      (target?.userId && String(target.userId) === String(getCurrentUserId()))
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     setContextMenu({
@@ -551,7 +627,12 @@ export default function RoomPage() {
         break;
       case 'add-friend':
         if (isFriend(userName)) {
+          const target = players.find((player) => player?.name === userName);
+          const friendId = target?.userId || findFriendUserId(userName);
           removeFriend(userName);
+          if (friendId) {
+            void emitFriendRemove(String(friendId)).catch(() => undefined);
+          }
           appendSystemMessage(`${userName} 님을 친구 목록에서 삭제했습니다.`);
         } else {
           appendSystemMessage(`${userName} 님에게 친구 요청을 보냈습니다.`);
@@ -762,12 +843,23 @@ export default function RoomPage() {
     }
   };
 
-  const handleKickPlayer = () => {
+  const handleKickPlayer = async () => {
     if (!kickTarget) return;
 
     const kickedName = kickTarget.name;
     const kickedPlayer = players[kickTarget.index];
     if (kickedPlayer) clearBotReadyTimer(kickedPlayer.id);
+
+    if (kickedPlayer?.userId && Number.isInteger(numericRoomId) && numericRoomId > 0) {
+      try {
+        await kickRoomParticipant(numericRoomId, String(kickedPlayer.userId));
+      } catch (error) {
+        appendSystemMessage(getRoomErrorMessage(error));
+        setShowKickModal(false);
+        setKickTarget(null);
+        return;
+      }
+    }
 
     setPlayers((prev) => {
       const next = [...prev];

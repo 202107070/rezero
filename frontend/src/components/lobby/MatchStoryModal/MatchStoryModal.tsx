@@ -122,9 +122,9 @@ export function MatchStoryModal({
                 )}
               </div>
               <div className="pixel-card-header match-story-detail-subheader">
-                <span style={{ color: 'var(--px-success)' }}>✅ 정답 / 해설</span>
+                <span style={{ color: 'var(--px-success)' }}>✅ 정답</span>
               </div>
-              <div className="match-story-grid">
+              <div className="match-story-grid match-story-grid-answer-only">
                 <div className="match-answer-box">
                   <pre
                     style={{
@@ -139,7 +139,6 @@ export function MatchStoryModal({
                     {getSolution(selectedProblem)}
                   </pre>
                 </div>
-                <div className="match-explain-box">{selectedProblem?.explanation || '해설이 없습니다.'}</div>
               </div>
             </div>
           </div>

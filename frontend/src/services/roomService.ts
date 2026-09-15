@@ -41,10 +41,18 @@ export function setPendingJoinPassword(password: string): void {
   pendingJoinPassword = password;
 }
 
+export function peekPendingJoinPassword(): string {
+  return pendingJoinPassword;
+}
+
 export function takePendingJoinPassword(): string {
   const password = pendingJoinPassword;
   pendingJoinPassword = '';
   return password;
+}
+
+export function clearPendingJoinPassword(): void {
+  pendingJoinPassword = '';
 }
 
 function isGameMode(value: unknown): value is GameMode {
@@ -57,15 +65,19 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalizeParticipant(raw: unknown): RoomParticipant {
   const participant = asRecord(raw);
+  const displayName = String(participant.displayName || '').trim();
+  const username = String(participant.username || '').trim();
   const name =
+    displayName ||
     String(participant.name || '').trim() ||
-    String(participant.displayName || '').trim() ||
-    String(participant.username || '').trim() ||
+    username ||
     String(participant.userId || '').trim();
   return {
     id: Number(participant.id) || 0,
     userId: String(participant.userId ?? ''),
     name,
+    displayName: displayName || name,
+    username: username || undefined,
     slotIndex: Number(participant.slotIndex) || 0,
     isHost: Boolean(participant.isHost),
     isReady: Boolean(participant.isReady),
@@ -201,6 +213,16 @@ function toRoomPlayer(participant: RoomParticipant): RoomPlayer {
     character,
     status: participant.isHost ? 'HOST' : participant.isReady ? 'READY' : participant.status || 'WAITING',
   };
+}
+
+export async function kickRoomParticipant(
+  roomId: number | string,
+  targetUserId: string,
+): Promise<void> {
+  await apiRequest(`/rooms/${roomId}/kick`, {
+    method: 'POST',
+    body: JSON.stringify({ targetUserId }),
+  });
 }
 
 export function mapParticipantsToPlayers(room: Room): (RoomPlayer | null)[] {

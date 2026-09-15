@@ -25,28 +25,35 @@ import {
   createRoom,
   fetchRooms,
   getRoomErrorMessage,
+  leaveRoom,
   setPendingJoinPassword,
 } from '../../services/roomService';
 import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
 import { apiRequest } from '../../services/apiClient';
 import {
+  emitFriendRemove,
   emitFriendRequest,
   emitFriendRequestResult,
+  emitUpdateTitle,
+  getActiveRoomId,
   joinRoomSocket,
   LOBBY_ROOM_ID,
   onRoomEvent,
   ROOM_SOCKET_EVENTS,
   sendRoomMessage,
+  setActiveRoomId,
   type ChatMessagePayload,
   type LobbyPresencePayload,
 } from '../../services/roomSocket';
 import {
   addFriend,
+  findFriendUserId,
   getFollowRoomPath,
   getFriendNames,
   getFriendUserIds,
   isFriend,
   removeFriend,
+  removeFriendByUserId,
   setUserPresence,
 } from '../../services/friendStore';
 import {
@@ -114,19 +121,22 @@ export default function LobbyPage() {
   const [users, setUsers] = useState<LobbyUser[]>(loadInitialUsers);
 
   const applyOnlineUsers = useCallback(
-    (online: Array<{ userId?: string; username?: string; displayName?: string }>) => {
+    (online: Array<{ userId?: string; username?: string; displayName?: string; equippedTitleId?: string | null }>) => {
       const meName = authUser.displayName || authUser.username;
       const mapped: LobbyUser[] = online.map((user) => ({
         name: user.displayName || user.username || user.userId || 'USER',
         rank: '-',
-        title:
-          meName && (user.displayName === meName || user.username === authUser.username)
-            ? getEquippedTitleId()
-            : null,
+        title: user.equippedTitleId || null,
         userId: user.userId,
       }));
       if (meName && !mapped.some((u) => u.name === meName || u.userId === authUser.id)) {
         mapped.unshift({ name: meName, rank: '-', title: getEquippedTitleId(), userId: authUser.id });
+      } else {
+        mapped.forEach((user) => {
+          if (user.userId === authUser.id || user.name === meName) {
+            user.title = getEquippedTitleId();
+          }
+        });
       }
       setUsers(mapped);
     },
@@ -139,8 +149,20 @@ export default function LobbyPage() {
 
     void (async () => {
       try {
+        // 로비 복귀 시 남아 있는 게임방 참가 상태 정리 (비공개방 유령 참가 방지)
+        const activeRoom = getActiveRoomId();
+        if (activeRoom && /^\d+$/.test(activeRoom)) {
+          try {
+            await leaveRoom(activeRoom);
+          } catch {
+            // ignore
+          }
+          setActiveRoomId(null);
+        }
+
         const joinResult = await joinRoomSocket(LOBBY_ROOM_ID);
         if (cancelled) return;
+        void emitUpdateTitle(getEquippedTitleId()).catch(() => undefined);
         if (joinResult.onlineUsers?.length) {
           applyOnlineUsers(joinResult.onlineUsers);
         }
@@ -155,6 +177,11 @@ export default function LobbyPage() {
             const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
             const text = String(payload.message || '');
             if (!text) return;
+            if (payload.mode === 'FRIEND') {
+              const myId = String(authUser.id);
+              const senderId = String(payload.sender?.id || '');
+              if (senderId !== myId && !isFriend(name)) return;
+            }
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
             const modeLabel =
@@ -215,6 +242,42 @@ export default function LobbyPage() {
                   },
                 ]);
               }
+            },
+          ),
+        );
+        unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
+            (payload?: { fromUserId?: string; fromUserName?: string }) => {
+              if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
+              if (payload?.fromUserName) removeFriend(payload.fromUserName);
+              setFriendNames(getFriendNames());
+              const now = new Date();
+              const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+              setChatMessages((prev) => [
+                ...prev,
+                {
+                  sender: 'SYSTEM',
+                  text: `${payload?.fromUserName || '상대'}님이 친구 목록에서 나를 삭제했습니다.`,
+                  time: timeStr,
+                  mode: '[안내]',
+                },
+              ]);
+            },
+          ),
+        );
+        unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.TITLE_CHANGED,
+            (payload?: { userId?: string; titleId?: string | null }) => {
+              if (!payload?.userId) return;
+              setUsers((prev) =>
+                prev.map((user) =>
+                  String(user.userId) === String(payload.userId)
+                    ? { ...user, title: payload.titleId || null }
+                    : user,
+                ),
+              );
             },
           ),
         );
@@ -300,10 +363,13 @@ export default function LobbyPage() {
   }, [audioSettings.lobbyMusic]);
 
   useEffect(() => {
-    const me = getCurrentUserName();
+    const me = getCurrentDisplayName() || getCurrentUserName();
+    const username = getCurrentUserName();
     setUserPresence(me, { status: 'lobby' });
+    if (username && username !== me) setUserPresence(username, { status: 'lobby' });
     return () => {
       setUserPresence(me, { status: 'lobby' });
+      if (username && username !== me) setUserPresence(username, { status: 'lobby' });
     };
   }, []);
 
@@ -393,8 +459,12 @@ export default function LobbyPage() {
         break;
       case 'add-friend': {
         if (isFriend(user.name)) {
+          const friendId = user.userId || findFriendUserId(user.name);
           removeFriend(user.name);
           setFriendNames(getFriendNames());
+          if (friendId) {
+            void emitFriendRemove(String(friendId)).catch(() => undefined);
+          }
           appendSystemChat(`${user.name} 님을 친구 목록에서 삭제했습니다.`);
         } else {
           appendSystemChat(`${user.name} 님에게 친구 요청을 보냈습니다.`);
@@ -667,7 +737,18 @@ export default function LobbyPage() {
         open={showTitleModal}
         titleData={titleData}
         onClose={() => setShowTitleModal(false)}
-        onTitleDataChange={setTitleData}
+        onTitleDataChange={(next) => {
+          setTitleData(next);
+          void emitUpdateTitle(next.equipped).catch(() => undefined);
+          setUsers((prev) =>
+            prev.map((user) =>
+              String(user.userId) === String(authUser.id) ||
+              user.name === (authUser.displayName || authUser.username)
+                ? { ...user, title: next.equipped }
+                : user,
+            ),
+          );
+        }}
       />
 
       <RoomCreateModal

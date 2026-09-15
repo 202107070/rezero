@@ -945,6 +945,10 @@ export default function BattlePage() {
                   payload.itemType === 'scribble')
               ) {
                 applyAttackPanelEffect(targetBot.id, payload.itemType);
+                if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
+                  setExpandedOpponentId(targetBot.id);
+                  runPanelCanvasEffect(targetBot.id, payload.itemType);
+                }
               }
               return prev;
             });
@@ -954,12 +958,20 @@ export default function BattlePage() {
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.GAME_ENDED, (payload: BattleGameEndedPayload) => {
             if (payload.matchId) {
+              const myId = getCurrentUserId();
+              const rewards = Array.isArray(payload.rewards) ? payload.rewards : [];
+              const mine =
+                rewards.find((reward) => String(reward.userId || reward.id) === String(myId)) ||
+                null;
               setBattleSettings({
                 ...getBattleSettings(),
                 matchSubmitResult: {
                   ...(getBattleSettings().matchSubmitResult as object),
                   resultReady: true,
                   rewards: payload.rewards,
+                  earnedGold: mine?.earnedGold,
+                  ratingDelta: mine?.ratingDelta,
+                  newTitleIds: mine?.newTitleIds,
                 },
               });
             }

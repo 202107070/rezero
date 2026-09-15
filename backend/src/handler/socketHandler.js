@@ -24,7 +24,12 @@ import { pool as dbPool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
 
 function userLabel(user) {
-  return user?.displayName || user?.username || user?.id || "USER";
+  const display = String(user?.displayName || "").trim();
+  const username = String(user?.username || "").trim();
+  // displayName이 username과 같으면 그냥 표시, 다르면 displayName 우선
+  if (display) return display;
+  if (username) return username;
+  return user?.id || "USER";
 }
 
 export function registerSocketHandlers(io, socket) {
@@ -128,8 +133,16 @@ export function registerSocketHandlers(io, socket) {
         socket.emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
       } else if (validatedData.mode === "FRIEND") {
         const friendIds = validatedData.friendUserIds || [];
+        const delivered = new Set();
         for (let i = 0; i < friendIds.length; i++) {
-          io.to("user:" + String(friendIds[i])).emit(
+          const fid = String(friendIds[i]);
+          if (delivered.has(fid)) continue;
+          delivered.add(fid);
+          io.to("user:" + fid).emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
+        }
+        // 같은 방(대기/결과)에 있으면 방에도 전달 → 친구가 못 받는 경우 보완
+        if (/^\d+$/.test(String(validatedData.roomId))) {
+          io.to(validatedData.roomId).emit(
             SOCKET_EVENTS.RECEIVE_MESSAGE,
             chatMessage,
           );
@@ -516,6 +529,50 @@ export function registerSocketHandlers(io, socket) {
       io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REQUEST_RESULT, payload);
       if (typeof callback === "function") {
         callback({ success: true });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.FRIEND_REMOVE, function (data, callback) {
+    try {
+      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      if (!toUserId) throw new Error("삭제 대상이 없습니다.");
+      const payload = {
+        fromUserId: String(socket.user.id),
+        fromUserName: userLabel(socket.user),
+        toUserId,
+      };
+      io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.UPDATE_TITLE, async function (data, callback) {
+    try {
+      const titleId = data?.titleId != null ? String(data.titleId) : "";
+      await markUserOnline({
+        ...socket.user,
+        equippedTitleId: titleId || "",
+      });
+      await broadcastLobbyPresence(io);
+      const payload = {
+        userId: String(socket.user.id),
+        titleId: titleId || null,
+        displayName: userLabel(socket.user),
+      };
+      io.to(LOBBY_ROOM_ID).emit(SOCKET_EVENTS.TITLE_CHANGED, payload);
+      if (typeof callback === "function") {
+        callback({ success: true, ...payload });
       }
     } catch (error) {
       if (typeof callback === "function") {

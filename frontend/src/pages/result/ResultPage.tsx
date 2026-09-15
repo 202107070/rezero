@@ -26,6 +26,7 @@ import {
   disconnectRoomSocket,
   emitReviewInvite,
   emitReviewInviteResponse,
+  emitFriendRemove,
   emitFriendRequest,
   getActiveRoomId,
   joinRoomSocket,
@@ -56,11 +57,13 @@ import {
 } from '../../services/userService';
 import {
   addFriend,
+  findFriendUserId,
   getFollowRoomPath,
   getFriendUserIds,
   getUserPresence,
   isFriend,
   removeFriend,
+  removeFriendByUserId,
 } from '../../services/friendStore';
 import {
   clearReviewInvite,
@@ -184,12 +187,22 @@ export default function ResultPage() {
     earnedGold?: number;
     ratingDelta?: number;
     newTitleIds?: string[];
+    rewards?: Array<{ userId?: string; id?: string; earnedGold?: number; ratingDelta?: number }>;
   };
+  const storedRewardFromList = Array.isArray(storedSubmit.rewards)
+    ? storedSubmit.rewards.find(
+        (reward) => String(reward.userId || reward.id) === String(myUserId),
+      )
+    : null;
   const [apiRewardGold, setApiRewardGold] = useState<number | null>(
-    typeof storedSubmit.earnedGold === 'number' ? storedSubmit.earnedGold : null,
+    typeof storedSubmit.earnedGold === 'number'
+      ? storedSubmit.earnedGold
+      : typeof storedRewardFromList?.earnedGold === 'number'
+        ? storedRewardFromList.earnedGold
+        : null,
   );
   const earnedGold = isLiveMatch ? (apiRewardGold ?? 0) : myScore;
-  const myRank = myPlayer?.rank || (myPlayer ? allPlayers.indexOf(myPlayer) + 1 : 0);
+  const myRank = myPlayer?.rank ?? (myPlayer ? allPlayers.indexOf(myPlayer) + 1 : 0);
   const totalPlayersForRank = Math.max(1, allPlayers.length);
   const isLastPlace = myRank > 0 && myRank === totalPlayersForRank && totalPlayersForRank > 1;
   const isFirstPlace = myRank === 1;
@@ -307,6 +320,24 @@ export default function ResultPage() {
                 {
                   sender: 'SYSTEM',
                   text: `${payload.fromUserName}님이 친구 요청을 수락했습니다.`,
+                  type: 'sys',
+                },
+              ]);
+            },
+          ),
+        );
+
+        unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
+            (payload?: { fromUserId?: string; fromUserName?: string }) => {
+              if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
+              if (payload?.fromUserName) removeFriend(payload.fromUserName);
+              setChatMessages((prev) => [
+                ...prev,
+                {
+                  sender: 'SYSTEM',
+                  text: `${payload?.fromUserName || '상대'}님이 친구 목록에서 나를 삭제했습니다.`,
                   type: 'sys',
                 },
               ]);
@@ -494,10 +525,10 @@ export default function ResultPage() {
 
     if (myRank <= 0) {
       mainMsg = '매치 결과를 집계했습니다.';
-    } else if (myRank === totalPlayers && totalPlayers > 1) {
-      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
     } else if (myRank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
+    } else if (myRank === totalPlayers && totalPlayers > 1) {
+      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
     } else {
       mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등입니다.`;
     }
@@ -526,10 +557,10 @@ export default function ResultPage() {
     if (!isLiveMatch || allPlayers.length === 0 || myRank <= 0) return;
     const totalPlayers = Math.max(1, allPlayers.length);
     let mainMsg = '';
-    if (myRank === totalPlayers && totalPlayers > 1) {
-      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
-    } else if (myRank === 1) {
+    if (myRank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
+    } else if (myRank === totalPlayers && totalPlayers > 1) {
+      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
     } else {
       mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등입니다.`;
     }
@@ -537,11 +568,12 @@ export default function ResultPage() {
     if (totalProblemCount > 0) {
       detailLines.push(`${totalProblemCount}문제 중 ${myCorrectCount}문제를 맞췄습니다.`);
     }
-    setResultPopup((prev) =>
-      prev.show
-        ? prev
-        : { show: true, mainMsg, detailLines, newTitles: [] },
-    );
+    setResultPopup((prev) => ({
+      show: true,
+      mainMsg,
+      detailLines: detailLines.length > 0 ? detailLines : prev.detailLines,
+      newTitles: prev.newTitles,
+    }));
   }, [isLiveMatch, allPlayers.length, myRank, totalProblemCount, myCorrectCount]);
 
   useEffect(() => {
@@ -873,13 +905,18 @@ export default function ResultPage() {
         break;
       case 'add-friend':
         if (isFriend(userName)) {
+          const target = allPlayers.find((p) => p.name === userName);
+          const friendId = target?.id || findFriendUserId(userName);
           removeFriend(userName);
+          if (friendId) {
+            void emitFriendRemove(String(friendId).replace(/^player-/, '')).catch(() => undefined);
+          }
           appendSystemChat(`${userName} 님을 친구 목록에서 삭제했습니다.`);
         } else {
           appendSystemChat(`${userName} 님에게 친구 요청을 보냈습니다.`);
           const target = allPlayers.find((p) => p.name === userName);
           if (target?.id) {
-            void emitFriendRequest(String(target.id), userName).catch(() => undefined);
+            void emitFriendRequest(String(target.id).replace(/^player-/, ''), userName).catch(() => undefined);
           }
         }
         break;

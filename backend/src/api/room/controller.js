@@ -5,11 +5,13 @@ import {
   getRoom,
   getRooms,
   joinRoom,
+  kickParticipant,
   leaveRoom,
   removeRoom,
   startRoom,
 } from "./service.js";
 import { sendSuccess } from "#utils/responseHelper.js";
+import { AppError } from "#utils/appError.js";
 
 export async function create(req, res, next) {
   try {
@@ -55,6 +57,20 @@ export async function leave(req, res, next) {
   try {
     const roomId = parseRoomId(req.params.id);
     const result = await leaveRoom(roomId, req.user.id);
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function kick(req, res, next) {
+  try {
+    const roomId = parseRoomId(req.params.id);
+    const targetUserId = req.body?.targetUserId ? String(req.body.targetUserId) : "";
+    if (!targetUserId) {
+      throw new AppError(400, "TARGET_REQUIRED", "targetUserId가 필요합니다.");
+    }
+    const result = await kickParticipant(roomId, req.user.id, targetUserId);
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);

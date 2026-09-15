@@ -74,6 +74,17 @@ export function removeFriend(name: string) {
   writeFriends(readFriends().filter((f) => f.name !== name));
 }
 
+export function removeFriendByUserId(userId: string) {
+  const id = String(userId || '');
+  if (!id) return;
+  writeFriends(readFriends().filter((f) => String(f.userId || '') !== id));
+}
+
+export function findFriendUserId(name: string): string | null {
+  const friend = readFriends().find((f) => f.name === name);
+  return friend?.userId ? String(friend.userId) : null;
+}
+
 export function isFriend(name: string): boolean {
   return readFriends().some((f) => f.name === name);
 }
@@ -91,8 +102,9 @@ export function setUserPresence(
     roomQuery?: string;
   },
 ) {
+  if (!userName) return;
   const map = readPresenceMap();
-  map[userName] = {
+  const entry = {
     userName,
     status: patch.status,
     roomId: patch.roomId,
@@ -100,6 +112,7 @@ export function setUserPresence(
     roomQuery: patch.roomQuery,
     updatedAt: Date.now(),
   };
+  map[userName] = entry;
   writePresenceMap(map);
 }
 
@@ -110,7 +123,11 @@ export function clearUserPresence(userName: string) {
 }
 
 export function getUserPresence(userName: string): FriendPresence | null {
-  return readPresenceMap()[userName] ?? null;
+  const map = readPresenceMap();
+  if (map[userName]) return map[userName];
+  // displayName / username 혼용 대비: 값 매칭
+  const found = Object.values(map).find((entry) => entry.userName === userName);
+  return found ?? null;
 }
 
 export function getPresenceMap(): Record<string, FriendPresence> {
@@ -120,14 +137,18 @@ export function getPresenceMap(): Record<string, FriendPresence> {
 export function getFriendPresences(): FriendPresence[] {
   const names = new Set(getFriendNames());
   const map = readPresenceMap();
-  return [...names].map(
-    (name) =>
-      map[name] ?? {
+  return [...names].map((name) => {
+    const direct = map[name];
+    if (direct) return direct;
+    const byValue = Object.values(map).find((entry) => entry.userName === name);
+    return (
+      byValue ?? {
         userName: name,
-        status: 'offline',
+        status: 'offline' as FriendPresenceStatus,
         updatedAt: 0,
-      },
-  );
+      }
+    );
+  });
 }
 
 export function getFollowRoomPath(friendName: string): string | null {

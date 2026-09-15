@@ -13,12 +13,16 @@ export async function markUserOnline(user) {
   const userId = String(user.id);
   try {
     await redisClient.sAdd(ONLINE_SET_KEY, userId);
-    await redisClient.hSet(ONLINE_META_PREFIX + userId, {
+    const fields = {
       userId,
       username: String(user.username || ""),
       displayName: String(user.displayName || user.username || userId),
       updatedAt: new Date().toISOString(),
-    });
+    };
+    if (user.equippedTitleId != null) {
+      fields.equippedTitleId = String(user.equippedTitleId || "");
+    }
+    await redisClient.hSet(ONLINE_META_PREFIX + userId, fields);
   } catch (err) {
     console.error("[markUserOnline] " + err.message);
   }
@@ -46,6 +50,7 @@ export async function listOnlineUsers() {
           userId: meta.userId,
           username: meta.username || "",
           displayName: meta.displayName || meta.username || meta.userId,
+          equippedTitleId: meta.equippedTitleId || null,
         });
       }
     }

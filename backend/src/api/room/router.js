@@ -4,6 +4,7 @@ import {
   create,
   detail,
   join,
+  kick,
   leave,
   list,
   remove,
@@ -23,6 +24,7 @@ router.get("/rooms/:id/can-start", validateGameStartQuery, checkStart);
 router.post("/rooms/:id/start", start);
 router.post("/rooms/:id/join", join);
 router.post("/rooms/:id/leave", leave);
+router.post("/rooms/:id/kick", kick);
 router.delete("/rooms/:id", remove);
 
 export default router;

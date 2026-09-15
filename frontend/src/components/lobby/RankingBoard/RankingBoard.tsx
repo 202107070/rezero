@@ -1,7 +1,7 @@
 import { useCallback, useState, type MouseEvent } from 'react';
 import { TITLE_DEFS } from '../../../constants/titleTypes';
 import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
-import { getCurrentUserName } from '../../../services/authService';
+import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../../services/authService';
 import { getUserPresence, isFriend } from '../../../services/friendStore';
 import type { LobbyUser } from '../../../types/lobby';
 import {
@@ -77,7 +77,10 @@ export function RankingBoard({
   onTabChange,
   onUserMenuAction,
 }: RankingBoardProps) {
-  const myUserName = getCurrentUserName();
+  const myUserId = getCurrentUserId();
+  const myNames = new Set(
+    [getCurrentDisplayName(), getCurrentUserName()].filter(Boolean).map(String),
+  );
   const sortedUsers = sortUsersForTab(users, activeTab, friendNames);
   const myEquipped = getEquippedTitle(titleData);
 
@@ -92,8 +95,13 @@ export function RankingBoard({
     setContextMenu((prev) => ({ ...prev, open: false, user: null }));
   }, []);
 
+  const isSelfUser = (user: LobbyUser) =>
+    Boolean(
+      (user.userId && String(user.userId) === String(myUserId)) || myNames.has(user.name),
+    );
+
   const handleNicknameContextMenu = (event: MouseEvent, user: LobbyUser) => {
-    if (user.name === myUserName) return;
+    if (isSelfUser(user)) return;
     event.preventDefault();
     event.stopPropagation();
     setContextMenu({
@@ -165,7 +173,7 @@ export function RankingBoard({
               </tr>
             ) : null}
             {sortedUsers.map((u, i) => {
-              const isSelf = u.name === myUserName;
+              const isSelf = isSelfUser(u);
               return (
                 <tr key={`${activeTab}-${i}`}>
                   <td className="pixel-text-warning">

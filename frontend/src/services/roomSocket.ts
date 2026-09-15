@@ -29,6 +29,10 @@ export const ROOM_SOCKET_EVENTS = {
   CHARACTER_CHANGED: 'character_changed',
   FRIEND_REQUEST: 'friend_request',
   FRIEND_REQUEST_RESULT: 'friend_request_result',
+  FRIEND_REMOVE: 'friend_remove',
+  USER_KICKED: 'user_kicked',
+  UPDATE_TITLE: 'update_title',
+  TITLE_CHANGED: 'title_changed',
 } as const;
 
 export const LOBBY_ROOM_ID = 'lobby';
@@ -37,6 +41,7 @@ export interface LobbyPresenceUser {
   userId: string;
   username?: string;
   displayName?: string;
+  equippedTitleId?: string | null;
 }
 
 export interface LobbyPresencePayload {
@@ -78,7 +83,13 @@ export interface BattleGameEndedPayload {
   roomId?: number | string;
   matchId?: string;
   ranking?: unknown;
-  rewards?: unknown;
+  rewards?: Array<{
+    userId?: string;
+    id?: string;
+    earnedGold?: number;
+    ratingDelta?: number;
+    newTitleIds?: string[];
+  }>;
 }
 
 export interface RoomReadyStatePayload {
@@ -414,6 +425,42 @@ export function emitFriendRequestResult(
     client.emit(
       ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
       { toUserId, accepted },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitFriendRemove(
+  toUserId: string,
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
+      { toUserId },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitUpdateTitle(
+  titleId: string | null,
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.UPDATE_TITLE,
+      { titleId: titleId || '' },
       (response?: { success?: boolean; message?: string }) => {
         resolve({
           success: Boolean(response?.success),

@@ -249,6 +249,62 @@ export async function leaveRoom(roomId, userId) {
   };
 }
 
+export async function kickParticipant(roomId, hostUserId, targetUserId) {
+  const result = await roomModel.kickRoomParticipant(roomId, hostUserId, targetUserId);
+
+  if (!result.success) {
+    if (result.reason === "ROOM_NOT_FOUND") throw roomNotFound();
+    if (result.reason === "ROOM_KICK_FORBIDDEN") {
+      throw new AppError(403, "ROOM_KICK_FORBIDDEN", "방장만 강퇴할 수 있습니다.");
+    }
+    if (result.reason === "ROOM_ALREADY_STARTED") {
+      throw new AppError(409, "ROOM_ALREADY_STARTED", "게임 중에는 강퇴할 수 없습니다.");
+    }
+    if (result.reason === "ROOM_KICK_SELF") {
+      throw new AppError(400, "ROOM_KICK_SELF", "자기 자신은 강퇴할 수 없습니다.");
+    }
+    throw new AppError(409, "ROOM_NOT_JOINED", "강퇴 대상이 방에 없습니다.");
+  }
+
+  await saveLeftRoomState(roomId, targetUserId, {
+    roomClosed: false,
+    currentPlayers: result.currentPlayers,
+  });
+
+  try {
+    await redisClient.sAdd(`room:kicked:${roomId}`, String(targetUserId));
+  } catch {
+    // ignore
+  }
+
+  const io = getSocket();
+  if (io) {
+    const payload = {
+      roomId: String(roomId),
+      userId: String(targetUserId),
+      kickedBy: String(hostUserId),
+      roomClosed: false,
+      newHostUserId: null,
+    };
+    io.to(String(roomId)).emit(SOCKET_EVENTS.USER_KICKED, payload);
+    io.to("user:" + String(targetUserId)).emit(SOCKET_EVENTS.USER_KICKED, payload);
+    io.to(String(roomId)).emit(SOCKET_EVENTS.USER_LEFT, {
+      roomId: String(roomId),
+      userId: String(targetUserId),
+      roomClosed: false,
+      newHostUserId: null,
+      kicked: true,
+    });
+  }
+
+  const room = await roomModel.findRoomById(roomId);
+  const participants = await roomModel.findRoomParticipants(roomId);
+  return {
+    roomClosed: false,
+    room: toRoomResponse(room, participants),
+  };
+}
+
 export async function startRoom(roomId, userId) {
   const room = await roomModel.findRoomById(roomId);
 

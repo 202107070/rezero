@@ -32,4 +32,8 @@ export const SOCKET_EVENTS = {
   CHARACTER_CHANGED: "character_changed",
   FRIEND_REQUEST: "friend_request",
   FRIEND_REQUEST_RESULT: "friend_request_result",
+  FRIEND_REMOVE: "friend_remove",
+  USER_KICKED: "user_kicked",
+  UPDATE_TITLE: "update_title",
+  TITLE_CHANGED: "title_changed",
 };
