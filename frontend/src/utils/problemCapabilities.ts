@@ -20,6 +20,17 @@ export function resolveProblemStyle(type: string | undefined): ProblemStyle {
   return 'code';
 }
 
+/** short_answer + _____ 빈칸이면 code(fill) 스타일로 취급 */
+export function resolveProblemStyleFromProblem(
+  problem: Pick<{ type?: string; question?: string }, 'type' | 'question'>,
+): ProblemStyle {
+  const style = resolveProblemStyle(problem.type);
+  if (style === 'short_answer' && /_____/.test(problem.question || '')) {
+    return 'code';
+  }
+  return style;
+}
+
 function mergeItemPolicy(
   style: ProblemStyle,
   overrides?: Partial<Record<ItemKey, boolean>>,
@@ -44,10 +55,10 @@ function disableAllItems(items: Record<ItemKey, boolean>): Record<ItemKey, boole
 }
 
 export function resolveProblemCapabilities(
-  problem: Pick<BattleProblem, 'type' | 'visual' | 'capabilityOverrides'>,
+  problem: Pick<BattleProblem, 'type' | 'question' | 'visual' | 'capabilityOverrides'>,
   ctx: { gameMode?: GameModeContext } = {},
 ): ProblemCapabilities {
-  const style = resolveProblemStyle(problem.type);
+  const style = resolveProblemStyleFromProblem(problem);
   let items = mergeItemPolicy(style, problem.capabilityOverrides);
 
   if (ctx.gameMode !== 'item') {

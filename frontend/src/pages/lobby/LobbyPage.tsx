@@ -329,6 +329,7 @@ export default function LobbyPage() {
   const [showInventoryItemsModal, setShowInventoryItemsModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [kickNotice, setKickNotice] = useState('');
   const [displayMode, setDisplayMode] = useState<DisplayMode>(loadDisplayMode);
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(loadAudioSettings);
   const [rouletteSpinning, setRouletteSpinning] = useState(false);
@@ -340,6 +341,22 @@ export default function LobbyPage() {
   const [joinPwd, setJoinPwd] = useState('');
   const [joinError, setJoinError] = useState('');
   const [joiningRoom, setJoiningRoom] = useState(false);
+
+  useEffect(() => {
+    try {
+      const notice = sessionStorage.getItem('rezero_kick_notice');
+      if (notice) {
+        sessionStorage.removeItem('rezero_kick_notice');
+        setKickNotice(notice);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    setFriendNames(getFriendNames());
+  }, [authUser.id]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -898,6 +915,24 @@ export default function LobbyPage() {
         onConfirm={() => void quitApp()}
         onCancel={() => setShowExitModal(false)}
       />
+
+      {kickNotice && (
+        <div className="review-modal-overlay" style={{ zIndex: 4100 }}>
+          <div className="review-modal-panel ranking-panel" style={{ width: 'min(420px, 92vw)', height: 'auto', minHeight: 160 }}>
+            <div className="rank-title">NOTICE</div>
+            <div className="review-incoming-msg">{kickNotice}</div>
+            <div className="review-modal-actions review-modal-actions-end">
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-primary review-modal-btn"
+                onClick={() => setKickNotice('')}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingFriendRequest && (
         <div className="review-modal-overlay" style={{ zIndex: 4000 }}>

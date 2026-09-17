@@ -1,4 +1,4 @@
-import { getCurrentUserName } from '../services/authService';
+import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../services/authService';
 import type { RoomPlayer, CharacterOption, LanguageOption } from '../types/room';
 import { getKickedCount } from '../services/roomStore';
 import { getTierByUserName } from '../utils/tierUtils';
@@ -76,16 +76,26 @@ export function buildInitialMessages(
   parsedMaxPlayers: number,
   players: (RoomPlayer | null)[],
 ): Array<{ type: 'sys' | 'user'; text: string; name?: string }> {
-  const playerName = getCurrentUserName();
+  const myId = String(getCurrentUserId() || '');
+  const myName = getCurrentDisplayName() || getCurrentUserName() || 'UNKNOWN';
   const msgs = [
     { type: 'sys' as const, text: `>> ${roomMode === '1/1' ? '1:1 진검승부' : `1/${parsedMaxPlayers} 배틀`} 방이 생성되었습니다.` },
-    { type: 'sys' as const, text: `>> [${playerName}] 님이 입장하셨습니다.` },
   ];
 
+  const seen = new Set<string>();
+  const pushJoin = (name: string, userId?: string) => {
+    const key = String(userId || name);
+    if (!name || seen.has(key)) return;
+    seen.add(key);
+    msgs.push({ type: 'sys', text: `>> [${name}] 님이 입장하셨습니다.` });
+  };
+
+  pushJoin(myName, myId);
   players.forEach((p) => {
-    if (p && p.id !== 1) {
-      msgs.push({ type: 'sys' as const, text: `>> [${p.name}] 님이 입장하셨습니다.` });
-    }
+    if (!p) return;
+    if (myId && String(p.userId) === myId) return;
+    if (!myId && p.name === myName) return;
+    pushJoin(p.name, p.userId);
   });
 
   return msgs;

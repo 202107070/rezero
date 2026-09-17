@@ -71,7 +71,10 @@ export default function PracticePage() {
     isChecked && currentEx.type === 'multiple_choice' && selectedOption === currentEx.correctIndex;
 
   const isFillBlankCorrect = () => {
-    if (!isBlankBasedType(currentEx.type)) return false;
+    const blankCount = (currentEx.question?.match(/_____/g) || []).length;
+    if (!isBlankBasedType(currentEx.type) && !(currentEx.type === 'short_answer' && blankCount > 0)) {
+      return false;
+    }
     const blanks = blankAnswers[currentIndex] || [];
     if (blanks.length !== correctAnswers.length) return false;
     for (let i = 0; i < blanks.length; i++) {
@@ -81,7 +84,8 @@ export default function PracticePage() {
   };
 
   const isShortAnswerCorrect = () => {
-    if (currentEx.type !== 'short_answer') return false;
+    const blankCount = (currentEx.question?.match(/_____/g) || []).length;
+    if (currentEx.type !== 'short_answer' || blankCount > 0) return false;
     const ans = (blankAnswers[currentIndex]?.[0] || '').trim().toLowerCase();
     return ans === (correctAnswers[0] || '').trim().toLowerCase();
   };
@@ -119,11 +123,12 @@ export default function PracticePage() {
 
   const handleCheck = () => {
     if (isChecked) return;
+    const blankCount = (currentEx.question?.match(/_____/g) || []).length;
     if (currentEx.type === 'multiple_choice') {
       if (selectedOption === -1 || selectedOption === undefined) return;
-    } else if (isBlankBasedType(currentEx.type)) {
+    } else if (isBlankBasedType(currentEx.type) || (currentEx.type === 'short_answer' && blankCount > 0)) {
       const blanks = blankAnswers[currentIndex] || [];
-      const required = (currentEx.question?.match(/_____/g) || []).length;
+      const required = blankCount || correctAnswers.length;
       if (blanks.length < required || blanks.some((v) => !v || v.trim() === '')) return;
     } else if (currentEx.type === 'short_answer') {
       const ans = (blankAnswers[currentIndex]?.[0] || '').trim();
@@ -154,9 +159,10 @@ export default function PracticePage() {
 
   const canCheck = () => {
     if (isChecked) return false;
+    const blankCount = (currentEx.question?.match(/_____/g) || []).length;
     if (currentEx.type === 'multiple_choice') return selectedOption !== -1 && selectedOption !== undefined;
-    if (isBlankBasedType(currentEx.type)) {
-      const required = (currentEx.question?.match(/_____/g) || []).length;
+    if (isBlankBasedType(currentEx.type) || (currentEx.type === 'short_answer' && blankCount > 0)) {
+      const required = blankCount || correctAnswers.length;
       const blanks = blankAnswers[currentIndex] || [];
       return blanks.length >= required && blanks.every((v) => v && v.trim() !== '');
     }

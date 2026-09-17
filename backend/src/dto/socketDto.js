@@ -105,6 +105,7 @@ export function validateUseItem(data) {
     roomId: String(data.roomId).trim(),
     targetUserId: targetUserId,
     itemType: data.itemType,
+    scribbleStroke: data.scribbleStroke || null,
   };
 }
 
@@ -135,6 +136,7 @@ export const socketDto = {
       itemType: params.itemType,
       success: params.success,
       effectDetails: params.effectDetails,
+      scribbleStroke: params.scribbleStroke || null,
       timestamp: new Date().toISOString(),
     };
   },

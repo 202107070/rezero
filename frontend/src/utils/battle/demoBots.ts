@@ -1,5 +1,6 @@
 import { resolveProblemStyle } from '../problemCapabilities';
 import { getProblemAnswersForLang } from '../problemTypeUtils';
+import problems from '../../data/problems.js';
 
 export interface DemoBot {
   id: string;
@@ -361,7 +362,21 @@ export function getBotSpectatorAnswers(
   const hasStored = stored.some((value) => String(value || '').trim() !== '');
   if (hasStored) return stored;
   if (problem && langKey) {
-    return getProblemAnswersForLang(problem.answer, langKey);
+    const fromProblem = getProblemAnswersForLang(problem.answer, langKey);
+    if (fromProblem.some((value) => String(value || '').trim() !== '')) {
+      return fromProblem;
+    }
+    const bank = problems as ProblemLike[];
+    const match =
+      bank.find(
+        (entry) =>
+          entry.title === problem.title &&
+          String(entry.question || '').trim() === String(problem.question || '').trim(),
+      ) || bank.find((entry) => entry.title === problem.title);
+    if (match) {
+      const fromBank = getProblemAnswersForLang(match.answer, langKey);
+      if (fromBank.length) return fromBank;
+    }
   }
   return stored;
 }

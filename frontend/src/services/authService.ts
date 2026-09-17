@@ -91,6 +91,18 @@ async function fetchMeProfile(): Promise<AuthUserPayload> {
   return apiRequest<AuthUserPayload>('/users/me');
 }
 
+/** 매치 종료 후 레이팅/골드 등 최신화 */
+export async function refreshMeProfile(): Promise<AuthUser | null> {
+  try {
+    const me = await fetchMeProfile();
+    applyUserProfile(me);
+    currentUser = toAuthUser(me);
+    return currentUser;
+  } catch {
+    return currentUser;
+  }
+}
+
 export async function login(username: string, password: string): Promise<AuthResult> {
   try {
     const result = await apiRequest<AuthResponse>('/auth/login', {

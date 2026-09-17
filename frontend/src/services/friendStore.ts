@@ -1,11 +1,53 @@
 import type { FriendEntry, FriendPresence, FriendPresenceStatus } from '../types/friend';
 
-const FRIENDS_KEY = 'rezero_friends';
-const PRESENCE_KEY = 'rezero_presence';
+const LEGACY_FRIENDS_KEY = 'rezero_friends';
+const LEGACY_PRESENCE_KEY = 'rezero_presence';
+const OWNER_KEY = 'rezero_friends_owner';
+
+let activeOwnerId: string | null = null;
+
+function friendsKey(ownerId: string | null) {
+  return ownerId ? `rezero_friends_${ownerId}` : LEGACY_FRIENDS_KEY;
+}
+
+function presenceKey(ownerId: string | null) {
+  return ownerId ? `rezero_presence_${ownerId}` : LEGACY_PRESENCE_KEY;
+}
+
+/** 로그인 유저별로 친구/프레즌스 저장소를 분리한다. */
+export function switchFriendOwner(userId: string | null | undefined) {
+  const next = userId ? String(userId) : null;
+  activeOwnerId = next;
+  if (next) {
+    localStorage.setItem(OWNER_KEY, next);
+    // 예전 글로벌 키가 남아 있고 새 키가 비어 있으면 1회 이전
+    const scoped = localStorage.getItem(friendsKey(next));
+    const legacy = localStorage.getItem(LEGACY_FRIENDS_KEY);
+    if (!scoped && legacy) {
+      localStorage.setItem(friendsKey(next), legacy);
+      localStorage.removeItem(LEGACY_FRIENDS_KEY);
+    }
+    const scopedPresence = localStorage.getItem(presenceKey(next));
+    const legacyPresence = localStorage.getItem(LEGACY_PRESENCE_KEY);
+    if (!scopedPresence && legacyPresence) {
+      localStorage.setItem(presenceKey(next), legacyPresence);
+      localStorage.removeItem(LEGACY_PRESENCE_KEY);
+    }
+  } else {
+    localStorage.removeItem(OWNER_KEY);
+  }
+}
+
+function currentOwnerId(): string | null {
+  if (activeOwnerId) return activeOwnerId;
+  const stored = localStorage.getItem(OWNER_KEY);
+  activeOwnerId = stored || null;
+  return activeOwnerId;
+}
 
 function readFriends(): FriendEntry[] {
   try {
-    const raw = localStorage.getItem(FRIENDS_KEY);
+    const raw = localStorage.getItem(friendsKey(currentOwnerId()));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as FriendEntry[];
     return Array.isArray(parsed) ? parsed : [];
@@ -15,12 +57,12 @@ function readFriends(): FriendEntry[] {
 }
 
 function writeFriends(friends: FriendEntry[]) {
-  localStorage.setItem(FRIENDS_KEY, JSON.stringify(friends));
+  localStorage.setItem(friendsKey(currentOwnerId()), JSON.stringify(friends));
 }
 
 function readPresenceMap(): Record<string, FriendPresence> {
   try {
-    const raw = localStorage.getItem(PRESENCE_KEY);
+    const raw = localStorage.getItem(presenceKey(currentOwnerId()));
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, FriendPresence>;
     return parsed && typeof parsed === 'object' ? parsed : {};
@@ -30,7 +72,7 @@ function readPresenceMap(): Record<string, FriendPresence> {
 }
 
 function writePresenceMap(map: Record<string, FriendPresence>) {
-  localStorage.setItem(PRESENCE_KEY, JSON.stringify(map));
+  localStorage.setItem(presenceKey(currentOwnerId()), JSON.stringify(map));
 }
 
 export function loadFriends(): FriendEntry[] {
@@ -125,7 +167,6 @@ export function clearUserPresence(userName: string) {
 export function getUserPresence(userName: string): FriendPresence | null {
   const map = readPresenceMap();
   if (map[userName]) return map[userName];
-  // displayName / username 혼용 대비: 값 매칭
   const found = Object.values(map).find((entry) => entry.userName === userName);
   return found ?? null;
 }
@@ -161,7 +202,7 @@ export function getFollowRoomPath(friendName: string): string | null {
 export function canSummonFriend(friendName: string): boolean {
   if (!isFriend(friendName)) return false;
   const presence = getUserPresence(friendName);
-  return !presence || presence.status === 'lobby';
+  return !presence || presence.status === 'lobby' || presence.status === 'offline';
 }
 
 export function summonFriendToRoom(

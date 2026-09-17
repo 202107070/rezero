@@ -16,11 +16,12 @@ export function updateUiScale() {
   const mode = loadDisplayMode();
 
   if (mode === 'fullscreen') {
-    const scaleX = window.innerWidth / REF_WIDTH;
-    const scaleY = window.innerHeight / REF_HEIGHT;
-    document.documentElement.style.setProperty('--ui-scale-x', String(scaleX));
-    document.documentElement.style.setProperty('--ui-scale-y', String(scaleY));
-    document.documentElement.style.setProperty('--ui-scale', String((scaleX + scaleY) / 2));
+    // 비율 유지 letterbox — 축별 스트레치로 가장자리가 잘리는 문제 방지
+    const scale = Math.min(window.innerWidth / REF_WIDTH, window.innerHeight / REF_HEIGHT);
+    const safeScale = Math.max(0.01, Math.floor(scale * 1000) / 1000);
+    document.documentElement.style.setProperty('--ui-scale-x', String(safeScale));
+    document.documentElement.style.setProperty('--ui-scale-y', String(safeScale));
+    document.documentElement.style.setProperty('--ui-scale', String(safeScale));
     return;
   }
 

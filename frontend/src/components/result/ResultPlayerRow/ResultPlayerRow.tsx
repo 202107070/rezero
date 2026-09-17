@@ -37,8 +37,12 @@ export function ResultPlayerRow({
 
   const ratingDeltaLabel =
     player.delta > 0 ? ` +${player.delta}` : player.delta < 0 ? ` ${player.delta}` : '';
-  const solveTimeLabel =
-    player.totalSolveTime > 0 ? `${player.totalSolveTime.toFixed(1)}s` : '—';
+  const ratingAfter = Math.max(0, (Number(player.ratingScore) || 0) + (Number(player.delta) || 0));
+  const completion =
+    Number.isFinite(player.completionTime) && player.completionTime > 0
+      ? player.completionTime
+      : player.totalSolveTime;
+  const solveTimeLabel = completion > 0 && Number.isFinite(completion) ? `${completion.toFixed(1)}s` : '—';
 
   const rowContent = (
     <>
@@ -101,14 +105,14 @@ export function ResultPlayerRow({
         <span className="player-solve-time">총 풀이 시간: {solveTimeLabel}</span>
         <span className="score-val">배틀 인게임 점수: {player.ingameScore.toLocaleString()}</span>
         <span className="player-rating-info">
-          레이팅: {player.ratingScore}
+          레이팅: {ratingAfter}
           {ratingDeltaLabel}
         </span>
       </div>
     </>
   );
 
-  const rowClass = `player-row${panelClass ? ` ${panelClass}` : ''}${departed ? ' departed' : ''}${inviteSelected ? ' invite-selected' : ''}${inviteSelectable ? ' invite-selectable' : ''}`;
+  const rowClass = `player-row${showRank ? '' : ' no-rank'}${panelClass ? ` ${panelClass}` : ''}${departed ? ' departed' : ''}${inviteSelected ? ' invite-selected' : ''}${inviteSelectable ? ' invite-selectable' : ''}`;
 
   if (inviteSelectable && onInviteSelect) {
     return (

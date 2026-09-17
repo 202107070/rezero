@@ -51,6 +51,7 @@ import {
   type GameStateUpdatePayload,
   type UserReconnectedPayload,
 } from '../../services/roomSocket';
+import { leaveRoom } from '../../services/roomService';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
@@ -62,11 +63,14 @@ import {
   getUserRankMetrics,
 } from '../../utils/battle/rankUtils';
 import {
+  applyScribbleStroke,
   clearPaintCanvas,
   clearScribbleCanvas,
   startPaintCanvas,
   startScribbleCanvas,
+  type ScribbleStroke,
 } from '../../utils/battle/canvasEffects';
+import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
 import { assembleCode, DEFAULT_TEMPLATE, getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
 import { canUseItem, resolveProblemCapabilities } from '../../utils/problemCapabilities';
 import {
@@ -176,6 +180,10 @@ export default function BattlePage() {
   const [spectatorLocked, setSpectatorLocked] = useState(false);
   const [battleFinished, setBattleFinished] = useState(false);
   const [battleBots, setBattleBots] = useState<DemoBot[]>([]);
+  const battleBotsRef = useRef<DemoBot[]>([]);
+  useEffect(() => {
+    battleBotsRef.current = battleBots;
+  }, [battleBots]);
   const [expandedOpponentId, setExpandedOpponentId] = useState<string | null>(null);
   const [spectatorViewProblemByBot, setSpectatorViewProblemByBot] = useState<Record<string, number>>({});
   const [spectatorMyViewProblem, setSpectatorMyViewProblem] = useState<number | null>(null);
@@ -202,8 +210,9 @@ export default function BattlePage() {
   } | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
   const [opponentEffects, setOpponentEffects] = useState<
-    Record<string, Record<number, { panelEffect?: { type: string; expiresAt: number } }>>
+    Record<string, { panelEffect?: { type: string; expiresAt: number } }>
   >({});
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [sessionSavedSnapshot, setSessionSavedSnapshot] = useState('');
   const [, setSaveStatus] = useState<'saving' | 'saved' | 'unsaved'>('saved');
@@ -693,20 +702,15 @@ export default function BattlePage() {
         let changed = false;
         const next: typeof prev = {};
 
-        Object.entries(prev).forEach(([botId, problemEffects]) => {
-          const kept: typeof problemEffects = {};
-          Object.entries(problemEffects).forEach(([problemKey, effectEntry]) => {
-            const panelEffect = effectEntry?.panelEffect;
-            if (panelEffect && now >= panelEffect.expiresAt) {
-              if (panelEffect.type === 'paint') clearPaintCanvas(botId);
-              if (panelEffect.type === 'scribble') clearScribbleCanvas(botId);
-              changed = true;
-              return;
-            }
-            kept[Number(problemKey)] = effectEntry;
-          });
-          if (Object.keys(kept).length > 0) next[botId] = kept;
-          else if (Object.keys(problemEffects).length > 0) changed = true;
+        Object.entries(prev).forEach(([botId, effectEntry]) => {
+          const panelEffect = effectEntry?.panelEffect;
+          if (panelEffect && now >= panelEffect.expiresAt) {
+            if (panelEffect.type === 'paint') clearPaintCanvas(botId);
+            if (panelEffect.type === 'scribble') clearScribbleCanvas(botId);
+            changed = true;
+            return;
+          }
+          next[botId] = effectEntry;
         });
 
         return changed ? next : prev;
@@ -890,12 +894,36 @@ export default function BattlePage() {
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.ITEM_USED, (payload: BattleItemUsedPayload) => {
             const myId = getCurrentUserId();
-            if (String(payload.fromUserId) === String(myId)) return;
+            if (String(payload.fromUserId) === String(myId)) {
+              // 본인이 보낸 낙서 스트로크는 로컬에서 이미 그림
+              return;
+            }
 
             const targetId = String(payload.targetUserId || '');
             const isTargetMe =
               Boolean(targetId) &&
               (targetId === String(myId) || targetId === `player-${myId}`);
+
+            // 낙서 스트로크 동기화
+            if (payload.itemType === 'scribble' && payload.scribbleStroke) {
+              const strokeTargetId = isTargetMe
+                ? 'self'
+                : (() => {
+                    const roster = Array.isArray(battleMeta.roomRoster)
+                      ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
+                      : [];
+                    const targetName =
+                      roster.find((player) => String(player.userId) === targetId)?.name ||
+                      roster.find((player) => `player-${player.userId}` === targetId)?.name;
+                    const bots = battleBotsRef.current;
+                    const targetBot =
+                      bots.find((bot) => bot.id === `player-${targetId}` || bot.id === targetId) ||
+                      bots.find((bot) => bot.name === targetName);
+                    return targetBot?.id || `player-${targetId}`;
+                  })();
+              applyScribbleStroke(strokeTargetId, payload.scribbleStroke as ScribbleStroke);
+              return;
+            }
 
             if (payload.itemType === 'timeReduce' && isTargetMe) {
               setRemaining((prev) => Math.max(0, prev - 15));
@@ -915,10 +943,16 @@ export default function BattlePage() {
               });
               if (effectType === 'paint' || effectType === 'scribble') {
                 const tryRun = (attempts = 0) => {
-                  const panelEl = document.querySelector('.code-card .fill-blank-code, .code-card .fill-blank-area');
+                  const panelEl = document.querySelector(
+                    '.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card',
+                  );
                   if (panelEl) {
                     if (effectType === 'paint') startPaintCanvas(panelEl as HTMLElement, 'self');
-                    else startScribbleCanvas(panelEl as HTMLElement, 'self', ITEM_PANEL_EFFECT_MS);
+                    else {
+                      startScribbleCanvas(panelEl as HTMLElement, 'self', ITEM_PANEL_EFFECT_MS, {
+                        interactive: false,
+                      });
+                    }
                     return;
                   }
                   if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
@@ -934,6 +968,8 @@ export default function BattlePage() {
             const targetName =
               roster.find((player) => String(player.userId) === targetId)?.name ||
               roster.find((player) => `player-${player.userId}` === targetId)?.name;
+
+            // setState 업데이터 밖에서 사이드 이펙트 실행
             setBattleBots((prev) => {
               const targetBot =
                 prev.find((bot) => bot.id === `player-${targetId}` || bot.id === targetId) ||
@@ -944,11 +980,17 @@ export default function BattlePage() {
                   payload.itemType === 'lightning' ||
                   payload.itemType === 'scribble')
               ) {
-                applyAttackPanelEffect(targetBot.id, payload.itemType);
-                if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
-                  setExpandedOpponentId(targetBot.id);
-                  runPanelCanvasEffect(targetBot.id, payload.itemType);
-                }
+                queueMicrotask(() => {
+                  applyAttackPanelEffect(targetBot.id, payload.itemType as 'paint' | 'lightning' | 'scribble');
+                  if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
+                    setExpandedOpponentId(targetBot.id);
+                    runPanelCanvasEffect(
+                      targetBot.id,
+                      payload.itemType,
+                      payload.itemType === 'scribble' ? { interactive: false } : undefined,
+                    );
+                  }
+                });
               }
               return prev;
             });
@@ -956,7 +998,51 @@ export default function BattlePage() {
         );
 
         unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.USER_LEFT,
+            (payload?: { userId?: string; roomClosed?: boolean; remainingPlayers?: number }) => {
+              const leftId = String(payload?.userId || '');
+              if (!leftId) return;
+              setBattleBots((prev) =>
+                prev.filter((bot) => {
+                  const botUid = String(bot.id).replace(/^player-/, '');
+                  return botUid !== leftId && bot.id !== leftId;
+                }),
+              );
+              const remainingAfter =
+                typeof payload?.remainingPlayers === 'number'
+                  ? payload.remainingPlayers
+                  : undefined;
+              // 남은 인원이 1명 이하면 대기실로
+              if (payload?.roomClosed || (remainingAfter !== undefined && remainingAfter <= 1)) {
+                setChatMessages((prev) => [
+                  ...prev,
+                  {
+                    sender: 'SYSTEM',
+                    text: '유저가 남아있지 않아 대기실로 이동합니다.',
+                    time: '',
+                  },
+                ]);
+                clearBattleAndLeave(sessionId, roomId);
+                navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
+              }
+            },
+          ),
+        );
+
+        unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.GAME_ENDED, (payload: BattleGameEndedPayload) => {
+            if (payload.message) {
+              setChatMessages((prev) => [
+                ...prev,
+                { sender: 'SYSTEM', text: String(payload.message), time: '' },
+              ]);
+            }
+            if (payload.reason === 'no_players' || payload.message?.includes('대기실로 이동')) {
+              clearBattleAndLeave(sessionId, roomId);
+              navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
+              return;
+            }
             if (payload.matchId) {
               const myId = getCurrentUserId();
               const rewards = Array.isArray(payload.rewards) ? payload.rewards : [];
@@ -1113,7 +1199,10 @@ export default function BattlePage() {
 
     matchResultSubmittedRef.current = true;
     const elapsed = finishedAtElapsedSec >= 0 ? finishedAtElapsedSec : Math.max(0, totalBattleSeconds - remaining);
-    if (finishedAtElapsedSec < 0) setFinishedAtElapsedSec(elapsed);
+    // 모든 문제를 푼 경우에만 완주 시각 확정
+    if (finishedAtElapsedSec < 0 && localSolvedProblems.length >= totalProblems) {
+      setFinishedAtElapsedSec(elapsed);
+    }
 
     const problemResultsList = finalizeProblemResults(problemResultsRef.current, totalProblems);
     const totalSolveTime = Object.values(solveTimes).reduce((sum, value) => sum + (Number(value) || 0), 0);
@@ -1355,9 +1444,12 @@ export default function BattlePage() {
         setLocalSolvedProblems((prev) => {
           const next = Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b);
           markProblemSubmitted(sessionId, next);
+          // 모든 문제를 맞춘 뒤에만 완주 시각 기록
+          if (next.length >= totalProblems) {
+            setFinishedAtElapsedSec(battleElapsed);
+          }
           return next;
         });
-        setFinishedAtElapsedSec(battleElapsed);
       }
 
       setProblemSolved(true);
@@ -1521,28 +1613,34 @@ export default function BattlePage() {
   const canUseAttackItems = isItemMode && selectedAttackItems.length > 0 && !showGameOver;
 
   const applyAttackPanelEffect = (botId: string, type: 'paint' | 'lightning' | 'scribble') => {
-    const bot = currentBotViews.find((entry) => entry.id === botId);
-    const problemIndex = bot?.currentProblem ?? currentIndex;
     setOpponentEffects((prev) => ({
       ...prev,
       [botId]: {
-        ...(prev[botId] || {}),
-        [problemIndex]: {
-          ...(prev[botId]?.[problemIndex] || {}),
-          panelEffect: { type, expiresAt: Date.now() + ITEM_PANEL_EFFECT_MS },
-        },
+        panelEffect: { type, expiresAt: Date.now() + ITEM_PANEL_EFFECT_MS },
       },
     }));
   };
 
-  const runPanelCanvasEffect = (botId: string, type: 'paint' | 'scribble') => {
+  const runPanelCanvasEffect = (
+    botId: string,
+    type: 'paint' | 'scribble',
+    options?: { interactive?: boolean; onStroke?: (stroke: ScribbleStroke) => void },
+  ) => {
     const tryRun = (attempts = 0) => {
-      const panelEl = document.querySelector(
-        `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] .mini-code-lines`,
-      );
+      const panelEl =
+        document.querySelector(
+          `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
+        ) ||
+        document.querySelector(`[data-opponent-canvas="${botId}"]`) ||
+        document.querySelector(`.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] .mini-code-area`);
       if (panelEl) {
         if (type === 'paint') startPaintCanvas(panelEl as HTMLElement, botId);
-        else startScribbleCanvas(panelEl as HTMLElement, botId, ITEM_PANEL_EFFECT_MS);
+        else {
+          startScribbleCanvas(panelEl as HTMLElement, botId, ITEM_PANEL_EFFECT_MS, {
+            interactive: options?.interactive !== false,
+            onStroke: options?.onStroke,
+          });
+        }
         return;
       }
       if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
@@ -1552,6 +1650,14 @@ export default function BattlePage() {
 
   const handleOpenItemModal = (botId: string) => {
     if (!canUseAttackItems) return;
+    const bot = currentBotViews.find((entry) => entry.id === botId);
+    if (bot && totalProblems > 0 && (bot.solvedProblems?.length || 0) >= totalProblems) {
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: 'SYSTEM', text: '이미 모든 문제를 푼 상대에게는 공격할 수 없습니다.', time: '' },
+      ]);
+      return;
+    }
     itemTargetBotIdRef.current = botId;
     setExpandedOpponentId(botId);
     setShowItemModal(true);
@@ -1624,7 +1730,17 @@ export default function BattlePage() {
       setItemInventory((prev) => ({ ...prev, timeReduce: prev.timeReduce - 1 }));
     } else if (type === 'scribble') {
       applyAttackPanelEffect(botId, 'scribble');
-      runPanelCanvasEffect(botId, 'scribble');
+      runPanelCanvasEffect(botId, 'scribble', {
+        interactive: true,
+        onStroke: (stroke) => {
+          if (!isLiveMatch || !roomId || !targetUserId) return;
+          void emitBattleItemUsed(roomId, {
+            itemType: 'scribble',
+            targetUserId,
+            scribbleStroke: stroke,
+          });
+        },
+      });
       setItemInventory((prev) => ({ ...prev, scribble: prev.scribble - 1 }));
     }
 
@@ -1653,6 +1769,19 @@ export default function BattlePage() {
   };
 
   const leaveBattle = () => {
+    setShowLeaveConfirm(true);
+  };
+
+  const confirmLeaveBattle = async () => {
+    setShowLeaveConfirm(false);
+    const numericRoomId = roomId ? Number(roomId) : NaN;
+    try {
+      if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
+        await leaveRoom(numericRoomId);
+      }
+    } catch {
+      // ignore
+    }
     clearBattleAndLeave(sessionId, roomId);
     disconnectRoomSocket(true);
     navigate(ROUTES.LOBBY);
@@ -1986,6 +2115,12 @@ export default function BattlePage() {
                 panelHit={panelHit}
                 onOpenItemModal={handleOpenItemModal}
                 showItemButton={canUseAttackItems}
+                itemDisabledByBot={Object.fromEntries(
+                  currentBotViews.map((bot) => [
+                    bot.id,
+                    totalProblems > 0 && (bot.solvedProblems?.length || 0) >= totalProblems,
+                  ]),
+                )}
                 renderMiniStatus={renderMiniStatus}
               />
             </div>
@@ -2063,6 +2198,12 @@ export default function BattlePage() {
         open={showAnswerRequiredModal}
         message="문제를 풀어주세요."
         onClose={() => setShowAnswerRequiredModal(false)}
+      />
+
+      <ExitConfirmModal
+        open={showLeaveConfirm}
+        onConfirm={() => void confirmLeaveBattle()}
+        onCancel={() => setShowLeaveConfirm(false)}
       />
     </div>
   );

@@ -53,7 +53,8 @@ export function isExerciseCorrect(
   blankAnswers: string[][],
 ): boolean {
   if (ex.type === 'multiple_choice') return userAnswers[idx] === ex.correctIndex;
-  if (isBlankBasedType(ex.type)) {
+  const blankCount = (ex.question?.match(/_____/g) || []).length;
+  if (isBlankBasedType(ex.type) || (ex.type === 'short_answer' && blankCount > 0)) {
     const blanks = blankAnswers[idx] || [];
     const correct = ex.answer?.[lang] || [];
     return (

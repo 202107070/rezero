@@ -140,13 +140,7 @@ export function registerSocketHandlers(io, socket) {
           delivered.add(fid);
           io.to("user:" + fid).emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
         }
-        // 같은 방(대기/결과)에 있으면 방에도 전달 → 친구가 못 받는 경우 보완
-        if (/^\d+$/.test(String(validatedData.roomId))) {
-          io.to(validatedData.roomId).emit(
-            SOCKET_EVENTS.RECEIVE_MESSAGE,
-            chatMessage,
-          );
-        }
+        // 방 전체 브로드캐스트 금지 — 친구 목록 대상에게만 전달
         socket.emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
       } else {
         io.to(validatedData.roomId).emit(
@@ -328,6 +322,7 @@ export function registerSocketHandlers(io, socket) {
         itemType: validated.itemType,
         success: true,
         effectDetails: effectMessage,
+        scribbleStroke: validated.scribbleStroke || null,
       });
 
       if (typeof callback === "function") {
@@ -585,7 +580,7 @@ export function registerSocketHandlers(io, socket) {
     console.log(
       "[Socket 연결 종료] " +
         userLabel(socket.user) +
-        " - 대기실인 경우만 퇴장 처리합니다.",
+        " - 대기실인 경우만 즉시 퇴장 처리합니다.",
     );
 
     try {
@@ -603,7 +598,8 @@ export function registerSocketHandlers(io, socket) {
         if (!Number.isInteger(roomId) || roomId < 1) continue;
         try {
           const room = await roomModel.findRoomById(roomId);
-          // 게임 중 순간 끊김으로 유령/조기종료가 나지 않도록 WAITING만 퇴장
+          // 게임 중 순간 끊김으로 유령/조기종료가 나지 않도록 WAITING만 즉시 퇴장
+          // STARTED는 명시적 leaveBattle(API leave) + 유령방 정리(closeStaleRooms)에 위임
           if (!room || room.status !== "WAITING") continue;
           await leaveRoom(roomId, socket.user.id);
         } catch (leaveError) {

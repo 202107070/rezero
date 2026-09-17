@@ -1,8 +1,10 @@
 /**
  * 로비 테스트용: 열린 방을 모두 CLOSED 처리하고 WAITING/STARTED 샘플 방 3개만 남깁니다.
+ * 또한 유령 WAITING(참가자 0) 방 정리 모드를 지원합니다.
  *
  * 사용 (Pi에서 권장):
  *   node backend/scripts/resetTestLobbyRooms.js
+ *   node backend/scripts/resetTestLobbyRooms.js --stale-only
  *
  * Windows에서 Pi DB에 붙을 때:
  *   set DB_HOST=100.126.240.26
@@ -21,6 +23,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const PRIVATE_PASSWORD = "1234";
+const STALE_ONLY = process.argv.includes("--stale-only");
+const STALE_MAX_AGE_HOURS = 6;
 
 const pool = mariadb.createPool({
   host: process.env.DB_HOST || "127.0.0.1",
@@ -58,6 +62,23 @@ async function clearPersistedChat() {
   }
 }
 
+async function closeStaleWaitingRooms(conn) {
+  const result = await conn.query(
+    `UPDATE rooms r
+     SET r.status = 'CLOSED'
+     WHERE r.status = 'WAITING'
+       AND (
+         (SELECT COUNT(*) FROM room_participants rp
+           WHERE rp.room_id = r.id AND rp.left_at IS NULL) = 0
+         OR r.created_at < (NOW() - INTERVAL ? HOUR)
+            AND (SELECT COUNT(*) FROM room_participants rp
+                  WHERE rp.room_id = r.id AND rp.left_at IS NULL) = 0
+       )`,
+    [STALE_MAX_AGE_HOURS],
+  );
+  return Number(result.affectedRows || 0);
+}
+
 async function main() {
   if (!process.env.DB_USER || !process.env.DB_NAME) {
     throw new Error("backend/.env 에 DB_USER / DB_NAME 이 필요합니다.");
@@ -66,6 +87,13 @@ async function main() {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+
+    if (STALE_ONLY) {
+      const closed = await closeStaleWaitingRooms(conn);
+      await conn.commit();
+      console.log(`closed stale WAITING rooms: ${closed}`);
+      return;
+    }
 
     const before = await conn.query(
       "SELECT COUNT(*) AS c FROM rooms WHERE status <> 'CLOSED'",

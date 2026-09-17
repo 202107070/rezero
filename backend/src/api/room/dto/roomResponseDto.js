@@ -3,6 +3,16 @@ function toTimestamp(value) {
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
+/** MySQL TINYINT/BIT 가 Buffer 로 오면 Boolean(buf) 가 항상 true 가 되는 문제 방지 */
+function toBool(value) {
+  if (Buffer.isBuffer(value)) return value.length > 0 && value[0] === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true";
+  }
+  return value === true || value === 1;
+}
+
 export function toParticipantResponse(participant) {
   const displayName =
     (participant.displayName && String(participant.displayName).trim()) ||
@@ -16,8 +26,8 @@ export function toParticipantResponse(participant) {
     displayName,
     username: participant.username ? String(participant.username) : undefined,
     slotIndex: Number(participant.slotIndex),
-    isHost: Boolean(participant.isHost),
-    isReady: Boolean(participant.isReady),
+    isHost: toBool(participant.isHost),
+    isReady: toBool(participant.isReady),
     language: participant.language,
     character: participant.character,
     status: participant.status,

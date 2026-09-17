@@ -69,13 +69,12 @@ import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/R
 import {
   addFriend,
   findFriendUserId,
-  getFollowRoomPath,
   getFriendUserIds,
-  getUserPresence,
   isFriend,
   removeFriend,
   removeFriendByUserId,
   setUserPresence,
+  summonFriendToRoom,
 } from '../../services/friendStore';
 import { getStartBlockReason, hasLocalBots } from '../../utils/room/roomStartValidation';
 import {
@@ -217,22 +216,22 @@ export default function RoomPage() {
 
     const mapped = mapParticipantsToPlayers(room).map((player) => {
       if (!player) return player;
-      const resolvedName =
-        (player.name && player.name !== 'UNKNOWN' && !/^[0-9a-f-]{16,}$/i.test(player.name)
-          ? player.name
-          : '') ||
-        (String(player.userId) === String(myId)
-          ? getCurrentDisplayName() || getCurrentUserName() || player.userId
-          : '') ||
-        player.name ||
-        player.userId ||
-        'UNKNOWN';
+      if (String(player.userId) === String(myId)) {
+        const selfName = getCurrentDisplayName() || getCurrentUserName();
+        return {
+          ...player,
+          name: selfName || player.name || 'UNKNOWN',
+        };
+      }
       return {
         ...player,
-        name: resolvedName,
+        name: player.name && player.name !== 'UNKNOWN' ? player.name : player.name || 'UNKNOWN',
       };
     });
     setPlayers(mapped);
+    if (myParticipant) {
+      setIsReady(Boolean(myParticipant.isReady));
+    }
     setMyLanguage(LANG_MAP[room.lang] || 'java');
     setSettings({
       time: urlTimeRaw,
@@ -376,16 +375,40 @@ export default function RoomPage() {
                   const name = payload?.user?.displayName || payload?.user?.username;
                   const joinedUserId = payload?.user?.id ? String(payload.user.id) : '';
                   if (name) {
-                    setMessages((prev) => [...prev, { type: 'sys', text: `>> [${name}] 님이 입장하셨습니다.` }]);
-                    if (joinedUserId) {
-                      setPlayers((prev) =>
-                        prev.map((player) =>
+                    setMessages((prev) => {
+                      const line = `>> [${name}] 님이 입장하셨습니다.`;
+                      if (prev.some((msg) => msg.type === 'sys' && msg.text === line)) return prev;
+                      return [...prev, { type: 'sys', text: line }];
+                    });
+                  }
+                  if (joinedUserId && name) {
+                    setPlayers((prev) => {
+                      const exists = prev.some((player) => player && String(player.userId) === joinedUserId);
+                      if (exists) {
+                        return prev.map((player) =>
                           player && String(player.userId) === joinedUserId
                             ? { ...player, name }
                             : player,
-                        ),
-                      );
-                    }
+                        );
+                      }
+                      const next = [...prev];
+                      const emptyIndex = next.findIndex((slot, index) => index > 0 && slot === null);
+                      const targetIndex = emptyIndex >= 0 ? emptyIndex : next.findIndex((slot) => slot === null);
+                      if (targetIndex >= 0) {
+                        next[targetIndex] = {
+                          id: Date.now(),
+                          userId: joinedUserId,
+                          name,
+                          rank: '브론즈',
+                          isHost: false,
+                          isReady: false,
+                          language: '☕',
+                          character: '🤺',
+                          status: 'WAITING',
+                        };
+                      }
+                      return next;
+                    });
                   }
                   void fetchRoom(numericRoomId)
                     .then((nextRoom) => {
@@ -404,10 +427,30 @@ export default function RoomPage() {
                   navigate(ROUTES.LOBBY);
                   return;
                 }
+                const leftId = payload.userId ? String(payload.userId) : '';
                 setMessages((prev) => [
                   ...prev,
                   { type: 'sys', text: `>> 유저가 퇴장했습니다.` },
                 ]);
+                if (leftId) {
+                  setPlayers((prev) =>
+                    prev.map((player) => (player && String(player.userId) === leftId ? null : player)),
+                  );
+                }
+                if (payload.newHostUserId) {
+                  const hostId = String(payload.newHostUserId);
+                  setPlayers((prev) =>
+                    prev.map((player) =>
+                      player
+                        ? {
+                            ...player,
+                            isHost: String(player.userId) === hostId,
+                            status: String(player.userId) === hostId ? 'HOST' : player.isReady ? 'READY' : 'WAITING',
+                          }
+                        : player,
+                    ),
+                  );
+                }
                 void fetchRoom(numericRoomId)
                   .then((nextRoom) => {
                     if (!cancelled) applyRoom(nextRoom, { resetChat: false });
@@ -519,10 +562,16 @@ export default function RoomPage() {
             unsubs.push(
               onRoomEvent(
                 ROOM_SOCKET_EVENTS.USER_KICKED,
-                (payload?: { userId?: string; roomId?: string }) => {
+                (payload?: { userId?: string; roomId?: string; message?: string }) => {
                   if (String(payload?.userId || '') !== String(getCurrentUserId())) return;
-                  setAlertMessage('방에서 강퇴되었습니다.');
-                  setShowAlertModal(true);
+                  try {
+                    sessionStorage.setItem(
+                      'rezero_kick_notice',
+                      payload?.message || '방에서 강퇴되었습니다.',
+                    );
+                  } catch {
+                    // ignore
+                  }
                   clearRoomSession(roomId);
                   disconnectRoomSocket(true);
                   navigate(ROUTES.LOBBY);
@@ -650,18 +699,49 @@ export default function RoomPage() {
         appendSystemMessage(`${userName} 님에게 귓속말 모드가 설정되었습니다.`);
         break;
       case 'follow': {
-        const roomPath = getFollowRoomPath(userName);
-        if (!roomPath) {
-          appendSystemMessage(`${userName} 님은 현재 따라갈 수 있는 방에 없습니다.`);
+        // 대기방에서는 따라가기 대신 초대(소환)로 동작
+        const target = players.find((player) => player?.name === userName);
+        const friendId = target?.userId || findFriendUserId(userName);
+        if (!isFriend(userName)) {
+          appendSystemMessage('친구만 초대할 수 있습니다.');
           break;
         }
-        appendSystemMessage(`${userName} 님이 있는 방으로 이동합니다.`);
-        navigate(roomPath);
+        const invited = summonFriendToRoom(userName, {
+          id: roomId,
+          title: roomTitle,
+          query: roomQuery.replace(/^\?/, ''),
+        });
+        if (!invited) {
+          appendSystemMessage(`${userName} 님을 초대하지 못했습니다.`);
+          break;
+        }
+        if (friendId) {
+          void sendRoomMessage(
+            numericRoomId,
+            `${getCurrentDisplayName() || getCurrentUserName()}님이 방으로 초대했습니다. 로비에서 따라가기를 눌러 주세요.`,
+            {
+              mode: 'WHISPER',
+              targetUserId: String(friendId),
+              targetUserName: userName,
+            },
+          ).catch(() => undefined);
+        }
+        appendSystemMessage(`${userName} 님을 현재 방으로 초대했습니다.`);
         break;
       }
-      case 'summon':
-        appendSystemMessage('소환하기는 친구 메신저에서 사용 가능합니다.');
+      case 'summon': {
+        const invited = summonFriendToRoom(userName, {
+          id: roomId,
+          title: roomTitle,
+          query: roomQuery.replace(/^\?/, ''),
+        });
+        appendSystemMessage(
+          invited
+            ? `${userName} 님을 현재 방으로 초대했습니다.`
+            : `${userName} 님을 초대하지 못했습니다.`,
+        );
         break;
+      }
       default:
         break;
     }
@@ -833,13 +913,13 @@ export default function RoomPage() {
       if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
         await leaveRoom(numericRoomId);
       }
+      clearRoomSession(roomId);
+      disconnectRoomSocket(true);
+      navigate(ROUTES.LOBBY);
     } catch (error) {
       showStartAlert(getRoomErrorMessage(error));
     } finally {
-      clearRoomSession(roomId);
-      disconnectRoomSocket(true);
       setRoomBusy(false);
-      navigate(ROUTES.LOBBY);
     }
   };
 
@@ -1038,13 +1118,10 @@ export default function RoomPage() {
           userName={contextMenu.userName}
           actionLabels={{
             'add-friend': isFriend(contextMenu.userName) ? '친구삭제' : '친구추가',
+            follow: '초대하기',
           }}
           hiddenActions={['summon']}
-          disabledActions={(() => {
-            const presence = getUserPresence(contextMenu.userName);
-            const canFollow = isFriend(contextMenu.userName) && presence?.status === 'room';
-            return canFollow ? [] : (['follow'] as UserListMenuAction[]);
-          })()}
+          disabledActions={isFriend(contextMenu.userName) ? [] : (['follow'] as UserListMenuAction[])}
           onSelect={handleUserMenuAction}
           onClose={closeUserContextMenu}
         />

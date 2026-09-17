@@ -40,11 +40,14 @@ export function PracticeAnswerSection({
     () => resolveProblemCapabilities(exercise, { gameMode: 'normal' }),
     [exercise],
   );
+  const blankMarkerCount = (exercise.question || '').match(/_____/g)?.length || 0;
+  const treatAsFillBlank =
+    caps.showCodePanel || (exercise.type === 'short_answer' && blankMarkerCount > 0);
   const shouldRenderVisual = caps.hasVisual || caps.hasImage;
 
   return (
     <div className="practice-answer-box">
-      {caps.showCodePanel && (
+      {treatAsFillBlank && (
         <div className="practice-code-answer">
           {shouldRenderVisual && <ProblemVisualPreview visual={exercise.visual} compact />}
           <div className="practice-code-blanks">
@@ -81,7 +84,7 @@ export function PracticeAnswerSection({
         </div>
       )}
 
-      {exercise.type === 'short_answer' && (
+      {exercise.type === 'short_answer' && blankMarkerCount === 0 && (
         <input
           type="text"
           className={`short-answer-input ${isChecked ? (isCorrect ? 'correct' : 'wrong') : ''}`}
@@ -114,13 +117,13 @@ export function PracticeAnswerSection({
               </div>
             </div>
           )}
-          {!isCorrect && exercise.type === 'short_answer' && (
+          {!isCorrect && exercise.type === 'short_answer' && blankMarkerCount === 0 && (
             <div className="answer-box">
               <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>정답:</div>
               <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>{correctAnswers[0] || ''}</div>
             </div>
           )}
-          {!isCorrect && isBlankBasedType(exercise.type) && (
+          {!isCorrect && (isBlankBasedType(exercise.type) || blankMarkerCount > 0) && (
             <div className="answer-box">
               <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>정답:</div>
               <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>{correctAnswers.join(', ')}</div>

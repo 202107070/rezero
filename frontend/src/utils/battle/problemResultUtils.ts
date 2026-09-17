@@ -19,7 +19,8 @@ export function normalizeBattleProblem(problem: BattleProblem): BattleProblem {
   ) {
     type = 'multiple_choice';
   } else if (rawType === 'short_answer' || rawType === 'shortanswer' || rawType === '주관식') {
-    type = 'short_answer';
+    // short_answer 문항이라도 _____ 빈칸이 있으면 fill_blank 멀티 입력으로 처리
+    type = hasBlanks ? 'fill_blank' : 'short_answer';
   } else if (rawType === 'fill_blank' || rawType === 'fillblank' || rawType === '빈칸') {
     type = hasBlanks ? 'fill_blank' : 'short_answer';
   } else if (!rawType) {

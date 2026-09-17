@@ -274,9 +274,11 @@ class GameAudioEngine {
 
       switch (type) {
         case 'lightning':
-          noiseBurst(0.35, 0.35, 0.05);
-          tone(90, 'sawtooth', 0.2, 0.18, 0.02);
-          tone(55, 'sine', 0.18, 0.28, 0.08);
+          // 부드러운 천둥 (거친 고음 beep 완화)
+          noiseBurst(0.28, 0.18, 0.08);
+          tone(120, 'sine', 0.12, 0.22, 0.02);
+          tone(70, 'triangle', 0.14, 0.32, 0.06);
+          tone(180, 'sine', 0.08, 0.16, 0.12);
           break;
         case 'paint':
           noiseBurst(0.12, 0.22, 0.02);

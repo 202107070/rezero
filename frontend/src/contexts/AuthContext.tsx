@@ -18,6 +18,7 @@ import {
 } from '../services/authService';
 import { leaveRoom } from '../services/roomService';
 import { disconnectRoomSocket, getActiveRoomId } from '../services/roomSocket';
+import { switchFriendOwner } from '../services/friendStore';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void restoreSession().then((restored) => {
       if (cancelled) return;
+      switchFriendOwner(restored?.id || null);
       setUser(restored);
       setAuthReady(true);
     });
@@ -49,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string) => {
     const result = await authLogin(username, password);
     if (result.ok) {
+      switchFriendOwner(result.user.id);
       setUser(result.user);
     }
     return result;
@@ -57,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = useCallback(async (username: string, password: string, displayName?: string) => {
     const result = await authSignup(username, password, displayName);
     if (result.ok) {
+      switchFriendOwner(result.user.id);
       setUser(result.user);
     }
     return result;
@@ -70,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     authLogout();
     disconnectRoomSocket(true);
+    switchFriendOwner(null);
     setUser(null);
   }, []);
 

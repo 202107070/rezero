@@ -469,7 +469,7 @@ export async function closeRoom(roomId) {
       `UPDATE rooms
        SET status = 'CLOSED'
        WHERE id = ?
-         AND status = 'WAITING'`,
+         AND status IN ('WAITING', 'STARTED')`,
       [roomId],
     );
 

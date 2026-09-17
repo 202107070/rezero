@@ -289,6 +289,20 @@ export async function saveReadyState(params) {
       await redisClient.sRem(key, userId);
     }
 
+    // DB room_participants.is_ready 도 동기화
+    try {
+      await dbPool.query(
+        `UPDATE room_participants
+         SET is_ready = ?
+         WHERE room_id = ?
+           AND user_id = ?
+           AND left_at IS NULL`,
+        [isReady ? 1 : 0, roomId, userId],
+      );
+    } catch (dbError) {
+      console.error("[saveReadyState] DB Error: " + dbError.message);
+    }
+
     const readyUserIds = await redisClient.sMembers(key);
     const readySet = new Set(readyUserIds.map(String));
 

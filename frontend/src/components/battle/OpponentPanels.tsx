@@ -37,10 +37,13 @@ interface OpponentPanelsProps {
   isItemMode: boolean;
   langKey: string;
   spectatorViewProblemByBot: Record<string, number>;
-  opponentEffects: Record<string, Record<number, { panelEffect?: PanelEffect }>>;
+  /** 상대별 패널 이펙트 (문제 인덱스와 무관) */
+  opponentEffects: Record<string, { panelEffect?: PanelEffect }>;
   panelHit: Record<string, boolean>;
   onOpenItemModal: (botId: string) => void;
   showItemButton?: boolean;
+  /** 상대별로 아이템 버튼 비활성 (전부 풀이 완료 등) */
+  itemDisabledByBot?: Record<string, boolean>;
   renderMiniStatus: (bot: BotView) => ReactNode;
 }
 
@@ -90,6 +93,8 @@ function OpponentProblemBody({
   const promptText = problem.question || '';
   const blankMarkerCount = (problem.question || '').match(/_____/g)?.length || 0;
   const answerMaskClass = showAnswers ? '' : ' opponent-answers-masked';
+  // 빈칸이 있는데 답안이 비면 원문 질문만 노출하지 않고 입력란/빈칸 UI만
+  const showPromptText = !(blankMarkerCount > 0 && showAnswers && displayAnswers.every((a) => !String(a || '').trim()));
 
   return (
     <>
@@ -115,7 +120,7 @@ function OpponentProblemBody({
             </div>
           ) : (
             <>
-              {promptText && <div className="code-problem-question">{promptText}</div>}
+              {showPromptText && promptText && <div className="code-problem-question">{promptText}</div>}
               {(showAnswers ? displayAnswers.length > 0 : true) && (
                 <div className={answerMaskClass || undefined}>
                   <input
@@ -192,18 +197,20 @@ export default function OpponentPanels({
   panelHit,
   onOpenItemModal,
   showItemButton = true,
+  itemDisabledByBot,
   renderMiniStatus,
 }: OpponentPanelsProps) {
   const now = Date.now();
 
   const renderMini = (bot: BotView) => {
     const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
-    const panelEff = opponentEffects[bot.id]?.[viewProblemIndex]?.panelEffect;
+    const panelEff = opponentEffects[bot.id]?.panelEffect;
     const hasPaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
     const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
     const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
     const effIcon = effectIcons(panelEff, now);
     const botProb = problems[viewProblemIndex] || currentProblem;
+    const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
 
     return (
       <div
@@ -222,11 +229,13 @@ export default function OpponentPanels({
               <button
                 type="button"
                 className="item-btn item-btn-mini"
+                disabled={itemDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (itemDisabled) return;
                   onOpenItemModal(bot.id);
                 }}
-                title="아이템 사용"
+                title={itemDisabled ? '이미 모든 문제를 푼 상대입니다' : '아이템 사용'}
               >
                 ⚡
               </button>
@@ -236,6 +245,8 @@ export default function OpponentPanels({
         {renderMiniStatus(bot)}
         <div
           className={`mini-code-area${hasPaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}`}
+          style={{ position: 'relative' }}
+          data-opponent-canvas={bot.id}
         >
           <div className="mini-code-textarea spectator-opponent-mini-body" style={{ whiteSpace: 'pre-wrap', overflow: 'auto' }}>
             <OpponentProblemBody
@@ -258,12 +269,13 @@ export default function OpponentPanels({
     if (!bot) return null;
 
     const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
-    const panelEff = opponentEffects[bot.id]?.[viewProblemIndex]?.panelEffect;
+    const panelEff = opponentEffects[bot.id]?.panelEffect;
     const hasActivePaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
     const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
     const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
     const isRevealed = demoSpectating;
     const botProb = problems[viewProblemIndex] || currentProblem;
+    const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
 
     return (
       <div
@@ -293,11 +305,13 @@ export default function OpponentPanels({
               <button
                 type="button"
                 className="item-btn"
+                disabled={itemDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (itemDisabled) return;
                   onOpenItemModal(bot.id);
                 }}
-                title="아이템 사용"
+                title={itemDisabled ? '이미 모든 문제를 푼 상대입니다' : '아이템 사용'}
               >
                 ⚡ ITEM
               </button>
@@ -308,6 +322,7 @@ export default function OpponentPanels({
         <div
           className={`mini-code-area${hasActivePaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}`}
           style={{ position: 'relative' }}
+          data-opponent-canvas={bot.id}
         >
           <div className="mini-code-lines spectator-opponent-expanded-body">
             <OpponentProblemBody

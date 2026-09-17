@@ -114,8 +114,78 @@ export async function createRoom(input, hostUserId) {
 }
 
 export async function getRooms() {
+  // 목록 조회 시 유령 WAITING 방 정리 (스로틀)
+  try {
+    await closeStaleRooms({ maxAgeHours: 6 });
+  } catch (error) {
+    console.error("[getRooms] closeStaleRooms: " + (error.message || error));
+  }
+
   const rooms = await roomModel.findRooms();
-  return rooms.map((room) => toRoomResponse(room));
+  return rooms
+    .filter((room) => {
+      // WAITING 이면서 활성 참가자가 0명이면 목록에서 제외
+      if (room.status === "WAITING" && Number(room.currentPlayers || 0) <= 0) {
+        return false;
+      }
+      return true;
+    })
+    .map((room) => toRoomResponse(room));
+}
+
+const STALE_CLEANUP_COOLDOWN_MS = 60_000;
+let lastStaleCleanupAt = 0;
+
+/**
+ * 유령 WAITING 방 정리:
+ * - 활성 참가자 0명
+ * - 또는 N시간 이상 경과하고 소켓/참가자가 없는 방
+ */
+export async function closeStaleRooms(options = {}) {
+  const maxAgeHours = Number(options.maxAgeHours) || 6;
+  const force = Boolean(options.force);
+  const now = Date.now();
+  if (!force && now - lastStaleCleanupAt < STALE_CLEANUP_COOLDOWN_MS) {
+    return { closed: 0, skipped: true };
+  }
+  lastStaleCleanupAt = now;
+
+  const rooms = await roomModel.findRooms();
+  let closed = 0;
+  const cutoffMs = maxAgeHours * 60 * 60 * 1000;
+
+  for (const room of rooms) {
+    if (room.status !== "WAITING" && room.status !== "STARTED") continue;
+    const players = Number(room.currentPlayers || 0);
+    const createdAt = room.createdAt ? new Date(room.createdAt).getTime() : 0;
+    const isOld = createdAt > 0 && now - createdAt >= cutoffMs;
+
+    // 빈 방 즉시 정리, 오래된 유령방(참가자 남아 있어도) 강제 종료
+    const shouldClose =
+      players <= 0 ||
+      (isOld && room.status === "WAITING") ||
+      (isOld && room.status === "STARTED");
+
+    if (!shouldClose) continue;
+
+    try {
+      const ok = await roomModel.closeRoom(room.id);
+      if (ok) {
+        closed += 1;
+        try {
+          await redisClient.del(roomStateKey(room.id));
+          await redisClient.del(roomParticipantsKey(room.id));
+          await redisClient.del(roomReadyKey(room.id));
+        } catch {
+          // ignore redis cleanup
+        }
+      }
+    } catch {
+      // ignore individual room errors
+    }
+  }
+
+  return { closed, skipped: false };
 }
 
 export async function getRoom(roomId) {
@@ -209,6 +279,7 @@ export async function joinRoom(roomId, userId, input) {
 }
 
 export async function leaveRoom(roomId, userId) {
+  const roomBefore = await roomModel.findRoomById(roomId);
   const result = await roomModel.leaveRoomAndSelectRandomHost(roomId, userId);
 
   if (!result.success) {
@@ -222,13 +293,33 @@ export async function leaveRoom(roomId, userId) {
   await saveLeftRoomState(roomId, userId, result);
 
   const io = getSocket();
+  const remainingPlayers = Number(result.currentPlayers || 0);
+  const wasStarted = roomBefore && roomBefore.status === "STARTED";
+  const abandonNoPlayers =
+    wasStarted && !result.roomClosed && remainingPlayers <= 1;
+
   if (io) {
     io.to(String(roomId)).emit(SOCKET_EVENTS.USER_LEFT, {
       roomId: String(roomId),
       userId: String(userId),
       roomClosed: Boolean(result.roomClosed),
       newHostUserId: result.newHostUserId ? String(result.newHostUserId) : null,
+      remainingPlayers,
     });
+
+    if (abandonNoPlayers) {
+      const abandonMessage = "유저가 남아있지 않아 대기실로 이동합니다.";
+      io.to(String(roomId)).emit(SOCKET_EVENTS.GAME_ENDED, {
+        roomId: String(roomId),
+        reason: "no_players",
+        message: abandonMessage,
+      });
+      try {
+        await roomModel.markRoomWaiting(roomId);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   if (result.roomClosed) {
@@ -236,6 +327,7 @@ export async function leaveRoom(roomId, userId) {
       roomId,
       roomClosed: true,
       newHostUserId: null,
+      remainingPlayers: 0,
     };
   }
 
@@ -245,6 +337,7 @@ export async function leaveRoom(roomId, userId) {
   return {
     roomClosed: false,
     newHostUserId: result.newHostUserId,
+    remainingPlayers,
     room: toRoomResponse(room, participants),
   };
 }

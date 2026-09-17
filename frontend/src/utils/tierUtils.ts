@@ -18,6 +18,17 @@ const TIER_ICON_MAP: Record<string, string> = {
   마스터: '👑',
 };
 
+/** 레이팅 점수 → 티어 (밴드 기준) */
+export function getTierByRating(rating: number): string {
+  const score = Number(rating) || 0;
+  if (score >= 2200) return '마스터';
+  if (score >= 1900) return '다이아';
+  if (score >= 1600) return '플래티넘';
+  if (score >= 1300) return '골드';
+  if (score >= 1000) return '실버';
+  return '브론즈';
+}
+
 export function getTierByUserName(userName: string): string {
   return USER_TIER_MAP[userName] || '브론즈';
 }

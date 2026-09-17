@@ -66,10 +66,15 @@ export function getBotRankMetrics(
   solvedProblems: number[],
 ) {
   const solved = [...solvedProblems].sort((a, b) => a - b);
-  const totalSolveTime = solved.reduce(
-    (sum, idx) => sum + getBotSolveDelay(bot, idx, roundSeconds),
-    0,
-  );
+  let totalSolveTime = 0;
+  let prevAbsolute = 0;
+  for (const idx of solved) {
+    const absolute = getBotSolveDelay(bot, idx, roundSeconds);
+    if (!Number.isFinite(absolute)) continue;
+    const delta = Math.max(0, absolute - prevAbsolute);
+    totalSolveTime += delta;
+    prevAbsolute = absolute;
+  }
   const lastIdx = solved.length > 0 ? solved[solved.length - 1] : -1;
   const completionTime =
     lastIdx >= 0 ? getBotSolveDelay(bot, lastIdx, roundSeconds) : Number.POSITIVE_INFINITY;

@@ -77,11 +77,26 @@ export interface BattleItemUsedPayload {
   itemType: string;
   success?: boolean;
   effectDetails?: string;
+  scribbleStroke?: {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    color: string;
+    width: number;
+    erasing?: boolean;
+    nx0?: number;
+    ny0?: number;
+    nx1?: number;
+    ny1?: number;
+  } | null;
 }
 
 export interface BattleGameEndedPayload {
   roomId?: number | string;
   matchId?: string;
+  message?: string;
+  reason?: string;
   ranking?: unknown;
   rewards?: Array<{
     userId?: string;
@@ -298,7 +313,11 @@ export function sendRoomMessage(
 
 export function emitBattleItemUsed(
   roomId: string | number,
-  params: { itemType: string; targetUserId?: string },
+  params: {
+    itemType: string;
+    targetUserId?: string;
+    scribbleStroke?: BattleItemUsedPayload['scribbleStroke'];
+  },
 ): Promise<{ success: boolean; message?: string }> {
   const client = getRoomSocket();
   return new Promise((resolve) => {
@@ -308,6 +327,7 @@ export function emitBattleItemUsed(
         roomId: String(roomId),
         itemType: params.itemType,
         targetUserId: params.targetUserId || undefined,
+        scribbleStroke: params.scribbleStroke || undefined,
       },
       (response?: { success?: boolean; message?: string }) => {
         resolve({

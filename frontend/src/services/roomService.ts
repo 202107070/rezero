@@ -25,6 +25,7 @@ export interface LeaveRoomResult {
   roomId?: number;
   roomClosed: boolean;
   newHostUserId: string | null;
+  remainingPlayers?: number;
   room?: Room;
 }
 
@@ -192,6 +193,16 @@ export function emptyPlayerSlots(): (RoomPlayer | null)[] {
   return Array.from({ length: 8 }, () => null);
 }
 
+function toFlag(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true';
+  }
+  return false;
+}
+
 function toRoomPlayer(participant: RoomParticipant): RoomPlayer {
   const character =
     CHARACTERS.find((item) => item.id === participant.character)?.icon || participant.character || '🤺';
@@ -199,19 +210,20 @@ function toRoomPlayer(participant: RoomParticipant): RoomPlayer {
     String(participant.displayName || '').trim() ||
     String(participant.name || '').trim() ||
     String(participant.username || '').trim() ||
-    String(participant.userId || '').trim() ||
     'UNKNOWN';
+  const isHost = toFlag(participant.isHost);
+  const isReady = toFlag(participant.isReady);
 
   return {
     id: participant.id,
     userId: participant.userId,
     name,
     rank: getTierByUserName(name),
-    isHost: participant.isHost,
-    isReady: participant.isReady,
+    isHost,
+    isReady,
     language: participant.language,
     character,
-    status: participant.isHost ? 'HOST' : participant.isReady ? 'READY' : participant.status || 'WAITING',
+    status: isHost ? 'HOST' : isReady ? 'READY' : participant.status || 'WAITING',
   };
 }
 
@@ -228,20 +240,24 @@ export async function kickRoomParticipant(
 export function mapParticipantsToPlayers(room: Room): (RoomPlayer | null)[] {
   const slots = emptyPlayerSlots();
   const participants = [...(room.participants || [])].sort((a, b) => a.slotIndex - b.slotIndex);
-  const host = participants.find((participant) => participant.isHost);
-  const others = participants.filter((participant) => !participant.isHost);
+  const host =
+    participants.find((participant) => toFlag(participant.isHost)) ||
+    participants.find((participant) => String(participant.userId) === String(room.hostUserId)) ||
+    participants[0];
+  const others = participants.filter((participant) => participant !== host);
 
   if (host) {
-    slots[0] = toRoomPlayer(host);
+    slots[0] = toRoomPlayer({ ...host, isHost: true });
   }
 
   others.forEach((participant) => {
-    let index = participant.slotIndex;
-    if (index <= 0 || slots[index]) {
+    const player = toRoomPlayer({ ...participant, isHost: false });
+    let index = Number(participant.slotIndex);
+    if (!Number.isInteger(index) || index <= 0 || index >= slots.length || slots[index]) {
       index = slots.findIndex((slot) => slot === null);
     }
     if (index >= 0 && index < slots.length) {
-      slots[index] = toRoomPlayer(participant);
+      slots[index] = player;
     }
   });
 

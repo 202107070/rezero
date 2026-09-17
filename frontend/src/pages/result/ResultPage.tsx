@@ -28,6 +28,7 @@ import {
   emitReviewInviteResponse,
   emitFriendRemove,
   emitFriendRequest,
+  emitFriendRequestResult,
   getActiveRoomId,
   joinRoomSocket,
   onRoomEvent,
@@ -38,7 +39,7 @@ import {
   type ReviewInviteResponsePayload,
   type ReviewInviteSocketPayload,
 } from '../../services/roomSocket';
-import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
+import { getCurrentDisplayName, getCurrentUserName, refreshMeProfile } from '../../services/authService';
 import {
   getBattleDemoState,
   getBattleSettings,
@@ -51,6 +52,7 @@ import {
   addGold,
   applyMatchRewards,
   getGold,
+  getRatingScore,
   saveTitles,
   setNewTitleIds,
   getTitles,
@@ -59,12 +61,14 @@ import {
   addFriend,
   findFriendUserId,
   getFollowRoomPath,
+  getFriendNames,
   getFriendUserIds,
   getUserPresence,
   isFriend,
   removeFriend,
   removeFriendByUserId,
 } from '../../services/friendStore';
+import { getTierByRating } from '../../utils/tierUtils';
 import {
   clearReviewInvite,
   createReviewInviteId,
@@ -271,6 +275,13 @@ export default function ResultPage() {
   const botAcceptTimerRef = useRef<(() => void) | null>(null);
   const [incomingReviewInvite, setIncomingReviewInvite] = useState<ReviewInviteSocketPayload | null>(null);
   const pendingInviteIdRef = useRef<string | null>(null);
+  const [pendingFriendRequest, setPendingFriendRequest] = useState<{
+    fromUserId: string;
+    fromUserName: string;
+  } | null>(null);
+  const [, setFriendNames] = useState<string[]>(() => getFriendNames());
+  const [liveRatingScore, setLiveRatingScore] = useState(() => getRatingScore());
+  const [liveRatingTier, setLiveRatingTier] = useState(() => getTierByRating(getRatingScore()));
 
   const reviewSelectMode = reviewPhase === 'selecting';
 
@@ -293,6 +304,11 @@ export default function ResultPage() {
             if (name === '알고리즘깎는노인' || text === '수고하셨습니다.' || text === '고생하셨습니다!') {
               return;
             }
+            if (payload.mode === 'FRIEND') {
+              const senderId = String(payload.sender?.id || '').replace(/^player-/, '');
+              const myId = String(myUserId || '');
+              if (senderId !== myId && !isFriend(name)) return;
+            }
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
             const modeLabel =
@@ -311,18 +327,46 @@ export default function ResultPage() {
 
         unsubs.push(
           onRoomEvent(
+            ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
+            (payload?: { fromUserId?: string; fromUserName?: string }) => {
+              if (!payload?.fromUserId) return;
+              if (String(payload.fromUserId) === String(myUserId)) return;
+              setPendingFriendRequest({
+                fromUserId: String(payload.fromUserId),
+                fromUserName: payload.fromUserName || 'UNKNOWN',
+              });
+            },
+          ),
+        );
+
+        unsubs.push(
+          onRoomEvent(
             ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
             (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
-              if (!payload?.accepted || !payload.fromUserName) return;
-              addFriend(payload.fromUserName, payload.fromUserId);
-              setChatMessages((prev) => [
-                ...prev,
-                {
-                  sender: 'SYSTEM',
-                  text: `${payload.fromUserName}님이 친구 요청을 수락했습니다.`,
-                  type: 'sys',
-                },
-              ]);
+              if (!payload) return;
+              if (payload.accepted) {
+                if (payload.fromUserName) {
+                  addFriend(payload.fromUserName, payload.fromUserId);
+                  setFriendNames(getFriendNames());
+                }
+                setChatMessages((prev) => [
+                  ...prev,
+                  {
+                    sender: 'SYSTEM',
+                    text: `${payload.fromUserName || '상대'}님이 친구 요청을 수락했습니다.`,
+                    type: 'sys',
+                  },
+                ]);
+              } else {
+                setChatMessages((prev) => [
+                  ...prev,
+                  {
+                    sender: 'SYSTEM',
+                    text: `${payload.fromUserName || '상대'}님이 친구 요청을 거절했습니다.`,
+                    type: 'sys',
+                  },
+                ]);
+              }
             },
           ),
         );
@@ -451,6 +495,7 @@ export default function ResultPage() {
             : storedSubmit.newTitleIds;
 
           if (earned !== undefined || ratingDelta !== undefined || newTitleIds?.length) {
+            const ratingBefore = getRatingScore();
             applyMatchRewards({
               earnedGold: earned,
               ratingDelta,
@@ -459,6 +504,14 @@ export default function ResultPage() {
             if (typeof earned === 'number') setApiRewardGold(earned);
             setTotalGold(getGold());
             rewardsAppliedRef.current = true;
+
+            void refreshMeProfile().then(() => {
+              const after = getRatingScore();
+              const resolvedAfter =
+                typeof ratingDelta === 'number' ? Math.max(0, ratingBefore + ratingDelta) : after;
+              setLiveRatingScore(resolvedAfter);
+              setLiveRatingTier(getTierByRating(resolvedAfter));
+            });
           }
         }
 
@@ -987,6 +1040,8 @@ export default function ResultPage() {
     <div className="page-container result-page">
       <div className="result-gold-bar">
         💰 GOLD +{earnedGold.toLocaleString()} (총 보유: {totalGold.toLocaleString()} G)
+        {' · '}
+        레이팅 {liveRatingScore} ({liveRatingTier})
       </div>
 
       <div className={`result-body ${isVersusMany ? 'versus-many' : 'versus-duel'}${reviewPhase === 'reviewing' ? ' review-active' : ''}${reviewExpanded ? ' review-focus-problems' : ''}`}>
@@ -1124,6 +1179,42 @@ export default function ResultPage() {
         onAccept={handleAcceptIncomingReview}
         onReject={handleRejectIncomingReview}
       />
+
+      {pendingFriendRequest && (
+        <div className="review-modal-overlay" style={{ zIndex: 4000 }}>
+          <div className="review-modal-panel ranking-panel" style={{ width: 'min(420px, 92vw)', height: 'auto', minHeight: 180 }}>
+            <div className="rank-title">FRIEND REQUEST</div>
+            <div className="review-incoming-msg">
+              <strong>{pendingFriendRequest.fromUserName}</strong>님이 친구 요청을 보냈습니다.
+            </div>
+            <div className="review-modal-actions review-modal-actions-end">
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-secondary review-modal-btn"
+                onClick={() => {
+                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, false);
+                  setPendingFriendRequest(null);
+                }}
+              >
+                거절
+              </button>
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-primary review-modal-btn"
+                onClick={() => {
+                  addFriend(pendingFriendRequest.fromUserName, pendingFriendRequest.fromUserId);
+                  setFriendNames(getFriendNames());
+                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, true);
+                  setPendingFriendRequest(null);
+                  appendSystemChat(`${pendingFriendRequest.fromUserName} 님과 친구가 되었습니다.`);
+                }}
+              >
+                수락
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ResultPopup
         show={resultPopup.show}

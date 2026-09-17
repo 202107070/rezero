@@ -153,6 +153,6 @@ export function getResultPlayerAnswer(params: {
     });
   }
 
-  const fallback = mySubmissionCodes[problemIndex];
-  return fallback?.trim() ? fallback : '(답안 없음)';
+  // 다른 플레이어 답안이 없으면 내 코드를 절대 사용하지 않음
+  return '(답안 없음)';
 }
