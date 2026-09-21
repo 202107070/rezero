@@ -59,45 +59,50 @@ export function ResultPlayerRow({
           {player.name}
         </div>
         {player.problemResults.length > 0 && (
-          <div className="player-problem-dots">
-            {player.problemResults.map((correct, index) => {
-              const selected = selectedReviewProblems?.has(index) ?? false;
-              if (canSelectDots) {
+          <div className="player-problem-dots-wrap">
+            <div className="player-problem-dots">
+              {player.problemResults.map((correct, index) => {
+                const selected = selectedReviewProblems?.has(index) ?? false;
+                if (canSelectDots) {
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      className={`problem-dot ${correct ? 'correct' : 'wrong'} selectable${selected ? ' selected' : ''}`}
+                      title={`문제 ${index + 1}: ${correct ? '정답' : '오답'}`}
+                      onClick={() => onToggleReviewProblem?.(index)}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                }
+                if (canOpenDetail) {
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      className={`problem-dot ${correct ? 'correct' : 'wrong'} clickable`}
+                      title={`문제 ${index + 1} 보기 (${correct ? '정답' : '오답'})`}
+                      onClick={() => onOpenProblemDetail(index)}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                }
                 return (
-                  <button
+                  <span
                     key={index}
-                    type="button"
-                    className={`problem-dot ${correct ? 'correct' : 'wrong'} selectable${selected ? ' selected' : ''}`}
+                    className={`problem-dot ${correct ? 'correct' : 'wrong'}`}
                     title={`문제 ${index + 1}: ${correct ? '정답' : '오답'}`}
-                    onClick={() => onToggleReviewProblem?.(index)}
                   >
                     {index + 1}
-                  </button>
+                  </span>
                 );
-              }
-              if (canOpenDetail) {
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    className={`problem-dot ${correct ? 'correct' : 'wrong'} clickable`}
-                    title={`문제 ${index + 1} 보기 (${correct ? '정답' : '오답'})`}
-                    onClick={() => onOpenProblemDetail(index)}
-                  >
-                    {index + 1}
-                  </button>
-                );
-              }
-              return (
-                <span
-                  key={index}
-                  className={`problem-dot ${correct ? 'correct' : 'wrong'}`}
-                  title={`문제 ${index + 1}: ${correct ? '정답' : '오답'}`}
-                >
-                  {index + 1}
-                </span>
-              );
-            })}
+              })}
+            </div>
+            {(canOpenDetail || canSelectDots) && (
+              <div className="player-problem-hint">문제를 확인하세요.</div>
+            )}
           </div>
         )}
       </div>

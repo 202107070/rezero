@@ -1882,33 +1882,27 @@ export default function BattlePage() {
 
   const battleActionBar = (
     <div className="battle-action-bar">
-      {!problemSolved ? (
-        <button
-          type="button"
-          className="pixel-btn pixel-btn-success"
-          onClick={handleSubmit}
-          style={{ padding: '4px 10px', fontSize: '14px' }}
-          disabled={demoSpectating || spectatorLocked}
-        >
-          {demoSpectating || spectatorLocked ? 'LOCKED' : '제출'}
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="pixel-btn pixel-btn-success"
-          onClick={handleAdvance}
-          style={{ padding: '4px 10px', fontSize: '14px' }}
-          disabled={
-            (demoSpectating || spectatorLocked) && currentIndex >= problems.length - 1
-          }
-        >
-          {currentIndex >= problems.length - 1
-            ? demoSpectating || spectatorLocked
-              ? '제출 완료'
-              : '최종 제출'
-            : '다음 문제'}
-        </button>
-      )}
+      {!demoSpectating &&
+        (!problemSolved ? (
+          <button
+            type="button"
+            className="pixel-btn pixel-btn-success"
+            onClick={handleSubmit}
+            style={{ padding: '4px 10px', fontSize: '14px' }}
+            disabled={spectatorLocked}
+          >
+            {spectatorLocked ? 'LOCKED' : '제출'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="pixel-btn pixel-btn-success"
+            onClick={handleAdvance}
+            style={{ padding: '4px 10px', fontSize: '14px' }}
+          >
+            {currentIndex >= problems.length - 1 ? '최종 제출' : '다음 문제'}
+          </button>
+        ))}
       <button type="button" className="pixel-btn pixel-btn-danger" onClick={leaveBattle} style={{ padding: '4px 10px', fontSize: '14px' }}>
         나가기
       </button>
@@ -2150,14 +2144,14 @@ export default function BattlePage() {
         <div className="game-over-overlay" style={{ zIndex: 3100 }}>
           <div className="game-over-box" style={{ maxWidth: '520px', borderColor: 'var(--px-warning)' }}>
             <div className="game-over-text" style={{ fontSize: '26px', color: 'var(--px-warning)' }}>
-              저장할까요?
+              제출할까요?
             </div>
             <div className="game-over-sub" style={{ marginBottom: '18px' }}>
-              코드를 저장하고 관전모드로 전환합니다.
+              답안을 제출하고 관전모드로 전환합니다.
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
               <button type="button" className="pixel-btn pixel-btn-success" onClick={finalizeSaveAndSpectate}>
-                저장 후 관전
+                제출 후 관전
               </button>
               <button type="button" className="pixel-btn pixel-btn-secondary" onClick={() => setShowSaveModal(false)}>
                 취소

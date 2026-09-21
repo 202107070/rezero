@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
 import { PracticeAnswerSection } from '../../components/practice/PracticeAnswerSection/PracticeAnswerSection';
 import { PracticeHeaderBar } from '../../components/practice/PracticeHeaderBar/PracticeHeaderBar';
 import { PracticeNavigator } from '../../components/practice/PracticeNavigator/PracticeNavigator';
@@ -43,6 +44,7 @@ export default function PracticePage() {
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [userAnswers, setUserAnswers] = useState<number[]>([]);
   const [blankAnswers, setBlankAnswers] = useState<string[][]>([]);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const langKey = getLangKey(lang);
   const displayLang =
@@ -141,9 +143,7 @@ export default function PracticePage() {
   const handleNext = () => setCurrentIndex((i) => Math.min(exercises.length - 1, i + 1));
 
   const handleExit = () => {
-    if (window.confirm('연습을 종료하고 로비로 돌아가시겠습니까?')) {
-      navigate(ROUTES.LOBBY);
-    }
+    setShowExitConfirm(true);
   };
 
   const solvedCount = useMemo(() => {
@@ -240,6 +240,16 @@ export default function PracticePage() {
         onPrev={handlePrev}
         onNext={handleNext}
         onExit={handleExit}
+      />
+
+      <ExitConfirmModal
+        open={showExitConfirm}
+        title="연습 종료"
+        message="연습을 종료하고 로비로 돌아가시겠습니까?"
+        confirmLabel="로비로"
+        cancelLabel="계속하기"
+        onConfirm={() => navigate(ROUTES.LOBBY)}
+        onCancel={() => setShowExitConfirm(false)}
       />
     </div>
   );

@@ -208,32 +208,36 @@
 }
 
 .exit-confirm-modal {
-  width: 380px;
+  width: min(440px, 92vw);
   text-align: center;
+  border-color: var(--px-warning);
+  box-shadow: var(--px-shadow-hard), 0 0 0 3px rgba(247, 213, 29, 0.18);
 }
 
 .exit-confirm-title {
   margin-bottom: 14px;
-  font-size: 24px;
+  font-size: 26px;
+  text-shadow: 3px 3px 0 #000;
 }
 
 .exit-confirm-message {
-  margin: 0 0 20px;
-  font-size: 17px;
-  color: #ddd;
-  line-height: 1.5;
+  margin: 0 0 22px;
+  font-size: 18px;
+  color: #eee;
+  line-height: 1.55;
+  text-shadow: 1px 1px 0 #000;
 }
 
 .exit-confirm-actions {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .exit-confirm-actions .pixel-btn {
-  min-width: 96px;
-  font-size: 16px;
-  padding: 7px 16px;
+  min-width: 110px;
+  font-size: 18px;
+  padding: 10px 18px;
 }
 
 .room-list-card {
