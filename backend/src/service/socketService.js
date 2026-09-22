@@ -12,11 +12,24 @@ export async function markUserOnline(user) {
   if (!user?.id) return;
   const userId = String(user.id);
   try {
+    let ratingScore = user.ratingScore;
+    if (ratingScore == null) {
+      try {
+        const rows = await dbPool.query(
+          "SELECT rating_score AS ratingScore FROM users WHERE id = ? LIMIT 1",
+          [userId],
+        );
+        ratingScore = rows[0]?.ratingScore ?? 1000;
+      } catch {
+        ratingScore = 1000;
+      }
+    }
     await redisClient.sAdd(ONLINE_SET_KEY, userId);
     const fields = {
       userId,
       username: String(user.username || ""),
       displayName: String(user.displayName || user.username || userId),
+      ratingScore: String(Number(ratingScore) || 1000),
       updatedAt: new Date().toISOString(),
     };
     if (user.equippedTitleId != null) {
@@ -51,6 +64,7 @@ export async function listOnlineUsers() {
           username: meta.username || "",
           displayName: meta.displayName || meta.username || meta.userId,
           equippedTitleId: meta.equippedTitleId || null,
+          ratingScore: Number(meta.ratingScore || 1000),
         });
       }
     }

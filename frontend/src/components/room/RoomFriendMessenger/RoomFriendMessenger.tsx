@@ -1,5 +1,5 @@
 import { useEffect, type MouseEvent, useState } from 'react';
-import { getFriendPresences } from '../../../services/friendStore';
+import { canSummonFriend, getFriendPresences, isFriendOnline } from '../../../services/friendStore';
 import type { FriendPresence } from '../../../types/friend';
 import { getTierByUserName, getTierIconByTier } from '../../../utils/tierUtils';
 
@@ -16,7 +16,7 @@ function presenceLabel(presence: FriendPresence) {
   if (presence.status === 'room') {
     return presence.roomId ? `방 · ${presence.roomTitle || presence.roomId}` : '대기방';
   }
-  if (presence.status === 'lobby') return '로비';
+  if (presence.status === 'lobby') return '온라인';
   return '오프라인';
 }
 
@@ -64,17 +64,34 @@ export function RoomFriendMessenger({
                 </thead>
                 <tbody>
                   {friends.map((friend) => {
+                    const online = isFriendOnline(friend.userName);
+                    const summonable = canSummonFriend(friend.userName);
                     return (
-                      <tr key={friend.userName}>
+                      <tr
+                        key={friend.userName}
+                        className={!online ? 'is-offline' : undefined}
+                        title={
+                          summonable
+                            ? '로비에 있음 · 초대 가능'
+                            : online
+                              ? '초대 불가'
+                              : '오프라인'
+                        }
+                      >
                         <td className="room-friend-tier-cell">
                           {getTierIconByTier(getTierByUserName(friend.userName))}
                         </td>
                         <td
                           className="room-friend-name-cell"
-                          title={`${friend.userName} · ${presenceLabel(friend)}`}
-                          onContextMenu={(event) => onFriendContextMenu?.(event, friend.userName)}
+                          onContextMenu={(event) => {
+                            if (!online) return;
+                            onFriendContextMenu?.(event, friend.userName);
+                          }}
                         >
-                          {friend.userName}
+                          <span>{friend.userName}</span>
+                          <span className={`friend-presence-badge ${online ? 'is-online' : 'is-offline'}`}>
+                            {presenceLabel(friend)}
+                          </span>
                         </td>
                       </tr>
                     );

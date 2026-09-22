@@ -13,12 +13,9 @@ import { RoomProfileModal } from '../../components/room/RoomProfileModal/RoomPro
 import { StartGameOverlay } from '../../components/room/StartGameOverlay/StartGameOverlay';
 import {
   buildInitialMessages,
-  BOT_READY_DELAY_MS,
   CHARACTERS,
-  DEMO_BOT_POOL,
   DIFF_MAP,
   LANG_MAP,
-  pickDemoBot,
 } from '../../constants/roomConstants';
 import { RoomItemLoadout } from '../../components/room/RoomItemLoadout/RoomItemLoadout';
 import {
@@ -30,6 +27,7 @@ import { setKickedCount, getKickedCount } from '../../services/roomStore';
 import { ROUTES } from '../../constants/routes';
 import type { GameMode, Room } from '../../types/lobby';
 import {
+  clearPendingInviteToken,
   clearPendingJoinPassword,
   emptyPlayerSlots,
   fetchRoom,
@@ -39,6 +37,7 @@ import {
   kickRoomParticipant,
   leaveRoom,
   mapParticipantsToPlayers,
+  peekPendingInviteToken,
   peekPendingJoinPassword,
   startRoom as startRoomApi,
 } from '../../services/roomService';
@@ -71,9 +70,11 @@ import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
 import {
   addFriend,
+  canSummonFriend,
   findFriendUserId,
   getFriendUserIds,
   isFriend,
+  isFriendOnline,
   removeFriend,
   removeFriendByUserId,
   setUserPresence,
@@ -134,7 +135,6 @@ export default function RoomPage() {
   const [roomBusy, setRoomBusy] = useState(false);
 
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
-  const botReadyTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const battleNavLockRef = useRef(false);
   const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
@@ -146,36 +146,8 @@ export default function RoomPage() {
   myLanguageRef.current = myLanguage;
   selectedItemsRef.current = selectedItems;
 
-  useEffect(() => {
-    const timers = botReadyTimersRef.current;
-    return () => {
-      timers.forEach(clearTimeout);
-      timers.clear();
-    };
-  }, []);
-
-  const clearBotReadyTimer = (playerId: number) => {
-    const timer = botReadyTimersRef.current.get(playerId);
-    if (timer) {
-      clearTimeout(timer);
-      botReadyTimersRef.current.delete(playerId);
-    }
-  };
-
-  const scheduleBotReady = (playerId: number, slotIndex: number) => {
-    clearBotReadyTimer(playerId);
-    const timer = setTimeout(() => {
-      setPlayers((prev) => {
-        const next = [...prev];
-        const bot = next[slotIndex];
-        if (bot && bot.id === playerId && !bot.isHost) {
-          next[slotIndex] = { ...bot, isReady: true, status: 'READY' };
-        }
-        return next;
-      });
-      botReadyTimersRef.current.delete(playerId);
-    }, BOT_READY_DELAY_MS);
-    botReadyTimersRef.current.set(playerId, timer);
+  const clearBotReadyTimer = (_playerId: number) => {
+    // no-op: local bots removed
   };
   const [chatMsg, setChatMsg] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
@@ -299,21 +271,26 @@ export default function RoomPage() {
           try {
             room = await joinRoom(numericRoomId, {
               password: peekPendingJoinPassword(),
+              inviteToken: peekPendingInviteToken(),
               language: room.lang,
               character: myCharacter || 'char1',
             });
             joinedThisAttempt = true;
             clearPendingJoinPassword();
+            clearPendingInviteToken();
           } catch (error) {
             if (!isAlreadyJoinedError(error)) {
               clearPendingJoinPassword();
+              clearPendingInviteToken();
               throw error;
             }
             clearPendingJoinPassword();
+            clearPendingInviteToken();
             room = await fetchRoom(numericRoomId);
           }
         } else {
           clearPendingJoinPassword();
+          clearPendingInviteToken();
         }
 
         if (!cancelled) {
@@ -696,6 +673,14 @@ export default function RoomPage() {
       appendSystemMessage('친구만 초대할 수 있습니다.');
       return;
     }
+    if (!canSummonFriend(userName)) {
+      appendSystemMessage(
+        isFriendOnline(userName)
+          ? `${userName} 님은 로비에 있을 때만 초대할 수 있습니다.`
+          : `${userName} 님은 오프라인입니다.`,
+      );
+      return;
+    }
     if (isUserAlreadyInRoom(userName)) {
       appendSystemMessage(`${userName} 님은 이미 이 방에 있습니다.`);
       return;
@@ -721,17 +706,7 @@ export default function RoomPage() {
   };
 
   const openUserContextMenu = (event: MouseEvent, userName: string) => {
-    const myNames = new Set(
-      [getCurrentDisplayName(), getCurrentUserName()].filter(Boolean).map(String),
-    );
-    const target = players.find((player) => player?.name === userName);
-    if (
-      !userName ||
-      myNames.has(userName) ||
-      (target?.userId && String(target.userId) === String(getCurrentUserId()))
-    ) {
-      return;
-    }
+    if (!userName) return;
     event.preventDefault();
     event.stopPropagation();
     setContextMenu({
@@ -746,10 +721,24 @@ export default function RoomPage() {
     setContextMenu(null);
   };
 
+  const isSelfName = (userName: string) => {
+    const myNames = new Set(
+      [getCurrentDisplayName(), getCurrentUserName()].filter(Boolean).map(String),
+    );
+    const target = players.find((player) => player?.name === userName);
+    return (
+      myNames.has(userName) ||
+      Boolean(target?.userId && String(target.userId) === String(getCurrentUserId()))
+    );
+  };
+
   const handleUserMenuAction = (action: UserListMenuAction, userName: string) => {
     switch (action) {
+      case 'my-info':
+        appendSystemMessage('내 정보는 로비에서 확인할 수 있습니다.');
+        break;
       case 'match-story':
-        appendSystemMessage('매치 스토리는 로비에서만 열 수 있습니다.');
+        appendSystemMessage('프로필 보기는 로비에서만 열 수 있습니다.');
         break;
       case 'add-friend':
         if (isFriend(userName)) {
@@ -780,6 +769,14 @@ export default function RoomPage() {
         break;
       }
       case 'summon': {
+        if (!canSummonFriend(userName)) {
+          appendSystemMessage(
+            isFriendOnline(userName)
+              ? `${userName} 님은 현재 소환할 수 없습니다.`
+              : `${userName} 님은 오프라인입니다.`,
+          );
+          break;
+        }
         void inviteUserToRoom(userName);
         break;
       }
@@ -800,8 +797,6 @@ export default function RoomPage() {
   const myIsReady = isReady || Boolean(myPlayer?.isReady);
   const occupiedCount = players.filter((p) => p !== null).length;
   const displayMaxPlayers = roomMode === '1/1' ? 2 : settings.maxPlayers || parsedMaxPlayers;
-  const maxOccupancy = displayMaxPlayers;
-  const canInviteMore = isMeHost && occupiedCount < maxOccupancy && DEMO_BOT_POOL.length > 0;
 
   const handleSendChat = async () => {
     if (!chatMsg.trim()) return;
@@ -1012,38 +1007,6 @@ export default function RoomPage() {
     });
   };
 
-  const handleInviteBot = useCallback(
-    (index: number) => {
-      if (DEMO_BOT_POOL.length === 0) return;
-
-      const slotIndex = roomMode === '1/1' ? 1 : index;
-      if (!isMeHost || players[slotIndex] !== null || occupiedCount >= maxOccupancy) return;
-
-      const botCount = players.filter((p) => p && !p.isHost).length;
-      const bot = pickDemoBot(botCount);
-      const maxId = players.reduce((max, p) => (p ? Math.max(max, p.id) : max), 0);
-      const newBotId = maxId + 1;
-
-      setPlayers((prev) => {
-        const next = [...prev];
-        next[slotIndex] = {
-          id: newBotId,
-          name: bot.name,
-          rank: bot.rank,
-          isHost: false,
-          isReady: false,
-          language: bot.language,
-          character: bot.character,
-          status: 'WAITING',
-        };
-        return next;
-      });
-      scheduleBotReady(newBotId, slotIndex);
-      setMessages((prev) => [...prev, { type: 'sys', text: `>> [${bot.name}] 님이 입장하셨습니다.` }]);
-    },
-    [isMeHost, players, roomMode, occupiedCount, maxOccupancy],
-  );
-
   return (
     <>
       <div className="room-page-container">
@@ -1063,9 +1026,7 @@ export default function RoomPage() {
                     roomMode={roomMode}
                     myCharacter={myCharacter}
                     myLanguage={myLanguage}
-                    canInviteMore={canInviteMore}
                     onPlayerClick={openProfile}
-                    onInviteBot={handleInviteBot}
                     onPlayerContextMenu={(event, player) => openUserContextMenu(event, player.name)}
                   />
                 </div>
@@ -1158,14 +1119,27 @@ export default function RoomPage() {
           y={contextMenu.y}
           userName={contextMenu.userName}
           actionLabels={{
+            'match-story': '프로필 보기',
             'add-friend': isFriend(contextMenu.userName) ? '친구삭제' : '친구추가',
             follow: '초대하기',
           }}
-          hiddenActions={['summon']}
+          hiddenActions={
+            isSelfName(contextMenu.userName)
+              ? (['match-story', 'add-friend', 'whisper', 'follow', 'summon'] as UserListMenuAction[])
+              : (['my-info', 'summon'] as UserListMenuAction[])
+          }
           disabledActions={(() => {
+            if (isSelfName(contextMenu.userName)) return [];
             const disabled: UserListMenuAction[] = [];
-            if (!isFriend(contextMenu.userName) || isUserAlreadyInRoom(contextMenu.userName)) {
+            if (
+              !isFriend(contextMenu.userName) ||
+              isUserAlreadyInRoom(contextMenu.userName) ||
+              !canSummonFriend(contextMenu.userName)
+            ) {
               disabled.push('follow');
+            }
+            if (!isFriendOnline(contextMenu.userName)) {
+              disabled.push('follow', 'summon', 'whisper');
             }
             return disabled;
           })()}

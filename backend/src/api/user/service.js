@@ -139,3 +139,45 @@ export async function getCurrentUser(userId) {
 
   return getUserProfile(user);
 }
+
+const ROULETTE_POOL = [
+  "paint",
+  "lightning",
+  "timeReduce",
+  "revealLength",
+  "revealPrev",
+  "miss",
+  "scribble",
+  "blankBreak",
+  "buildCharge",
+];
+const ROULETTE_COST = 1000;
+
+export async function spinRoulette(userId) {
+  const deductUserGold = getModelFunction("deductUserGold");
+  const addUserItem = getModelFunction("addUserItem");
+  const findUserById = getModelFunction("findUserById");
+  const findUserItems = getModelFunction("findUserItems");
+
+  const deducted = await deductUserGold(userId, ROULETTE_COST);
+  if (!deducted.ok) {
+    throw new AppError(400, "INSUFFICIENT_GOLD", "골드가 부족합니다.");
+  }
+
+  const itemKey = ROULETTE_POOL[Math.floor(Math.random() * ROULETTE_POOL.length)];
+  if (itemKey !== "miss") {
+    await addUserItem(userId, itemKey, 1);
+  }
+
+  const [user, items] = await Promise.all([
+    findUserById(userId),
+    findUserItems(userId),
+  ]);
+
+  return {
+    itemKey,
+    missed: itemKey === "miss",
+    gold: Number(user?.gold ?? deducted.gold),
+    items,
+  };
+}

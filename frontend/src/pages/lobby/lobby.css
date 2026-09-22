@@ -473,6 +473,11 @@
   white-space: nowrap;
 }
 
+.room-meta-private {
+  color: var(--px-warning);
+  border-color: var(--px-warning);
+}
+
 .status-started {
   color: var(--px-danger);
   text-shadow: 1px 1px 0 #000;
@@ -681,6 +686,77 @@
   color: #aaa;
   font-size: 12px;
   padding: 12px 8px;
+}
+
+.friend-presence-badge {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 2px solid var(--px-border);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.friend-presence-badge.is-online {
+  color: var(--px-success);
+  border-color: var(--px-success);
+}
+
+.friend-presence-badge.is-offline {
+  color: #888;
+  border-color: #555;
+}
+
+.my-info-modal {
+  max-width: min(920px, 96vw);
+  width: 100%;
+}
+
+.my-info-stats-panel {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.my-info-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #ddd;
+  font-size: 15px;
+  border-bottom: 2px solid #222;
+  padding-bottom: 6px;
+}
+
+.my-info-public-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.my-info-public-name {
+  color: #eee;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.my-info-public-meta {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  color: #bbb;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.my-info-embed {
+  max-height: min(560px, 70vh);
+  overflow: auto;
+}
+
+.match-story-embedded .match-story-layout {
+  min-height: 320px;
 }
 
 .tab-btn {

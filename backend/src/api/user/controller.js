@@ -1,6 +1,6 @@
 import { parseLoginRequest } from "./dto/loginRequestDto.js";
 import { parseSignupRequest } from "./dto/signupRequestDto.js";
-import { getCurrentUser, loginUser, signupUser } from "./service.js";
+import { getCurrentUser, loginUser, signupUser, spinRoulette } from "./service.js";
 import { listOnlineUsers } from "#service/socketService.js";
 import { sendSuccess } from "#utils/responseHelper.js";
 
@@ -37,6 +37,15 @@ export async function getOnlineUsers(req, res, next) {
   try {
     const users = await listOnlineUsers();
     return sendSuccess(res, { users });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function postRoulette(req, res, next) {
+  try {
+    const result = await spinRoulette(req.user.id);
+    return sendSuccess(res, result);
   } catch (error) {
     return next(error);
   }

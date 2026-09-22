@@ -1,15 +1,18 @@
 import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
+import { getRatingScore } from '../../../services/userService';
+import { getTierByRating, getTierIconByTier } from '../../../utils/tierUtils';
 
 interface ProfilePanelProps {
   username: string;
   displayName: string;
   titleData: TitleData;
-  onOpenMatchStory: () => void;
-  onOpenTitles: () => void;
+  onOpenMyInfo: () => void;
 }
 
-export function ProfilePanel({ username, displayName, titleData, onOpenMatchStory, onOpenTitles }: ProfilePanelProps) {
+export function ProfilePanel({ username, displayName, titleData, onOpenMyInfo }: ProfilePanelProps) {
   const equipped = getEquippedTitle(titleData);
+  const rating = getRatingScore();
+  const tier = getTierByRating(rating);
 
   return (
     <div
@@ -53,13 +56,12 @@ export function ProfilePanel({ username, displayName, titleData, onOpenMatchStor
           {equipped.icon} {equipped.name}
         </span>
       )}
-      <div style={{ color: '#999', fontSize: '14px' }}>Lv.0 | -</div>
+      <div style={{ color: '#999', fontSize: '14px' }}>
+        {getTierIconByTier(tier)} {tier} · {rating}
+      </div>
       <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
-        <button type="button" className="profile-btn" style={{ fontSize: '13px', padding: '4px 9px' }} onClick={onOpenMatchStory}>
-          📋 매치 스토리
-        </button>
-        <button type="button" className="profile-btn" style={{ fontSize: '13px', padding: '4px 9px' }} onClick={onOpenTitles}>
-          🏆 칭호
+        <button type="button" className="profile-btn" style={{ fontSize: '13px', padding: '4px 9px' }} onClick={onOpenMyInfo}>
+          📋 내 정보
         </button>
       </div>
     </div>

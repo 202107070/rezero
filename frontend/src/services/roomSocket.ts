@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import { getAccessToken } from './apiClient';
+import { getAccessToken, dispatchAuthExpired } from './apiClient';
 
 export const ROOM_SOCKET_EVENTS = {
   JOIN_ROOM: 'join_room',
@@ -44,6 +44,7 @@ export interface LobbyPresenceUser {
   username?: string;
   displayName?: string;
   equippedTitleId?: string | null;
+  ratingScore?: number;
 }
 
 export interface LobbyPresencePayload {
@@ -80,6 +81,7 @@ export interface RoomInvitePayload {
   roomId: string;
   roomTitle: string;
   roomQuery: string;
+  inviteToken?: string;
   createdAt?: number;
 }
 
@@ -242,6 +244,18 @@ export function getRoomSocket(): Socket {
     auth: { token: `Bearer ${token}` },
     transports: ['websocket', 'polling'],
     autoConnect: true,
+  });
+
+  socket.on('connect_error', (error: Error) => {
+    const message = String(error?.message || '').toUpperCase();
+    if (
+      message.includes('TOKEN_EXPIRED') ||
+      message.includes('UNAUTHORIZED') ||
+      message.includes('INVALID_TOKEN') ||
+      message.includes('AUTHENTICATION')
+    ) {
+      dispatchAuthExpired('SOCKET_AUTH_ERROR');
+    }
   });
 
   return socket;
@@ -544,7 +558,7 @@ export function emitReviewInviteResponse(
 export function emitRoomInvite(
   toUserId: string,
   params: { roomId: string | number; roomTitle: string; roomQuery: string },
-): Promise<{ success: boolean; message?: string }> {
+): Promise<{ success: boolean; message?: string; inviteToken?: string }> {
   const client = getRoomSocket();
   return new Promise((resolve) => {
     client.emit(
@@ -555,10 +569,11 @@ export function emitRoomInvite(
         roomTitle: params.roomTitle,
         roomQuery: params.roomQuery,
       },
-      (response?: { success?: boolean; message?: string }) => {
+      (response?: { success?: boolean; message?: string; inviteToken?: string }) => {
         resolve({
           success: Boolean(response?.success),
           message: response?.message,
+          inviteToken: response?.inviteToken,
         });
       },
     );

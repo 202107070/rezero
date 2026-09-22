@@ -552,12 +552,26 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
-  socket.on(SOCKET_EVENTS.ROOM_INVITE, function (data, callback) {
+  socket.on(SOCKET_EVENTS.ROOM_INVITE, async function (data, callback) {
     try {
       const toUserId = data?.toUserId ? String(data.toUserId) : "";
       const roomId = data?.roomId != null ? String(data.roomId) : "";
       if (!toUserId) throw new Error("초대 대상이 없습니다.");
       if (!roomId) throw new Error("방 정보가 없습니다.");
+      const inviteToken = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      try {
+        await redisClient.set(
+          `room:invite:${inviteToken}`,
+          JSON.stringify({
+            roomId,
+            toUserId,
+            fromUserId: String(socket.user.id),
+          }),
+          { EX: 300 },
+        );
+      } catch (redisError) {
+        console.error("[ROOM_INVITE] redis:", redisError.message);
+      }
       const payload = {
         fromUserId: String(socket.user.id),
         fromUserName: userLabel(socket.user),
@@ -565,11 +579,12 @@ export function registerSocketHandlers(io, socket) {
         roomId,
         roomTitle: data?.roomTitle ? String(data.roomTitle) : "",
         roomQuery: data?.roomQuery ? String(data.roomQuery) : `id=${roomId}`,
+        inviteToken,
         createdAt: Date.now(),
       };
       io.to("user:" + toUserId).emit(SOCKET_EVENTS.ROOM_INVITE, payload);
       if (typeof callback === "function") {
-        callback({ success: true });
+        callback({ success: true, inviteToken });
       }
     } catch (error) {
       if (typeof callback === "function") {
@@ -628,7 +643,7 @@ export function registerSocketHandlers(io, socket) {
     console.log(
       "[Socket 연결 종료] " +
         userLabel(socket.user) +
-        " - 대기실인 경우만 즉시 퇴장 처리합니다.",
+        " - 참가 중인 방에서 퇴장 처리합니다.",
     );
 
     try {
@@ -636,7 +651,6 @@ export function registerSocketHandlers(io, socket) {
       await broadcastLobbyPresence(io);
 
       const { leaveRoom } = await import("../api/room/service.js");
-      const roomModel = await import("../api/room/model.js");
       const joinedRooms = [...socket.rooms].filter(function (room) {
         return room !== socket.id && room !== LOBBY_ROOM_ID;
       });
@@ -645,10 +659,7 @@ export function registerSocketHandlers(io, socket) {
         const roomId = Number(joinedRooms[i]);
         if (!Number.isInteger(roomId) || roomId < 1) continue;
         try {
-          const room = await roomModel.findRoomById(roomId);
-          // 게임 중 순간 끊김으로 유령/조기종료가 나지 않도록 WAITING만 즉시 퇴장
-          // STARTED는 명시적 leaveBattle(API leave) + 유령방 정리(closeStaleRooms)에 위임
-          if (!room || room.status !== "WAITING") continue;
+          // WAITING/STARTED 모두 퇴장 처리 → 유령 인원/방 잔존 방지
           await leaveRoom(roomId, socket.user.id);
         } catch (leaveError) {
           // 이미 나간 방이면 무시

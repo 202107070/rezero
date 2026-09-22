@@ -12,6 +12,8 @@ export function parseJoinRoomRequest(body = {}) {
     typeof body.language === "string" ? body.language.trim() : "";
   const character =
     typeof body.character === "string" ? body.character.trim() : "";
+  const inviteToken =
+    typeof body.inviteToken === "string" ? body.inviteToken.trim() : "";
 
   if (password.length > 64) {
     throw invalidJoinRequest("방 비밀번호는 64자 이하로 입력해 주세요.");
@@ -27,10 +29,15 @@ export function parseJoinRoomRequest(body = {}) {
     );
   }
 
+  if (inviteToken.length > 128) {
+    throw invalidJoinRequest("초대 토큰이 올바르지 않습니다.");
+  }
+
   return {
     password,
     language: language || null,
     character: character || null,
+    inviteToken: inviteToken || null,
   };
 }
 

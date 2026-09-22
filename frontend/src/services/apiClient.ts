@@ -43,6 +43,20 @@ export class ApiError extends Error {
   }
 }
 
+export const AUTH_EXPIRED_EVENT = 'rezero:auth-expired';
+
+export function dispatchAuthExpired(reason = 'TOKEN_EXPIRED'): void {
+  try {
+    window.dispatchEvent(
+      new CustomEvent(AUTH_EXPIRED_EVENT, {
+        detail: { reason },
+      }),
+    );
+  } catch {
+    // ignore
+  }
+}
+
 interface ErrorBody {
   error?: {
     code?: string;
@@ -85,9 +99,13 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const body = (payload || {}) as ErrorBody;
+    const code = body.error?.code || 'REQUEST_FAILED';
+    if (response.status === 401 && (code === 'TOKEN_EXPIRED' || code === 'UNAUTHORIZED' || code === 'INVALID_TOKEN')) {
+      dispatchAuthExpired(code);
+    }
     throw new ApiError(
       response.status,
-      body.error?.code || 'REQUEST_FAILED',
+      code,
       body.error?.message || '요청을 처리하지 못했습니다.',
     );
   }

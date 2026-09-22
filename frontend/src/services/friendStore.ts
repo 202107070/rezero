@@ -202,7 +202,12 @@ export function getFollowRoomPath(friendName: string): string | null {
 export function canSummonFriend(friendName: string): boolean {
   if (!isFriend(friendName)) return false;
   const presence = getUserPresence(friendName);
-  return !presence || presence.status === 'lobby' || presence.status === 'offline';
+  return Boolean(presence && presence.status === 'lobby');
+}
+
+export function isFriendOnline(name: string): boolean {
+  const presence = getUserPresence(name);
+  return Boolean(presence && (presence.status === 'lobby' || presence.status === 'room'));
 }
 
 export function summonFriendToRoom(

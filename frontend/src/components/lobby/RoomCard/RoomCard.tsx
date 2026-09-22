@@ -36,6 +36,9 @@ export function RoomCard({ room, onJoin }: RoomCardProps) {
         <span className="room-meta-pill">{roomDiff}</span>
         <span className="room-meta-pill">{room.mode || '1/1'}</span>
         <span className="room-meta-pill">{roomCount}문제</span>
+        {(room.isPrivate || room.pwd) && (
+          <span className="room-meta-pill room-meta-private">🔒 비공개</span>
+        )}
       </div>
     </div>
   );

@@ -936,7 +936,6 @@ export default function ResultPage() {
   };
 
   const handleNicknameContextMenu = (event: MouseEvent, player: ResultPlayer) => {
-    if (player.id === myUserId) return;
     event.preventDefault();
     event.stopPropagation();
     setContextMenu({
@@ -953,8 +952,11 @@ export default function ResultPage() {
 
   const handleUserMenuAction = (action: UserListMenuAction, userName: string) => {
     switch (action) {
+      case 'my-info':
+        appendSystemChat('내 정보는 로비에서 확인할 수 있습니다.');
+        break;
       case 'match-story':
-        appendSystemChat(`${userName} 님의 매치 스토리는 로비에서 확인할 수 있습니다.`);
+        appendSystemChat(`${userName} 님의 프로필은 로비에서 확인할 수 있습니다.`);
         break;
       case 'add-friend':
         if (isFriend(userName)) {
@@ -1245,10 +1247,16 @@ export default function ResultPage() {
           y={contextMenu.y}
           userName={contextMenu.player.name}
           actionLabels={{
+            'match-story': '프로필 보기',
             'add-friend': isFriend(contextMenu.player.name) ? '친구삭제' : '친구추가',
           }}
-          hiddenActions={['summon']}
+          hiddenActions={
+            contextMenu.player.id === myUserId
+              ? (['match-story', 'add-friend', 'whisper', 'follow', 'summon'] as UserListMenuAction[])
+              : (['my-info', 'summon'] as UserListMenuAction[])
+          }
           disabledActions={(() => {
+            if (contextMenu.player!.id === myUserId) return [];
             const presence = getUserPresence(contextMenu.player!.name);
             const canFollow = isFriend(contextMenu.player!.name) && presence?.status === 'room';
             return canFollow ? [] : (['follow'] as UserListMenuAction[]);

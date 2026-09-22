@@ -97,6 +97,47 @@ export async function grantStarterItems(userId, quantity = 5) {
   }
 }
 
+export async function addUserItem(userId, itemKey, delta = 1) {
+  await pool.query(
+    `INSERT INTO user_items (user_id, item_key, quantity)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+    [userId, itemKey, delta],
+  );
+}
+
+export async function updateUserGold(userId, gold) {
+  await pool.query(`UPDATE users SET gold = ? WHERE id = ?`, [
+    Math.max(0, Number(gold) || 0),
+    userId,
+  ]);
+}
+
+export async function deductUserGold(userId, cost) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const rows = await connection.query(
+      `SELECT gold FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [userId],
+    );
+    const current = Number(rows[0]?.gold || 0);
+    if (current < cost) {
+      await connection.rollback();
+      return { ok: false, gold: current };
+    }
+    const next = current - cost;
+    await connection.query(`UPDATE users SET gold = ? WHERE id = ?`, [next, userId]);
+    await connection.commit();
+    return { ok: true, gold: next };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function grantStarterItemsByUsernames(usernames, quantity = 5) {
   if (!Array.isArray(usernames) || usernames.length === 0) return 0;
   const placeholders = usernames.map(() => "?").join(", ");

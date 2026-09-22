@@ -228,10 +228,28 @@ export async function joinRoom(roomId, userId, input) {
     }
   } catch (error) {
     if (error instanceof AppError) throw error;
-    // redis 실패 시 입장 자체는 계속 진행
   }
 
-  if (room.passwordHash) {
+  let inviteBypass = false;
+  if (input.inviteToken) {
+    try {
+      const raw = await redisClient.get(`room:invite:${input.inviteToken}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (
+          String(parsed.roomId) === String(roomId) &&
+          String(parsed.toUserId) === String(userId)
+        ) {
+          inviteBypass = true;
+          await redisClient.del(`room:invite:${input.inviteToken}`);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (room.passwordHash && !inviteBypass) {
     const passwordMatches = input.password
       ? await comparePassword(input.password, room.passwordHash)
       : false;

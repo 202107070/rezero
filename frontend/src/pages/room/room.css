@@ -1222,6 +1222,30 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-friend-table tr.is-offline .room-friend-name-cell {
+  color: #888;
+}
+
+.friend-presence-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 2px solid var(--px-border);
+  flex-shrink: 0;
+}
+
+.friend-presence-badge.is-online {
+  color: var(--px-success);
+  border-color: var(--px-success);
+}
+
+.friend-presence-badge.is-offline {
+  color: #888;
+  border-color: #555;
 }
 
 .room-friend-messenger-toggle {

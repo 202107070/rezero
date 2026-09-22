@@ -19,6 +19,7 @@ export interface JoinRoomParams {
   password?: string;
   language?: string;
   character?: string;
+  inviteToken?: string;
 }
 
 export interface LeaveRoomResult {
@@ -37,6 +38,7 @@ export interface StartRoomResult {
 }
 
 let pendingJoinPassword = '';
+let pendingInviteToken = '';
 
 export function setPendingJoinPassword(password: string): void {
   pendingJoinPassword = password;
@@ -54,6 +56,34 @@ export function takePendingJoinPassword(): string {
 
 export function clearPendingJoinPassword(): void {
   pendingJoinPassword = '';
+}
+
+export function setPendingInviteToken(token: string): void {
+  pendingInviteToken = token || '';
+  try {
+    if (token) sessionStorage.setItem('rezero_pending_invite_token', token);
+    else sessionStorage.removeItem('rezero_pending_invite_token');
+  } catch {
+    // ignore
+  }
+}
+
+export function peekPendingInviteToken(): string {
+  if (pendingInviteToken) return pendingInviteToken;
+  try {
+    return sessionStorage.getItem('rezero_pending_invite_token') || '';
+  } catch {
+    return '';
+  }
+}
+
+export function clearPendingInviteToken(): void {
+  pendingInviteToken = '';
+  try {
+    sessionStorage.removeItem('rezero_pending_invite_token');
+  } catch {
+    // ignore
+  }
 }
 
 function isGameMode(value: unknown): value is GameMode {
@@ -153,6 +183,7 @@ export async function joinRoom(roomId: number | string, params: JoinRoomParams =
       password: params.password || '',
       language: params.language || '',
       character: params.character || '',
+      inviteToken: params.inviteToken || '',
     }),
   });
   return normalizeRoom(result);

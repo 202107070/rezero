@@ -18,20 +18,16 @@ export const CHARACTERS: CharacterOption[] = [
   { id: 'char4', icon: '🤖', label: '로봇' },
 ];
 
-/** 로컬 테스트용 봇 (서버 참가자와는 별개 — START는 실제 유저만 인정) */
-export const DEMO_BOT_POOL: Array<{ name: string; rank: string; language: string; character: string }> = [
-  { name: '알고리즘깎는노인', rank: '다이아', language: '☕', character: '🧙' },
-  { name: '코딩마스터', rank: '플래티넘', language: '🐍', character: '🤖' },
-  { name: '빈칸헌터', rank: '골드', language: '⚡', character: '🥷' },
-  { name: '자바의달인', rank: '플래티넘', language: '☕', character: '🤺' },
-  { name: '프론트요정', rank: '실버', language: '🌐', character: '🧙' },
-  { name: '스타일리스트', rank: '브론즈', language: '🎨', character: '🤖' },
-];
+/** 로컬 테스트용 봇 — 비활성화 (빈 풀) */
+export const DEMO_BOT_POOL: Array<{ name: string; rank: string; language: string; character: string }> = [];
 
-/** 봇 입장 후 READY 전환 대기 (ms) — 멀티 연동 전 로컬 봇용 */
+/** 봇 입장 후 READY 전환 대기 (ms) — 미사용 */
 export const BOT_READY_DELAY_MS = 3000;
 
 export function pickDemoBot(existingBotCount: number): (typeof DEMO_BOT_POOL)[number] {
+  if (DEMO_BOT_POOL.length === 0) {
+    return { name: '', rank: '브론즈', language: '☕', character: '🤺' };
+  }
   return DEMO_BOT_POOL[existingBotCount % DEMO_BOT_POOL.length];
 }
 

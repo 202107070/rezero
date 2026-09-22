@@ -2,9 +2,10 @@ import { useCallback, useState, type MouseEvent } from 'react';
 import { TITLE_DEFS } from '../../../constants/titleTypes';
 import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../../services/authService';
-import { getUserPresence, isFriend } from '../../../services/friendStore';
+import { getUserPresence, isFriend, isFriendOnline } from '../../../services/friendStore';
 import { getActiveRoomId } from '../../../services/roomSocket';
 import type { LobbyUser } from '../../../types/lobby';
+import { getTierIconByTier } from '../../../utils/tierUtils';
 import {
   UserListContextMenu,
   type UserListMenuAction,
@@ -17,15 +18,6 @@ const TIER_ORDER: Record<string, number> = {
   골드: 3,
   실버: 2,
   브론즈: 1,
-};
-
-const TIER_ICONS: Record<string, string> = {
-  브론즈: '🥉',
-  실버: '🥈',
-  골드: '🥇',
-  플래티넘: '💠',
-  다이아: '💎',
-  마스터: '👑',
 };
 
 interface RankingBoardProps {
@@ -102,7 +94,6 @@ export function RankingBoard({
     );
 
   const handleNicknameContextMenu = (event: MouseEvent, user: LobbyUser) => {
-    if (isSelfUser(user)) return;
     event.preventDefault();
     event.stopPropagation();
     setContextMenu({
@@ -114,7 +105,7 @@ export function RankingBoard({
   };
 
   const handleMenuSelect = (action: UserListMenuAction, userName: string) => {
-    const user = sortedUsers.find((entry) => entry.name === userName);
+    const user = sortedUsers.find((entry) => entry.name === userName) || contextMenu.user;
     if (user) onUserMenuAction?.(action, user);
   };
 
@@ -175,15 +166,17 @@ export function RankingBoard({
             ) : null}
             {sortedUsers.map((u, i) => {
               const isSelf = isSelfUser(u);
+              const presence = getUserPresence(u.name);
+              const online = isFriendOnline(u.name);
               return (
                 <tr key={`${activeTab}-${i}`}>
                   <td className="pixel-text-warning">
-                    <span className="tier-icon-wrap">{TIER_ICONS[u.rank] || '⭐'}</span>
+                    <span className="tier-icon-wrap">{getTierIconByTier(u.rank)}</span>
                     {u.rank}
                   </td>
                   <td
                     className={`user-nickname-cell${isSelf ? ' is-self' : ''}`}
-                    onContextMenu={isSelf ? undefined : (event) => handleNicknameContextMenu(event, u)}
+                    onContextMenu={(event) => handleNicknameContextMenu(event, u)}
                   >
                     {isSelf ? (
                       <>
@@ -198,6 +191,15 @@ export function RankingBoard({
                       <>
                         {u.name}
                         <UserTitleBadge titleId={u.title} />
+                        {activeTab === '친구' && (
+                          <span className={`friend-presence-badge ${online ? 'is-online' : 'is-offline'}`}>
+                            {online
+                              ? presence?.status === 'room'
+                                ? '방'
+                                : '온라인'
+                              : '오프라인'}
+                          </span>
+                        )}
                       </>
                     )}
                   </td>
@@ -215,10 +217,16 @@ export function RankingBoard({
           y={contextMenu.y}
           userName={contextMenu.user.name}
           actionLabels={{
+            'match-story': '프로필 보기',
             'add-friend': isFriend(contextMenu.user.name) ? '친구삭제' : '친구추가',
           }}
-          hiddenActions={['summon']}
+          hiddenActions={
+            isSelfUser(contextMenu.user)
+              ? (['match-story', 'add-friend', 'whisper', 'follow', 'summon'] as UserListMenuAction[])
+              : (['my-info', 'summon'] as UserListMenuAction[])
+          }
           disabledActions={(() => {
+            if (isSelfUser(contextMenu.user!)) return [];
             const presence = getUserPresence(contextMenu.user!.name);
             const activeRoomId = getActiveRoomId();
             const sameRoom =
@@ -227,7 +235,12 @@ export function RankingBoard({
               String(presence?.roomId) === String(activeRoomId);
             const canFollow =
               isFriend(contextMenu.user!.name) && presence?.status === 'room' && !sameRoom;
-            return canFollow ? [] : (['follow'] as UserListMenuAction[]);
+            const disabled: UserListMenuAction[] = [];
+            if (!canFollow) disabled.push('follow');
+            if (!isFriendOnline(contextMenu.user!.name)) {
+              disabled.push('follow', 'summon');
+            }
+            return disabled;
           })()}
           onSelect={handleMenuSelect}
           onClose={closeContextMenu}

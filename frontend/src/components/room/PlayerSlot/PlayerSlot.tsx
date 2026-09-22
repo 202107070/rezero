@@ -8,28 +8,24 @@ interface PlayerSlotProps {
   index: number;
   myCharacter: string;
   myLanguage: string;
-  canInvite?: boolean;
   onClick?: () => void;
-  onInvite?: () => void;
   onContextMenu?: (event: MouseEvent, player: RoomPlayer) => void;
 }
 
 export function PlayerSlot({
   player,
-  index,
+  index: _index,
   myCharacter,
   myLanguage: _myLanguage,
-  canInvite,
   onClick,
-  onInvite,
   onContextMenu,
 }: PlayerSlotProps) {
   const myCharIcon = CHARACTERS.find((c) => c.id === myCharacter)?.icon;
 
   return (
     <div
-      className={`player-slot ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''} ${!player && canInvite ? 'invite' : ''}`}
-      onClick={player ? onClick : canInvite ? onInvite : undefined}
+      className={`player-slot ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''}`}
+      onClick={player ? onClick : undefined}
       onContextMenu={(event) => {
         if (!player || !onContextMenu) return;
         onContextMenu(event, player);
@@ -44,8 +40,6 @@ export function PlayerSlot({
             <span className="slot-rank">{getTierIconByTier(player.rank || getTierByUserName(player.name))}</span>
             {player.name}
           </>
-        ) : canInvite ? (
-          '🤖 봇 초대'
         ) : (
           'Empty'
         )}

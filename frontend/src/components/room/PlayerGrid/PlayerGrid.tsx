@@ -8,9 +8,7 @@ interface PlayerGridProps {
   roomMode: string;
   myCharacter: string;
   myLanguage: string;
-  canInviteMore: boolean;
   onPlayerClick: (player: RoomPlayer, index: number) => void;
-  onInviteBot: (index: number) => void;
   onPlayerContextMenu?: (event: MouseEvent, player: RoomPlayer) => void;
 }
 
@@ -19,9 +17,7 @@ export function PlayerGrid({
   roomMode,
   myCharacter,
   myLanguage,
-  canInviteMore,
   onPlayerClick,
-  onInviteBot,
   onPlayerContextMenu,
 }: PlayerGridProps) {
   if (roomMode === '1/1') {
@@ -38,10 +34,8 @@ export function PlayerGrid({
         opponent={opponent}
         myCharacter={myCharacter}
         myLanguage={myLanguage}
-        canInviteOpponent={canInviteMore && !opponent}
         onHostClick={() => host && onPlayerClick(host, 0)}
         onOpponentClick={() => opponent && onPlayerClick(opponent, opponentIndex)}
-        onInviteOpponent={() => onInviteBot(1)}
         onPlayerContextMenu={onPlayerContextMenu}
       />
     );
@@ -56,9 +50,7 @@ export function PlayerGrid({
           index={idx}
           myCharacter={myCharacter}
           myLanguage={myLanguage}
-          canInvite={!p && canInviteMore}
           onClick={p ? () => onPlayerClick(p, idx) : undefined}
-          onInvite={() => onInviteBot(idx)}
           onContextMenu={onPlayerContextMenu}
         />
       ))}

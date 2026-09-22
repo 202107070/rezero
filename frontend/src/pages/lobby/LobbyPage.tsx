@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { InventoryPanel } from '../../components/lobby/InventoryPanel/InventoryPanel';
 import { InventoryItemsModal } from '../../components/lobby/InventoryItemsModal/InventoryItemsModal';
 import { LobbyChatPanel } from '../../components/lobby/LobbyChatPanel/LobbyChatPanel';
-import { MatchStoryModal } from '../../components/lobby/MatchStoryModal/MatchStoryModal';
+import { MyInfoModal } from '../../components/lobby/MyInfoModal/MyInfoModal';
 import { RoomFilterModal } from '../../components/lobby/RoomFilterModal/RoomFilterModal';
 import { PracticeModal } from '../../components/lobby/PracticeModal/PracticeModal';
 import { ProfilePanel } from '../../components/lobby/ProfilePanel/ProfilePanel';
@@ -16,7 +16,6 @@ import { RoomList } from '../../components/lobby/RoomList/RoomList';
 import { RouletteWheel } from '../../components/lobby/RouletteWheel/RouletteWheel';
 import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
 import { SettingsModal } from '../../components/lobby/SettingsModal/SettingsModal';
-import { TitleModal } from '../../components/lobby/TitleModal/TitleModal';
 import { ROULETTE_COST, ROULETTE_ITEMS, type ItemInventory } from '../../constants/itemTypes';
 import { ROUTES } from '../../constants/routes';
 import { useAuthUser } from '../../contexts/AuthContext';
@@ -27,10 +26,11 @@ import {
   fetchRooms,
   getRoomErrorMessage,
   leaveRoom,
+  setPendingInviteToken,
   setPendingJoinPassword,
 } from '../../services/roomService';
 import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
-import { apiRequest } from '../../services/apiClient';
+import { ApiError, apiRequest } from '../../services/apiClient';
 import {
   emitFriendRemove,
   emitFriendRequest,
@@ -54,6 +54,7 @@ import {
   getFollowRoomPath,
   getFriendNames,
   getFriendUserIds,
+  getUserPresence,
   isFriend,
   removeFriend,
   removeFriendByUserId,
@@ -63,8 +64,9 @@ import {
   getEquippedTitleId,
   getGold,
   getItemInventory,
+  getRatingScore,
   setGold,
-  updateItemInventory,
+  setItemInventory as persistItemInventory,
 } from '../../services/userService';
 import type { ChatMessage, CodeHistoryEntry, GameMode, LobbyUser, Room } from '../../types/lobby';
 import { persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtils';
@@ -81,14 +83,68 @@ import type { DisplayMode } from '../../types/electron';
 import { loadAudioSettings, saveAudioSettings } from '../../utils/audio/audioSettings';
 import { applyAudioSettings, BattleBGM, LobbyBGM } from '../../utils/audio/gameAudio';
 import { applyDisplayMode, loadDisplayMode, quitApp } from '../../utils/windowBridge';
+import { getTierByRating } from '../../utils/tierUtils';
 import './lobby.css';
 
 const SEG_ANGLE = 360 / ROULETTE_ITEMS.length;
 
+function inventoryFromItems(items: unknown): ItemInventory {
+  const base: ItemInventory = {
+    paint: 0,
+    revealLength: 0,
+    revealPrev: 0,
+    lightning: 0,
+    timeReduce: 0,
+    scribble: 0,
+    blankBreak: 0,
+    buildCharge: 0,
+  };
+  if (!Array.isArray(items)) {
+    if (items && typeof items === 'object') {
+      return { ...base, ...(items as Partial<ItemInventory>) };
+    }
+    return getItemInventory();
+  }
+  const next = { ...base };
+  for (const raw of items) {
+    const row = raw as { itemKey?: string; quantity?: number };
+    const key = String(row.itemKey || '') as keyof ItemInventory;
+    if (key && key in next) {
+      next[key] = Number(row.quantity) || 0;
+    }
+  }
+  return next;
+}
+
+function syncFriendPresenceFromOnline(
+  online: Array<{ userId?: string; username?: string; displayName?: string }>,
+) {
+  const onlineNames = new Set<string>();
+  const onlineIds = new Set<string>();
+  for (const user of online) {
+    if (user.displayName) onlineNames.add(user.displayName);
+    if (user.username) onlineNames.add(user.username);
+    if (user.userId) onlineIds.add(String(user.userId));
+  }
+  for (const name of getFriendNames()) {
+    const friendId = findFriendUserId(name);
+    const inLobby =
+      onlineNames.has(name) || (friendId ? onlineIds.has(String(friendId)) : false);
+    if (inLobby) {
+      const current = getUserPresence(name);
+      if (!current || current.status !== 'room') {
+        setUserPresence(name, { status: 'lobby' });
+      }
+    } else {
+      setUserPresence(name, { status: 'offline' });
+    }
+  }
+}
+
 function loadInitialUsers(): LobbyUser[] {
   const me = getCurrentDisplayName() || getCurrentUserName();
   if (!me) return [];
-  return [{ name: me, rank: '-', title: getEquippedTitleId() }];
+  return [{ name: me, rank: getTierByRating(getRatingScore()), title: getEquippedTitleId() }];
 }
 
 export default function LobbyPage() {
@@ -118,7 +174,6 @@ export default function LobbyPage() {
   const [practiceDiff, setPracticeDiff] = useState('보통');
   const [practiceCount, setPracticeCount] = useState('5');
   const [currentPage, setCurrentPage] = useState(0);
-  const [showCodeModal, setShowCodeModal] = useState(false);
   const [codeHistory, setCodeHistory] = useState<CodeHistoryEntry[]>(readCodeHistory);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(0);
   const [roomFilter, setRoomFilter] = useState<RoomFilterState>(EMPTY_ROOM_FILTER);
@@ -126,29 +181,46 @@ export default function LobbyPage() {
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
   const [gold, setGoldState] = useState(getGold);
   const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
-  const [showTitleModal, setShowTitleModal] = useState(false);
+  const [showMyInfoModal, setShowMyInfoModal] = useState(false);
+  const [myInfoMode, setMyInfoMode] = useState<'self' | 'public'>('self');
+  const [myInfoPublicUser, setMyInfoPublicUser] = useState<LobbyUser | null>(null);
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
   const [users, setUsers] = useState<LobbyUser[]>(loadInitialUsers);
 
   const applyOnlineUsers = useCallback(
-    (online: Array<{ userId?: string; username?: string; displayName?: string; equippedTitleId?: string | null }>) => {
+    (
+      online: Array<{
+        userId?: string;
+        username?: string;
+        displayName?: string;
+        equippedTitleId?: string | null;
+        ratingScore?: number;
+      }>,
+    ) => {
       const meName = authUser.displayName || authUser.username;
       const mapped: LobbyUser[] = online.map((user) => ({
         name: user.displayName || user.username || user.userId || 'USER',
-        rank: '-',
+        rank: getTierByRating(user.ratingScore || 1000),
         title: user.equippedTitleId || null,
         userId: user.userId,
       }));
       if (meName && !mapped.some((u) => u.name === meName || u.userId === authUser.id)) {
-        mapped.unshift({ name: meName, rank: '-', title: getEquippedTitleId(), userId: authUser.id });
+        mapped.unshift({
+          name: meName,
+          rank: getTierByRating(getRatingScore()),
+          title: getEquippedTitleId(),
+          userId: authUser.id,
+        });
       } else {
         mapped.forEach((user) => {
           if (user.userId === authUser.id || user.name === meName) {
             user.title = getEquippedTitleId();
+            user.rank = getTierByRating(getRatingScore());
           }
         });
       }
       setUsers(mapped);
+      syncFriendPresenceFromOnline(online);
     },
     [authUser.displayName, authUser.username, authUser.id],
   );
@@ -230,6 +302,7 @@ export default function LobbyPage() {
               roomId: String(payload.roomId),
               roomTitle: payload.roomTitle || '대기실',
               roomQuery: payload.roomQuery || `id=${payload.roomId}`,
+              inviteToken: payload.inviteToken,
             });
           }),
         );
@@ -347,6 +420,7 @@ export default function LobbyPage() {
     roomId: string;
     roomTitle: string;
     roomQuery: string;
+    inviteToken?: string;
   } | null>(null);
   const [showRoulette, setShowRoulette] = useState(false);
   const [showInventoryItemsModal, setShowInventoryItemsModal] = useState(false);
@@ -497,13 +571,31 @@ export default function LobbyPage() {
 
   const handleUserMenuAction = (action: UserListMenuAction, user: LobbyUser) => {
     switch (action) {
-      case 'match-story':
+      case 'my-info':
+        setMyInfoMode('self');
+        setMyInfoPublicUser(null);
         setSelectedHistoryIndex(0);
         setSelectedHistoryProblemIndex(0);
         setSelectedHistoryIds([]);
-        setShowCodeModal(true);
-        appendSystemChat(`${user.name} 님의 매치 스토리를 열었습니다.`);
+        setShowMyInfoModal(true);
         break;
+      case 'match-story': {
+        const meName = authUser.displayName || authUser.username;
+        const isSelf =
+          (user.userId && String(user.userId) === String(authUser.id)) || user.name === meName;
+        if (isSelf) {
+          setMyInfoMode('self');
+          setMyInfoPublicUser(null);
+        } else {
+          setMyInfoMode('public');
+          setMyInfoPublicUser(user);
+        }
+        setSelectedHistoryIndex(0);
+        setSelectedHistoryProblemIndex(0);
+        setSelectedHistoryIds([]);
+        setShowMyInfoModal(true);
+        break;
+      }
       case 'add-friend': {
         if (isFriend(user.name)) {
           const friendId = user.userId || findFriendUserId(user.name);
@@ -648,38 +740,66 @@ export default function LobbyPage() {
     setJoiningRoom(false);
   };
 
-  const spinRoulette = () => {
+  const spinRoulette = async () => {
     if (gold < ROULETTE_COST || rouletteSpinning) return;
 
-    setGoldState((p) => {
-      const v = p - ROULETTE_COST;
-      setGold(v);
-      return v;
-    });
     setRouletteSpinning(true);
     setRouletteResult(null);
 
-    const targetIdx = Math.floor(Math.random() * ROULETTE_ITEMS.length);
-    const correction = 360 - targetIdx * SEG_ANGLE - SEG_ANGLE / 2;
-    const minTarget = wheelDeg + 360 * 8;
-    const base = Math.ceil((minTarget - correction) / 360) * 360;
-    const targetDeg = base + correction;
-    setWheelDeg(targetDeg);
+    try {
+      const result = await apiRequest<{
+        itemKey?: string;
+        missed?: boolean;
+        gold?: number;
+        items?: unknown;
+      }>('/users/me/roulette', { method: 'POST' });
 
-    setTimeout(() => {
-      const sel = ROULETTE_ITEMS[targetIdx];
-      if (sel.type === 'miss') {
-        setRouletteResult('💀 꽝! 아쉽습니다.');
+      const itemKey = String(result.itemKey || 'miss');
+      const targetIdx = Math.max(
+        0,
+        ROULETTE_ITEMS.findIndex((item) => item.type === itemKey),
+      );
+      const resolvedIdx = targetIdx >= 0 ? targetIdx : ROULETTE_ITEMS.findIndex((item) => item.type === 'miss');
+
+      if (typeof result.gold === 'number') {
+        setGold(result.gold);
+        setGoldState(result.gold);
       } else {
-        setRouletteResult(`${sel.icon} ${sel.name} 획득!`);
-        setItemInventory((p) => {
-          const n = { ...p, [sel.type]: (p[sel.type as keyof ItemInventory] || 0) + 1 };
-          updateItemInventory(() => n);
-          return n;
+        setGoldState((p) => {
+          const v = Math.max(0, p - ROULETTE_COST);
+          setGold(v);
+          return v;
         });
       }
-      setTimeout(() => setRouletteSpinning(false), 1200);
-    }, 3200);
+
+      if (result.items != null) {
+        const nextInv = inventoryFromItems(result.items);
+        persistItemInventory(nextInv);
+        setItemInventory(nextInv);
+      }
+
+      const correction = 360 - resolvedIdx * SEG_ANGLE - SEG_ANGLE / 2;
+      const minTarget = wheelDeg + 360 * 8;
+      const base = Math.ceil((minTarget - correction) / 360) * 360;
+      const targetDeg = base + correction;
+      setWheelDeg(targetDeg);
+
+      window.setTimeout(() => {
+        const sel = ROULETTE_ITEMS[resolvedIdx] || ROULETTE_ITEMS.find((item) => item.type === 'miss');
+        if (!sel || sel.type === 'miss' || result.missed) {
+          setRouletteResult('💀 꽝! 아쉽습니다.');
+        } else {
+          setRouletteResult(`${sel.icon} ${sel.name} 획득!`);
+        }
+        window.setTimeout(() => setRouletteSpinning(false), 1200);
+      }, 3200);
+    } catch (error) {
+      setRouletteSpinning(false);
+      const message =
+        error instanceof ApiError ? error.message : '룰렛을 돌리지 못했습니다.';
+      setRouletteResult(`❌ ${message}`);
+      appendSystemChat(message);
+    }
   };
 
   const handleDeleteSelectedHistory = () => {
@@ -761,13 +881,14 @@ export default function LobbyPage() {
               username={authUser.username}
               displayName={authUser.displayName}
               titleData={titleData}
-              onOpenMatchStory={() => {
+              onOpenMyInfo={() => {
+                setMyInfoMode('self');
+                setMyInfoPublicUser(null);
                 setSelectedHistoryIndex(0);
                 setSelectedHistoryProblemIndex(0);
                 setSelectedHistoryIds([]);
-                setShowCodeModal(true);
+                setShowMyInfoModal(true);
               }}
-              onOpenTitles={() => setShowTitleModal(true)}
             />
             <InventoryPanel
               gold={gold}
@@ -796,10 +917,16 @@ export default function LobbyPage() {
         </div>
       </div>
 
-      <TitleModal
-        open={showTitleModal}
+      <MyInfoModal
+        open={showMyInfoModal}
+        mode={myInfoMode}
+        publicUser={myInfoPublicUser}
         titleData={titleData}
-        onClose={() => setShowTitleModal(false)}
+        codeHistory={codeHistory}
+        selectedIndex={safeHistoryIndex}
+        selectedProblemIndex={selectedHistoryProblemIndex}
+        selectedIds={safeSelectedHistoryIds}
+        onClose={() => setShowMyInfoModal(false)}
         onTitleDataChange={(next) => {
           setTitleData(next);
           void emitUpdateTitle(next.equipped).catch(() => undefined);
@@ -812,6 +939,18 @@ export default function LobbyPage() {
             ),
           );
         }}
+        onSelectEntry={(idx) => {
+          setSelectedHistoryIndex(idx);
+          setSelectedHistoryProblemIndex(0);
+        }}
+        onSelectProblem={setSelectedHistoryProblemIndex}
+        onToggleSelection={(historyId) =>
+          setSelectedHistoryIds((prev) =>
+            prev.includes(historyId) ? prev.filter((id) => id !== historyId) : [...prev, historyId],
+          )
+        }
+        onSelectAll={handleSelectAllHistory}
+        onDeleteSelected={handleDeleteSelectedHistory}
       />
 
       <RoomCreateModal
@@ -916,7 +1055,7 @@ export default function LobbyPage() {
           setShowRoulette(false);
           setRouletteResult(null);
         }}
-        onSpin={spinRoulette}
+        onSpin={() => void spinRoulette()}
       />
 
       <InventoryItemsModal
@@ -1001,6 +1140,9 @@ export default function LobbyPage() {
           if (!pendingRoomInvite) return;
           const invite = pendingRoomInvite;
           setPendingRoomInvite(null);
+          if (invite.inviteToken) {
+            setPendingInviteToken(invite.inviteToken);
+          }
           void emitRoomInviteResponse(invite.fromUserId, true, invite.roomId);
           const query = invite.roomQuery.replace(/^\?/, '');
           navigate(`${ROUTES.ROOM}?${query}`);
@@ -1014,27 +1156,6 @@ export default function LobbyPage() {
           );
           setPendingRoomInvite(null);
         }}
-      />
-
-      <MatchStoryModal
-        open={showCodeModal}
-        codeHistory={codeHistory}
-        selectedIndex={safeHistoryIndex}
-        selectedProblemIndex={selectedHistoryProblemIndex}
-        selectedIds={safeSelectedHistoryIds}
-        onClose={() => setShowCodeModal(false)}
-        onSelectEntry={(idx) => {
-          setSelectedHistoryIndex(idx);
-          setSelectedHistoryProblemIndex(0);
-        }}
-        onSelectProblem={setSelectedHistoryProblemIndex}
-        onToggleSelection={(historyId) =>
-          setSelectedHistoryIds((prev) =>
-            prev.includes(historyId) ? prev.filter((id) => id !== historyId) : [...prev, historyId],
-          )
-        }
-        onSelectAll={handleSelectAllHistory}
-        onDeleteSelected={handleDeleteSelectedHistory}
       />
     </>
   );

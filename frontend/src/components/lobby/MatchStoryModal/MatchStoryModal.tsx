@@ -4,6 +4,7 @@ import { getSolution } from '../../../utils/codeHistoryUtils';
 
 interface MatchStoryModalProps {
   open: boolean;
+  embedded?: boolean;
   codeHistory: CodeHistoryEntry[];
   selectedIndex: number;
   selectedProblemIndex: number;
@@ -18,6 +19,7 @@ interface MatchStoryModalProps {
 
 export function MatchStoryModal({
   open,
+  embedded = false,
   codeHistory,
   selectedIndex,
   selectedProblemIndex,
@@ -36,12 +38,13 @@ export function MatchStoryModal({
   const selectedProblems = selectedHistory?.problems || [];
   const selectedProblem = selectedProblems[selectedProblemIndex] || selectedProblems[0] || null;
 
-  return (
-    <div className="modal-overlay" onClick={triggerShake}>
-      <div className={`modal-content match-story-modal${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
+  const body = (
+    <>
+        {!embedded && (
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '6px', fontSize: '22px' }}>
           MATCH HISTORY
         </h3>
+        )}
         {codeHistory.length === 0 ? (
           <div className="pixel-card" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
             저장된 문제가 없습니다.
@@ -163,6 +166,17 @@ export function MatchStoryModal({
             </button>
           </div>
         </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="match-story-modal match-story-embedded">{body}</div>;
+  }
+
+  return (
+    <div className="modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content match-story-modal${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
+        {body}
       </div>
     </div>
   );

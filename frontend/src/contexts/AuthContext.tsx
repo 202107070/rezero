@@ -19,6 +19,9 @@ import {
 import { leaveRoom } from '../services/roomService';
 import { disconnectRoomSocket, getActiveRoomId } from '../services/roomSocket';
 import { switchFriendOwner } from '../services/friendStore';
+import { AUTH_EXPIRED_EVENT } from '../services/apiClient';
+import { ConnectionLostModal } from '../components/lobby/ConnectionLostModal/ConnectionLostModal';
+import { quitApp } from '../utils/windowBridge';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -34,6 +37,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [connectionLost, setConnectionLost] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,11 +52,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const onAuthExpired = () => {
+      setConnectionLost(true);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
+  }, []);
+
   const login = useCallback(async (username: string, password: string) => {
     const result = await authLogin(username, password);
     if (result.ok) {
       switchFriendOwner(result.user.id);
       setUser(result.user);
+      setConnectionLost(false);
     }
     return result;
   }, []);
@@ -62,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.ok) {
       switchFriendOwner(result.user.id);
       setUser(result.user);
+      setConnectionLost(false);
     }
     return result;
   }, []);
@@ -90,7 +104,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user, authReady, login, signup, logout],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <ConnectionLostModal
+        open={connectionLost}
+        onConfirm={() => {
+          logout();
+          void quitApp();
+        }}
+      />
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

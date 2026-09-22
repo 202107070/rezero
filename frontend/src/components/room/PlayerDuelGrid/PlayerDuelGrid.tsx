@@ -8,29 +8,24 @@ interface DuelSideProps {
   isHostSide: boolean;
   myCharacter: string;
   myLanguage: string;
-  canInvite: boolean;
   onPlayerClick?: () => void;
-  onInvite?: () => void;
   onPlayerContextMenu?: (event: MouseEvent, player: RoomPlayer) => void;
 }
 
 function DuelSide({
   player,
-  isHostSide,
+  isHostSide: _isHostSide,
   myCharacter,
   myLanguage: _myLanguage,
-  canInvite,
   onPlayerClick,
-  onInvite,
   onPlayerContextMenu,
 }: DuelSideProps) {
   const myCharIcon = CHARACTERS.find((c) => c.id === myCharacter)?.icon;
-  const clickable = player ? onPlayerClick : canInvite ? onInvite : undefined;
 
   return (
     <div
-      className={`duel-side ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''} ${!player && canInvite ? 'invite' : ''}`}
-      onClick={clickable}
+      className={`duel-side ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''}`}
+      onClick={player ? onPlayerClick : undefined}
       onContextMenu={(event) => {
         if (!player || !onPlayerContextMenu) return;
         onPlayerContextMenu(event, player);
@@ -45,10 +40,8 @@ function DuelSide({
             <span className="duel-rank">{getTierIconByTier(player.rank || getTierByUserName(player.name))}</span>
             {player.name}
           </>
-        ) : canInvite ? (
-          '🤖 봇 초대'
         ) : (
-          '대기 중'
+          'Empty'
         )}
       </div>
       <div
@@ -73,10 +66,8 @@ interface PlayerDuelGridProps {
   opponent: RoomPlayer | null;
   myCharacter: string;
   myLanguage: string;
-  canInviteOpponent: boolean;
   onHostClick: () => void;
   onOpponentClick: () => void;
-  onInviteOpponent: () => void;
   onPlayerContextMenu?: (event: MouseEvent, player: RoomPlayer) => void;
 }
 
@@ -85,10 +76,8 @@ export function PlayerDuelGrid({
   opponent,
   myCharacter,
   myLanguage,
-  canInviteOpponent,
   onHostClick,
   onOpponentClick,
-  onInviteOpponent,
   onPlayerContextMenu,
 }: PlayerDuelGridProps) {
   return (
@@ -98,7 +87,6 @@ export function PlayerDuelGrid({
         isHostSide
         myCharacter={myCharacter}
         myLanguage={myLanguage}
-        canInvite={false}
         onPlayerClick={onHostClick}
         onPlayerContextMenu={onPlayerContextMenu}
       />
@@ -108,9 +96,7 @@ export function PlayerDuelGrid({
         isHostSide={false}
         myCharacter={myCharacter}
         myLanguage={myLanguage}
-        canInvite={canInviteOpponent}
         onPlayerClick={onOpponentClick}
-        onInvite={onInviteOpponent}
         onPlayerContextMenu={onPlayerContextMenu}
       />
     </div>

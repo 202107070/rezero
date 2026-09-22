@@ -1,10 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-export type UserListMenuAction = 'match-story' | 'add-friend' | 'whisper' | 'follow' | 'summon';
+export type UserListMenuAction =
+  | 'match-story'
+  | 'my-info'
+  | 'add-friend'
+  | 'whisper'
+  | 'follow'
+  | 'summon';
 
 const MENU_ITEMS: Array<{ action: UserListMenuAction; label: string }> = [
-  { action: 'match-story', label: '매치 스토리' },
+  { action: 'match-story', label: '프로필 보기' },
+  { action: 'my-info', label: '내 정보' },
   { action: 'add-friend', label: '친구추가' },
   { action: 'whisper', label: '귓속말' },
   { action: 'follow', label: '따라가기' },

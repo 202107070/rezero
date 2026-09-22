@@ -3,23 +3,25 @@ import { useModalShake } from '../../../hooks/useModalShake';
 
 interface TitleModalProps {
   open: boolean;
+  embedded?: boolean;
   titleData: TitleData;
   onClose: () => void;
   onTitleDataChange: (data: TitleData) => void;
 }
 
-export function TitleModal({ open, titleData, onClose, onTitleDataChange }: TitleModalProps) {
+export function TitleModal({ open, embedded = false, titleData, onClose, onTitleDataChange }: TitleModalProps) {
   const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
 
   const equipped = getEquippedTitle(titleData);
 
-  return (
-    <div className="modal-overlay" onClick={triggerShake}>
-      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+  const body = (
+    <>
+        {!embedded && (
         <h3 className="text-center pixel-text-warning" style={{ marginBottom: '10px', fontSize: '22px' }}>
           🏆 칭호 관리
         </h3>
+        )}
         {equipped ? (
           <div style={{ textAlign: 'center', marginBottom: '10px' }}>
             <span style={{ color: '#aaa' }}>장착 중: </span>
@@ -68,6 +70,17 @@ export function TitleModal({ open, titleData, onClose, onTitleDataChange }: Titl
             닫기
           </button>
         </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="title-modal-embedded">{body}</div>;
+  }
+
+  return (
+    <div className="modal-overlay" onClick={triggerShake}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+        {body}
       </div>
     </div>
   );
