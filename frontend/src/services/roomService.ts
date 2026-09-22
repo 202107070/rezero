@@ -179,7 +179,12 @@ export function isAlreadyJoinedError(error: unknown): boolean {
 }
 
 export function getRoomErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
+  if (error instanceof ApiError) {
+    if (error.code === 'ROOM_KICKED') {
+      return error.message || '강퇴된 방에는 다시 입장할 수 없습니다.';
+    }
+    return error.message;
+  }
   return '요청을 처리하지 못했습니다.';
 }
 

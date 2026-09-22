@@ -371,6 +371,7 @@ export async function resetRoomAfterMatch(roomId) {
       "chat:room:" + id + ":recent",
     ]);
 
+    // DB is_ready 는 markRoomWaiting에서 이미 초기화됨. Redis ready 집합도 비운 채 참가자만 복구.
     const multi = redisClient.multi();
     for (let i = 0; i < participants.length; i++) {
       multi.sAdd("room:" + id + ":participants", String(participants[i].userId));
@@ -416,5 +417,19 @@ export const socketGameService = {
   async broadcastGameEnded(io, roomId, resultData) {
     io.to(String(roomId)).emit(SOCKET_EVENTS.GAME_ENDED, resultData);
     await resetRoomAfterMatch(roomId);
+    // 다시하기 시 전원 ready 해제 동기화
+    try {
+      const participants = await roomModel.findRoomParticipants(roomId);
+      const roomReadyStates = (participants || []).map(function (p) {
+        return { userId: String(p.userId), isReady: false };
+      });
+      io.to(String(roomId)).emit(SOCKET_EVENTS.READY_CHANGED, {
+        userId: null,
+        isReady: false,
+        roomReadyStates,
+      });
+    } catch {
+      // ignore
+    }
   },
 };

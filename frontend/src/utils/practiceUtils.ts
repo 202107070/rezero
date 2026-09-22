@@ -28,6 +28,41 @@ export function shuffleArray<T>(items: T[]): T[] {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
+/** Normalize blank markers and coerce fill_blank ↔ short_answer like battle problems. */
+export function normalizePracticeExercise(exercise: PracticeExercise): PracticeExercise {
+  let question = exercise.question || '';
+  // 4 underscores (and 3+) → canonical _____ for blank detection / rendering
+  question = question.replace(/_{3,}/g, '_____');
+
+  const hasBlanks = (question.match(/_____/g) || []).length > 0;
+  const rawType = String(exercise.type || '')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_');
+
+  let type = exercise.type;
+
+  if (
+    rawType === 'multiple_choice' ||
+    rawType === 'multiplechoice' ||
+    (Array.isArray(exercise.options) && exercise.options.length > 0 && exercise.correctIndex != null)
+  ) {
+    type = 'multiple_choice';
+  } else if (rawType === 'short_answer' || rawType === 'shortanswer' || rawType === '주관식') {
+    type = hasBlanks ? 'fill_blank' : 'short_answer';
+  } else if (rawType === 'fill_blank' || rawType === 'fillblank' || rawType === '빈칸') {
+    type = hasBlanks ? 'fill_blank' : 'short_answer';
+  } else if (!rawType) {
+    type = hasBlanks ? 'fill_blank' : 'short_answer';
+  } else if (hasBlanks) {
+    type = 'fill_blank';
+  } else {
+    type = 'short_answer';
+  }
+
+  return { ...exercise, question, type };
+}
+
 export function createExercisePool(count: number, diff: string, type: string, langKey?: string): PracticeExercise[] {
   const bank = (problems as PracticeExercise[]) || [];
   let filtered = bank;
@@ -42,7 +77,7 @@ export function createExercisePool(count: number, diff: string, type: string, la
     filtered = filtered.filter((p) => problemSupportsLang(p.answer, langKey));
   }
   const shuffled = shuffleArray(filtered);
-  return shuffled.slice(0, Math.max(3, Math.min(90, count)));
+  return shuffled.slice(0, Math.max(3, Math.min(90, count))).map(normalizePracticeExercise);
 }
 
 export function isExerciseCorrect(

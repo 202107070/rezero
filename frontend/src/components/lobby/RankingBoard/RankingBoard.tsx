@@ -3,6 +3,7 @@ import { TITLE_DEFS } from '../../../constants/titleTypes';
 import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../../services/authService';
 import { getUserPresence, isFriend } from '../../../services/friendStore';
+import { getActiveRoomId } from '../../../services/roomSocket';
 import type { LobbyUser } from '../../../types/lobby';
 import {
   UserListContextMenu,
@@ -219,7 +220,13 @@ export function RankingBoard({
           hiddenActions={['summon']}
           disabledActions={(() => {
             const presence = getUserPresence(contextMenu.user!.name);
-            const canFollow = isFriend(contextMenu.user!.name) && presence?.status === 'room';
+            const activeRoomId = getActiveRoomId();
+            const sameRoom =
+              Boolean(presence?.roomId) &&
+              Boolean(activeRoomId) &&
+              String(presence?.roomId) === String(activeRoomId);
+            const canFollow =
+              isFriend(contextMenu.user!.name) && presence?.status === 'room' && !sameRoom;
             return canFollow ? [] : (['follow'] as UserListMenuAction[]);
           })()}
           onSelect={handleMenuSelect}

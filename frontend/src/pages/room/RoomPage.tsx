@@ -52,6 +52,8 @@ import {
   disconnectRoomSocket,
   emitFriendRemove,
   emitFriendRequest,
+  emitFriendRequestResult,
+  emitRoomInvite,
   emitUpdateCharacter,
   joinRoomSocket,
   onRoomEvent,
@@ -62,6 +64,7 @@ import {
   type RoomReadyStatePayload,
   type ChatMessagePayload,
   type GameStartedPayload,
+  type RoomInviteResponsePayload,
   type UserLeftPayload,
 } from '../../services/roomSocket';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
@@ -74,7 +77,6 @@ import {
   removeFriend,
   removeFriendByUserId,
   setUserPresence,
-  summonFriendToRoom,
 } from '../../services/friendStore';
 import { getStartBlockReason, hasLocalBots } from '../../utils/room/roomStartValidation';
 import {
@@ -185,6 +187,10 @@ export default function RoomPage() {
     y: number;
     userName: string;
   } | null>(null);
+  const [pendingFriendRequest, setPendingFriendRequest] = useState<{
+    fromUserId: string;
+    fromUserName: string;
+  } | null>(null);
 
   const roomTitle = roomDetail?.title || fallbackTitle;
   const isPrivate = roomDetail?.isPrivate ?? (fallbackPwd.length > 0 && fallbackPwd !== 'protected');
@@ -230,6 +236,7 @@ export default function RoomPage() {
     });
     setPlayers(mapped);
     if (myParticipant) {
+      // rematch → WAITING: backend clears is_ready; trust participant payload
       setIsReady(Boolean(myParticipant.isReady));
     }
     setMyLanguage(LANG_MAP[room.lang] || 'java');
@@ -485,6 +492,20 @@ export default function RoomPage() {
 
             unsubs.push(
               onRoomEvent(
+                ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
+                (payload?: { fromUserId?: string; fromUserName?: string }) => {
+                  if (!payload?.fromUserId) return;
+                  if (String(payload.fromUserId) === String(getCurrentUserId())) return;
+                  setPendingFriendRequest({
+                    fromUserId: String(payload.fromUserId),
+                    fromUserName: payload.fromUserName || 'UNKNOWN',
+                  });
+                },
+              ),
+            );
+
+            unsubs.push(
+              onRoomEvent(
                 ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
                 (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
                   if (!payload?.accepted || !payload.fromUserName) return;
@@ -494,6 +515,23 @@ export default function RoomPage() {
                     {
                       type: 'sys',
                       text: `>> ${payload.fromUserName}님이 친구 요청을 수락했습니다.`,
+                    },
+                  ]);
+                },
+              ),
+            );
+
+            unsubs.push(
+              onRoomEvent(
+                ROOM_SOCKET_EVENTS.ROOM_INVITE_RESPONSE,
+                (payload: RoomInviteResponsePayload) => {
+                  if (!payload?.accepted) return;
+                  const name = payload.fromUserName || '상대';
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      type: 'sys',
+                      text: `>> ${name}님이 방 초대를 수락했습니다.`,
                     },
                   ]);
                 },
@@ -643,6 +681,45 @@ export default function RoomPage() {
     appendSystemMessage(`${friendName} 님 소환 실패: ${reason}`);
   };
 
+  const isUserAlreadyInRoom = (userName: string) =>
+    players.some(
+      (player) =>
+        player &&
+        (player.name === userName ||
+          (player.userId && String(player.userId) === String(findFriendUserId(userName) || ''))),
+    );
+
+  const inviteUserToRoom = async (userName: string) => {
+    const target = players.find((player) => player?.name === userName);
+    const friendId = target?.userId || findFriendUserId(userName);
+    if (!isFriend(userName)) {
+      appendSystemMessage('친구만 초대할 수 있습니다.');
+      return;
+    }
+    if (isUserAlreadyInRoom(userName)) {
+      appendSystemMessage(`${userName} 님은 이미 이 방에 있습니다.`);
+      return;
+    }
+    if (!friendId) {
+      appendSystemMessage('상대 유저 ID를 찾을 수 없어 초대하지 못했습니다.');
+      return;
+    }
+    try {
+      const result = await emitRoomInvite(String(friendId), {
+        roomId,
+        roomTitle,
+        roomQuery: roomQuery.replace(/^\?/, ''),
+      });
+      if (!result.success) {
+        appendSystemMessage(result.message || `${userName} 님을 초대하지 못했습니다.`);
+        return;
+      }
+      appendSystemMessage(`${userName} 님을 현재 방으로 초대했습니다.`);
+    } catch {
+      appendSystemMessage(`${userName} 님을 초대하지 못했습니다.`);
+    }
+  };
+
   const openUserContextMenu = (event: MouseEvent, userName: string) => {
     const myNames = new Set(
       [getCurrentDisplayName(), getCurrentUserName()].filter(Boolean).map(String),
@@ -699,47 +776,11 @@ export default function RoomPage() {
         appendSystemMessage(`${userName} 님에게 귓속말 모드가 설정되었습니다.`);
         break;
       case 'follow': {
-        // 대기방에서는 따라가기 대신 초대(소환)로 동작
-        const target = players.find((player) => player?.name === userName);
-        const friendId = target?.userId || findFriendUserId(userName);
-        if (!isFriend(userName)) {
-          appendSystemMessage('친구만 초대할 수 있습니다.');
-          break;
-        }
-        const invited = summonFriendToRoom(userName, {
-          id: roomId,
-          title: roomTitle,
-          query: roomQuery.replace(/^\?/, ''),
-        });
-        if (!invited) {
-          appendSystemMessage(`${userName} 님을 초대하지 못했습니다.`);
-          break;
-        }
-        if (friendId) {
-          void sendRoomMessage(
-            numericRoomId,
-            `${getCurrentDisplayName() || getCurrentUserName()}님이 방으로 초대했습니다. 로비에서 따라가기를 눌러 주세요.`,
-            {
-              mode: 'WHISPER',
-              targetUserId: String(friendId),
-              targetUserName: userName,
-            },
-          ).catch(() => undefined);
-        }
-        appendSystemMessage(`${userName} 님을 현재 방으로 초대했습니다.`);
+        void inviteUserToRoom(userName);
         break;
       }
       case 'summon': {
-        const invited = summonFriendToRoom(userName, {
-          id: roomId,
-          title: roomTitle,
-          query: roomQuery.replace(/^\?/, ''),
-        });
-        appendSystemMessage(
-          invited
-            ? `${userName} 님을 현재 방으로 초대했습니다.`
-            : `${userName} 님을 초대하지 못했습니다.`,
-        );
+        void inviteUserToRoom(userName);
         break;
       }
       default:
@@ -1121,10 +1162,54 @@ export default function RoomPage() {
             follow: '초대하기',
           }}
           hiddenActions={['summon']}
-          disabledActions={isFriend(contextMenu.userName) ? [] : (['follow'] as UserListMenuAction[])}
+          disabledActions={(() => {
+            const disabled: UserListMenuAction[] = [];
+            if (!isFriend(contextMenu.userName) || isUserAlreadyInRoom(contextMenu.userName)) {
+              disabled.push('follow');
+            }
+            return disabled;
+          })()}
           onSelect={handleUserMenuAction}
           onClose={closeUserContextMenu}
         />
+      )}
+
+      {pendingFriendRequest && (
+        <div className="review-modal-overlay" style={{ zIndex: 4000 }}>
+          <div
+            className="review-modal-panel ranking-panel"
+            style={{ width: 'min(420px, 92vw)', height: 'auto', minHeight: 180 }}
+          >
+            <div className="rank-title">FRIEND REQUEST</div>
+            <div className="review-incoming-msg">
+              <strong>{pendingFriendRequest.fromUserName}</strong>님이 친구 요청을 보냈습니다.
+            </div>
+            <div className="review-modal-actions review-modal-actions-end">
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-secondary review-modal-btn"
+                onClick={() => {
+                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, false);
+                  setPendingFriendRequest(null);
+                }}
+              >
+                거절
+              </button>
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-primary review-modal-btn"
+                onClick={() => {
+                  addFriend(pendingFriendRequest.fromUserName, pendingFriendRequest.fromUserId);
+                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, true);
+                  setPendingFriendRequest(null);
+                  appendSystemMessage(`${pendingFriendRequest.fromUserName} 님과 친구가 되었습니다.`);
+                }}
+              >
+                수락
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

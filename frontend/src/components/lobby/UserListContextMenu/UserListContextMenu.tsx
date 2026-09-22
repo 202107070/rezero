@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 export type UserListMenuAction = 'match-story' | 'add-friend' | 'whisper' | 'follow' | 'summon';
 
@@ -63,14 +64,14 @@ export function UserListContextMenu({
   const visibleItems = MENU_ITEMS.filter((item) => !hiddenActions.includes(item.action));
   const menuWidth = 168;
   const menuHeight = visibleItems.length * 40 + 8;
-  const clampedX = Math.min(x, window.innerWidth - menuWidth - 8);
-  const clampedY = Math.min(y, window.innerHeight - menuHeight - 8);
+  const clampedX = Math.max(8, Math.min(x, window.innerWidth - menuWidth - 8));
+  const clampedY = Math.max(8, Math.min(y, window.innerHeight - menuHeight - 8));
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       className="user-list-context-menu"
-      style={{ left: clampedX, top: clampedY }}
+      style={{ position: 'fixed', left: clampedX, top: clampedY }}
       role="menu"
       aria-label={`${userName} 유저 메뉴`}
     >
@@ -93,6 +94,7 @@ export function UserListContextMenu({
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }

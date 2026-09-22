@@ -214,6 +214,23 @@ export async function joinRoom(roomId, userId, input) {
     );
   }
 
+  try {
+    const kicked = await redisClient.sIsMember(
+      `room:kicked:${roomId}`,
+      String(userId),
+    );
+    if (kicked) {
+      throw new AppError(
+        403,
+        "ROOM_KICKED",
+        "강퇴된 방에는 다시 입장할 수 없습니다.",
+      );
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    // redis 실패 시 입장 자체는 계속 진행
+  }
+
   if (room.passwordHash) {
     const passwordMatches = input.password
       ? await comparePassword(input.password, room.passwordHash)
@@ -316,6 +333,20 @@ export async function leaveRoom(roomId, userId) {
       });
       try {
         await roomModel.markRoomWaiting(roomId);
+        await redisClient.hSet(roomStateKey(roomId), {
+          status: "WAITING",
+          updatedAt: new Date().toISOString(),
+        });
+        await redisClient.del(roomReadyKey(roomId));
+        const participants = await roomModel.findRoomParticipants(roomId);
+        const roomReadyStates = (participants || []).map(function (p) {
+          return { userId: String(p.userId), isReady: false };
+        });
+        io.to(String(roomId)).emit(SOCKET_EVENTS.READY_CHANGED, {
+          userId: null,
+          isReady: false,
+          roomReadyStates,
+        });
       } catch {
         // ignore
       }

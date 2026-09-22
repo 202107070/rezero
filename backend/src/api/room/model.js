@@ -512,15 +512,37 @@ export async function markRoomStarted(roomId) {
 }
 
 export async function markRoomWaiting(roomId) {
-  const result = await pool.query(
-    `UPDATE rooms
-     SET status = 'WAITING'
-     WHERE id = ?
-       AND status = 'STARTED'`,
-    [roomId],
-  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const result = await connection.query(
+      `UPDATE rooms
+       SET status = 'WAITING'
+       WHERE id = ?
+         AND status = 'STARTED'`,
+      [roomId],
+    );
 
-  return Number(result.affectedRows) > 0;
+    await connection.query(
+      `UPDATE room_participants
+       SET is_ready = FALSE,
+           status = CASE
+             WHEN is_host = TRUE OR is_host = 1 THEN 'HOST'
+             ELSE 'WAITING'
+           END
+       WHERE room_id = ?
+         AND left_at IS NULL`,
+      [roomId],
+    );
+
+    await connection.commit();
+    return Number(result.affectedRows) > 0;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 // 방 생성 중 Valkey 저장이 실패한 경우에만 미완성 기록을 완전히 정리합니다.

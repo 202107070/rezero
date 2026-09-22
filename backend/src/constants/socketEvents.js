@@ -36,4 +36,6 @@ export const SOCKET_EVENTS = {
   USER_KICKED: "user_kicked",
   UPDATE_TITLE: "update_title",
   TITLE_CHANGED: "title_changed",
+  ROOM_INVITE: "room_invite",
+  ROOM_INVITE_RESPONSE: "room_invite_response",
 };

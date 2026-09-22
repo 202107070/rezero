@@ -25,6 +25,8 @@ export const ROOM_SOCKET_EVENTS = {
   LOBBY_PRESENCE: 'lobby_presence',
   REVIEW_INVITE: 'review_invite',
   REVIEW_INVITE_RESPONSE: 'review_invite_response',
+  ROOM_INVITE: 'room_invite',
+  ROOM_INVITE_RESPONSE: 'room_invite_response',
   UPDATE_CHARACTER: 'update_character',
   CHARACTER_CHANGED: 'character_changed',
   FRIEND_REQUEST: 'friend_request',
@@ -69,6 +71,24 @@ export interface ReviewInviteResponsePayload {
   toUserName?: string;
   accepted: boolean;
   problemIndices?: number[];
+}
+
+export interface RoomInvitePayload {
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  roomId: string;
+  roomTitle: string;
+  roomQuery: string;
+  createdAt?: number;
+}
+
+export interface RoomInviteResponsePayload {
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  accepted: boolean;
+  roomId: string;
 }
 
 export interface BattleItemUsedPayload {
@@ -510,6 +530,54 @@ export function emitReviewInviteResponse(
         fromUserId: params.fromUserId,
         accepted: params.accepted,
         problemIndices: params.problemIndices,
+      },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitRoomInvite(
+  toUserId: string,
+  params: { roomId: string | number; roomTitle: string; roomQuery: string },
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.ROOM_INVITE,
+      {
+        toUserId,
+        roomId: String(params.roomId),
+        roomTitle: params.roomTitle,
+        roomQuery: params.roomQuery,
+      },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitRoomInviteResponse(
+  toUserId: string,
+  accepted: boolean,
+  roomId: string | number,
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.ROOM_INVITE_RESPONSE,
+      {
+        toUserId,
+        accepted,
+        roomId: String(roomId),
       },
       (response?: { success?: boolean; message?: string }) => {
         resolve({

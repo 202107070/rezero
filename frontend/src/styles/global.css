@@ -44,7 +44,7 @@ body {
   font-family: var(--font-pixel);
   color: var(--px-text);
   line-height: 1.4;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   font-size: 20px;
 }
@@ -72,13 +72,13 @@ body::after {
 }
 
 #root {
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 
 html.display-window #root {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   transform: none;
 }
 
@@ -89,6 +89,8 @@ html.display-fullscreen body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background: #000;
+  background-image: none;
 }
 
 html.display-fullscreen #root {
@@ -99,6 +101,8 @@ html.display-fullscreen #root {
   flex-shrink: 0;
   transform: scale(var(--ui-scale-x, 1), var(--ui-scale-y, 1));
   transform-origin: center center;
+  /* compensate layout box after scale so letterbox fits without clipping */
+  margin: calc((960px * (var(--ui-scale) - 1)) / -2) calc((1280px * (var(--ui-scale) - 1)) / -2);
 }
 
 html.display-fullscreen #root .page-container,

@@ -552,6 +552,54 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
+  socket.on(SOCKET_EVENTS.ROOM_INVITE, function (data, callback) {
+    try {
+      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      const roomId = data?.roomId != null ? String(data.roomId) : "";
+      if (!toUserId) throw new Error("초대 대상이 없습니다.");
+      if (!roomId) throw new Error("방 정보가 없습니다.");
+      const payload = {
+        fromUserId: String(socket.user.id),
+        fromUserName: userLabel(socket.user),
+        toUserId,
+        roomId,
+        roomTitle: data?.roomTitle ? String(data.roomTitle) : "",
+        roomQuery: data?.roomQuery ? String(data.roomQuery) : `id=${roomId}`,
+        createdAt: Date.now(),
+      };
+      io.to("user:" + toUserId).emit(SOCKET_EVENTS.ROOM_INVITE, payload);
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.ROOM_INVITE_RESPONSE, function (data, callback) {
+    try {
+      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      if (!toUserId) throw new Error("응답 대상이 없습니다.");
+      const payload = {
+        fromUserId: String(socket.user.id),
+        fromUserName: userLabel(socket.user),
+        toUserId,
+        accepted: Boolean(data?.accepted),
+        roomId: data?.roomId != null ? String(data.roomId) : "",
+      };
+      io.to("user:" + toUserId).emit(SOCKET_EVENTS.ROOM_INVITE_RESPONSE, payload);
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
   socket.on(SOCKET_EVENTS.UPDATE_TITLE, async function (data, callback) {
     try {
       const titleId = data?.titleId != null ? String(data.titleId) : "";

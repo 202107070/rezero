@@ -51,7 +51,7 @@ import {
   type GameStateUpdatePayload,
   type UserReconnectedPayload,
 } from '../../services/roomSocket';
-import { leaveRoom } from '../../services/roomService';
+import { leaveRoom, getRoomErrorMessage } from '../../services/roomService';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
@@ -201,6 +201,7 @@ export default function BattlePage() {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [revealHint, setRevealHint] = useState<string | null>(null);
   const [showAnswerRequiredModal, setShowAnswerRequiredModal] = useState(false);
+  const [leaveAlertMessage, setLeaveAlertMessage] = useState('');
   const [breakingBlanks, setBreakingBlanks] = useState<Record<string, boolean>>({});
   const [itemCastState, setItemCastState] = useState<{ type: string; ts: number } | null>(null);
   const [panelHit, setPanelHit] = useState<Record<string, boolean>>({});
@@ -895,7 +896,7 @@ export default function BattlePage() {
           onRoomEvent(ROOM_SOCKET_EVENTS.ITEM_USED, (payload: BattleItemUsedPayload) => {
             const myId = getCurrentUserId();
             if (String(payload.fromUserId) === String(myId)) {
-              // 본인이 보낸 낙서 스트로크는 로컬에서 이미 그림
+              // 본인이 보낸 아이템/낙서는 로컬에서 이미 재생·그림
               return;
             }
 
@@ -904,7 +905,7 @@ export default function BattlePage() {
               Boolean(targetId) &&
               (targetId === String(myId) || targetId === `player-${myId}`);
 
-            // 낙서 스트로크 동기화
+            // 낙서 스트로크 동기화 (SFX 없음)
             if (payload.itemType === 'scribble' && payload.scribbleStroke) {
               const strokeTargetId = isTargetMe
                 ? 'self'
@@ -926,6 +927,7 @@ export default function BattlePage() {
             }
 
             if (payload.itemType === 'timeReduce' && isTargetMe) {
+              SFX.play(payload.itemType);
               setRemaining((prev) => Math.max(0, prev - 15));
               return;
             }
@@ -936,6 +938,7 @@ export default function BattlePage() {
                 payload.itemType === 'lightning' ||
                 payload.itemType === 'scribble')
             ) {
+              SFX.play(payload.itemType);
               const effectType = payload.itemType;
               setSelfPanelEffect({
                 type: effectType,
@@ -981,6 +984,7 @@ export default function BattlePage() {
                   payload.itemType === 'scribble')
               ) {
                 queueMicrotask(() => {
+                  SFX.play(payload.itemType);
                   applyAttackPanelEffect(targetBot.id, payload.itemType as 'paint' | 'lightning' | 'scribble');
                   if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
                     setExpandedOpponentId(targetBot.id);
@@ -1013,7 +1017,7 @@ export default function BattlePage() {
                 typeof payload?.remainingPlayers === 'number'
                   ? payload.remainingPlayers
                   : undefined;
-              // 남은 인원이 1명 이하면 대기실로
+              // 남은 인원이 1명 이하면 대기실로 (본인만 남은 경우)
               if (payload?.roomClosed || (remainingAfter !== undefined && remainingAfter <= 1)) {
                 setChatMessages((prev) => [
                   ...prev,
@@ -1023,6 +1027,7 @@ export default function BattlePage() {
                     time: '',
                   },
                 ]);
+                // 세션만 정리하고 소켓/방 참가는 유지한 채 대기실로 이동
                 clearBattleAndLeave(sessionId, roomId);
                 navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
               }
@@ -1773,18 +1778,19 @@ export default function BattlePage() {
   };
 
   const confirmLeaveBattle = async () => {
-    setShowLeaveConfirm(false);
     const numericRoomId = roomId ? Number(roomId) : NaN;
     try {
       if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
         await leaveRoom(numericRoomId);
       }
-    } catch {
-      // ignore
+      setShowLeaveConfirm(false);
+      clearBattleAndLeave(sessionId, roomId);
+      disconnectRoomSocket(true);
+      navigate(ROUTES.LOBBY);
+    } catch (error) {
+      setShowLeaveConfirm(false);
+      setLeaveAlertMessage(getRoomErrorMessage(error) || '방 나가기에 실패했습니다. 다시 시도해 주세요.');
     }
-    clearBattleAndLeave(sessionId, roomId);
-    disconnectRoomSocket(true);
-    navigate(ROUTES.LOBBY);
   };
 
   const renderMiniStatus = (bot: BotView) => {
@@ -2192,6 +2198,12 @@ export default function BattlePage() {
         open={showAnswerRequiredModal}
         message="문제를 풀어주세요."
         onClose={() => setShowAnswerRequiredModal(false)}
+      />
+
+      <RoomAlertModal
+        open={Boolean(leaveAlertMessage)}
+        message={leaveAlertMessage}
+        onClose={() => setLeaveAlertMessage('')}
       />
 
       <ExitConfirmModal

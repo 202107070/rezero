@@ -9,6 +9,7 @@ import { PracticeModal } from '../../components/lobby/PracticeModal/PracticeModa
 import { ProfilePanel } from '../../components/lobby/ProfilePanel/ProfilePanel';
 import { RankingBoard } from '../../components/lobby/RankingBoard/RankingBoard';
 import type { UserListMenuAction } from '../../components/lobby/UserListContextMenu/UserListContextMenu';
+import { RoomInviteModal } from '../../components/lobby/RoomInviteModal/RoomInviteModal';
 import { JoinRoomPasswordModal } from '../../components/lobby/JoinRoomPasswordModal/JoinRoomPasswordModal';
 import { RoomCreateModal } from '../../components/lobby/RoomCreateModal/RoomCreateModal';
 import { RoomList } from '../../components/lobby/RoomList/RoomList';
@@ -34,6 +35,7 @@ import {
   emitFriendRemove,
   emitFriendRequest,
   emitFriendRequestResult,
+  emitRoomInviteResponse,
   emitUpdateTitle,
   getActiveRoomId,
   joinRoomSocket,
@@ -44,6 +46,7 @@ import {
   setActiveRoomId,
   type ChatMessagePayload,
   type LobbyPresencePayload,
+  type RoomInvitePayload,
 } from '../../services/roomSocket';
 import {
   addFriend,
@@ -218,6 +221,19 @@ export default function LobbyPage() {
           ),
         );
         unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_INVITE, (payload: RoomInvitePayload) => {
+            if (!payload?.fromUserId || !payload.roomId) return;
+            if (String(payload.fromUserId) === String(authUser.id)) return;
+            setPendingRoomInvite({
+              fromUserId: String(payload.fromUserId),
+              fromUserName: payload.fromUserName || 'UNKNOWN',
+              roomId: String(payload.roomId),
+              roomTitle: payload.roomTitle || '대기실',
+              roomQuery: payload.roomQuery || `id=${payload.roomId}`,
+            });
+          }),
+        );
+        unsubs.push(
           onRoomEvent(
             ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
             (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
@@ -324,6 +340,13 @@ export default function LobbyPage() {
   const [pendingFriendRequest, setPendingFriendRequest] = useState<{
     fromUserId: string;
     fromUserName: string;
+  } | null>(null);
+  const [pendingRoomInvite, setPendingRoomInvite] = useState<{
+    fromUserId: string;
+    fromUserName: string;
+    roomId: string;
+    roomTitle: string;
+    roomQuery: string;
   } | null>(null);
   const [showRoulette, setShowRoulette] = useState(false);
   const [showInventoryItemsModal, setShowInventoryItemsModal] = useState(false);
@@ -969,6 +992,29 @@ export default function LobbyPage() {
           </div>
         </div>
       )}
+
+      <RoomInviteModal
+        show={Boolean(pendingRoomInvite)}
+        fromUserName={pendingRoomInvite?.fromUserName || ''}
+        roomTitle={pendingRoomInvite?.roomTitle || ''}
+        onAccept={() => {
+          if (!pendingRoomInvite) return;
+          const invite = pendingRoomInvite;
+          setPendingRoomInvite(null);
+          void emitRoomInviteResponse(invite.fromUserId, true, invite.roomId);
+          const query = invite.roomQuery.replace(/^\?/, '');
+          navigate(`${ROUTES.ROOM}?${query}`);
+        }}
+        onDecline={() => {
+          if (!pendingRoomInvite) return;
+          void emitRoomInviteResponse(
+            pendingRoomInvite.fromUserId,
+            false,
+            pendingRoomInvite.roomId,
+          );
+          setPendingRoomInvite(null);
+        }}
+      />
 
       <MatchStoryModal
         open={showCodeModal}
