@@ -165,6 +165,7 @@ export default function ResultPage() {
   const demoState = useMemo((): DemoState | null => getBattleDemoState<DemoState>(sessionId), [sessionId]);
 
   const [rankingSnapshot, setRankingSnapshot] = useState(() => readFinalRankingSnapshot(sessionId));
+  const [apiRankingReady, setApiRankingReady] = useState(false);
 
   const roomUsers = useMemo(() => getRoomUsers(), []);
 
@@ -208,7 +209,14 @@ export default function ResultPage() {
         : null,
   );
   const earnedGold = isLiveMatch ? (apiRewardGold ?? 0) : myScore;
-  const myRank = myPlayer?.rank ?? (myPlayer ? allPlayers.indexOf(myPlayer) + 1 : 0);
+  const explicitMyRank = Number(myPlayer?.rank) || 0;
+  const myRank = isLiveMatch
+    ? explicitMyRank
+    : explicitMyRank > 0
+      ? explicitMyRank
+      : myPlayer
+        ? allPlayers.indexOf(myPlayer) + 1
+        : 0;
   const totalPlayersForRank = Math.max(1, allPlayers.length);
   const isLastPlace = myRank > 0 && myRank === totalPlayersForRank && totalPlayersForRank > 1;
   const isFirstPlace = myRank === 1;
@@ -238,6 +246,7 @@ export default function ResultPage() {
     detailLines: string[];
     newTitles: TitleDef[];
   }>({ show: false, mainMsg: '', detailLines: [], newTitles: [] });
+  const rankPopupLockedRef = useRef(false);
 
   const [isAiOpen, setIsAiOpen] = useState(false);
 
@@ -474,6 +483,7 @@ export default function ResultPage() {
         };
         setRankingSnapshot(snapshot);
         saveFinalRankingSnapshot(snapshot);
+        setApiRankingReady(true);
 
         if (!rewardsAppliedRef.current) {
           const mine =
@@ -627,27 +637,43 @@ export default function ResultPage() {
   }, []);
 
   useEffect(() => {
-    if (!isLiveMatch || allPlayers.length === 0 || myRank <= 0) return;
+    // 라이브 매치: 서버 랭킹 API 확정 전에는 팝업을 띄우지 않음
+    // (배틀 스냅샷의 임시 등수로 꼴등→1등 깜빡임 방지)
+    if (!isLiveMatch || rankPopupLockedRef.current) return;
+    if (!apiRankingReady || allPlayers.length === 0) return;
+
+    const rank = Number(myPlayer?.rank) || 0;
+    if (rank <= 0) return;
+
     const totalPlayers = Math.max(1, allPlayers.length);
     let mainMsg = '';
-    if (myRank === 1) {
+    if (rank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
-    } else if (myRank === totalPlayers && totalPlayers > 1) {
-      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등(꼴등)입니다.`;
+    } else if (rank === totalPlayers && totalPlayers > 1) {
+      mainMsg = `당신은 ${totalPlayers}명 중 ${rank}등(꼴등)입니다.`;
     } else {
-      mainMsg = `당신은 ${totalPlayers}명 중 ${myRank}등입니다.`;
+      mainMsg = `당신은 ${totalPlayers}명 중 ${rank}등입니다.`;
     }
     const detailLines: string[] = [];
     if (totalProblemCount > 0) {
       detailLines.push(`${totalProblemCount}문제 중 ${myCorrectCount}문제를 맞췄습니다.`);
     }
+    rankPopupLockedRef.current = true;
     setResultPopup((prev) => ({
       show: true,
       mainMsg,
       detailLines: detailLines.length > 0 ? detailLines : prev.detailLines,
       newTitles: prev.newTitles,
     }));
-  }, [isLiveMatch, allPlayers.length, myRank, totalProblemCount, myCorrectCount]);
+  }, [
+    isLiveMatch,
+    apiRankingReady,
+    allPlayers.length,
+    myPlayer,
+    myPlayer?.rank,
+    totalProblemCount,
+    myCorrectCount,
+  ]);
 
   useEffect(() => {
     try {

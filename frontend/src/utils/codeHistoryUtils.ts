@@ -46,17 +46,35 @@ export function persistCodeHistory(nextHistory: CodeHistoryEntry[]): void {
 }
 
 export async function fetchMatchHistory(): Promise<CodeHistoryEntry[]> {
+  const localEntries = readCodeHistory();
   try {
     const result = await apiRequest<{ entries?: unknown[] }>('/users/me/match-history');
-    const entries = Array.isArray(result.entries)
+    const serverEntries = Array.isArray(result.entries)
       ? result.entries
           .map(normalizeCodeHistoryEntry)
           .filter((entry): entry is CodeHistoryEntry => Boolean(entry))
       : [];
-    persistCodeHistory(entries);
+
+    // 서버가 비어 있으면 로컬을 지우지 않음 (레이스로 빈 응답이 와도 매치스토리 유지)
+    if (serverEntries.length === 0) {
+      return localEntries;
+    }
+
+    const byId = new Map<string, CodeHistoryEntry>();
+    for (const entry of localEntries) {
+      byId.set(entry.historyId, entry);
+    }
+    for (const entry of serverEntries) {
+      byId.set(entry.historyId, entry);
+    }
+
+    const merged = Array.from(byId.values())
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+      .slice(0, 100);
+    persistCodeHistory(merged);
     return readCodeHistory();
   } catch {
-    return readCodeHistory();
+    return localEntries;
   }
 }
 
