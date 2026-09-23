@@ -1,7 +1,7 @@
 import { CHARACTERS } from '../constants/roomConstants';
 import type { GameMode, Room, RoomParticipant } from '../types/lobby';
 import type { RoomPlayer } from '../types/room';
-import { getTierByUserName } from '../utils/tierUtils';
+import { getTierByRating } from '../utils/tierUtils';
 import { normalizeRoomEntry, normalizeRoomList } from '../utils/roomNormalize';
 import { ApiError, apiRequest } from './apiClient';
 
@@ -39,6 +39,15 @@ export interface StartRoomResult {
 
 let pendingJoinPassword = '';
 let pendingInviteToken = '';
+let pendingInviteMeta: PendingInviteMeta | null = null;
+let joinInFlight: Promise<Room> | null = null;
+let joinInFlightKey = '';
+
+export interface PendingInviteMeta {
+  token: string;
+  fromUserId: string;
+  roomId: string;
+}
 
 export function setPendingJoinPassword(password: string): void {
   pendingJoinPassword = password;
@@ -68,8 +77,37 @@ export function setPendingInviteToken(token: string): void {
   }
 }
 
+export function setPendingInviteMeta(meta: PendingInviteMeta | null): void {
+  pendingInviteMeta = meta;
+  setPendingInviteToken(meta?.token || '');
+  try {
+    if (meta) sessionStorage.setItem('rezero_pending_invite_meta', JSON.stringify(meta));
+    else sessionStorage.removeItem('rezero_pending_invite_meta');
+  } catch {
+    // ignore
+  }
+}
+
+export function peekPendingInviteMeta(): PendingInviteMeta | null {
+  if (pendingInviteMeta) return pendingInviteMeta;
+  try {
+    const raw = sessionStorage.getItem('rezero_pending_invite_meta');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PendingInviteMeta;
+    if (parsed?.token && parsed?.fromUserId) {
+      pendingInviteMeta = parsed;
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function peekPendingInviteToken(): string {
   if (pendingInviteToken) return pendingInviteToken;
+  const meta = peekPendingInviteMeta();
+  if (meta?.token) return meta.token;
   try {
     return sessionStorage.getItem('rezero_pending_invite_token') || '';
   } catch {
@@ -79,8 +117,10 @@ export function peekPendingInviteToken(): string {
 
 export function clearPendingInviteToken(): void {
   pendingInviteToken = '';
+  pendingInviteMeta = null;
   try {
     sessionStorage.removeItem('rezero_pending_invite_token');
+    sessionStorage.removeItem('rezero_pending_invite_meta');
   } catch {
     // ignore
   }
@@ -109,6 +149,7 @@ function normalizeParticipant(raw: unknown): RoomParticipant {
     name,
     displayName: displayName || name,
     username: username || undefined,
+    ratingScore: Number(participant.ratingScore ?? 1000),
     slotIndex: Number(participant.slotIndex) || 0,
     isHost: Boolean(participant.isHost),
     isReady: Boolean(participant.isReady),
@@ -177,7 +218,12 @@ export async function createRoom(params: CreateRoomParams): Promise<Room> {
 }
 
 export async function joinRoom(roomId: number | string, params: JoinRoomParams = {}): Promise<Room> {
-  const result = await apiRequest<unknown>(`/rooms/${roomId}/join`, {
+  const key = `${roomId}:${params.inviteToken || ''}:${params.password || ''}`;
+  if (joinInFlight && joinInFlightKey === key) {
+    return joinInFlight;
+  }
+  joinInFlightKey = key;
+  joinInFlight = apiRequest<unknown>(`/rooms/${roomId}/join`, {
     method: 'POST',
     body: JSON.stringify({
       password: params.password || '',
@@ -185,8 +231,15 @@ export async function joinRoom(roomId: number | string, params: JoinRoomParams =
       character: params.character || '',
       inviteToken: params.inviteToken || '',
     }),
-  });
-  return normalizeRoom(result);
+  })
+    .then((result) => normalizeRoom(result))
+    .finally(() => {
+      if (joinInFlightKey === key) {
+        joinInFlight = null;
+        joinInFlightKey = '';
+      }
+    });
+  return joinInFlight;
 }
 
 export async function leaveRoom(roomId: number | string): Promise<LeaveRoomResult> {
@@ -254,7 +307,7 @@ function toRoomPlayer(participant: RoomParticipant): RoomPlayer {
     id: participant.id,
     userId: participant.userId,
     name,
-    rank: getTierByUserName(name),
+    rank: getTierByRating(Number(participant.ratingScore ?? 1000)),
     isHost,
     isReady,
     language: participant.language,

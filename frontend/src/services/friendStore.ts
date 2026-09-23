@@ -207,7 +207,8 @@ export function canSummonFriend(friendName: string): boolean {
 
 export function isFriendOnline(name: string): boolean {
   const presence = getUserPresence(name);
-  return Boolean(presence && (presence.status === 'lobby' || presence.status === 'room'));
+  if (!presence || presence.status === 'offline') return false;
+  return true;
 }
 
 export function summonFriendToRoom(

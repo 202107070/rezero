@@ -8,6 +8,20 @@ const ONLINE_SET_KEY = "presence:online";
 const ONLINE_META_PREFIX = "presence:meta:";
 export const LOBBY_ROOM_ID = "lobby";
 
+const LOCATION_VALUES = new Set([
+  "lobby",
+  "room",
+  "battle",
+  "practice",
+  "build",
+  "result",
+]);
+
+function normalizeLocation(value) {
+  const loc = String(value || "lobby").toLowerCase();
+  return LOCATION_VALUES.has(loc) ? loc : "lobby";
+}
+
 export async function markUserOnline(user) {
   if (!user?.id) return;
   const userId = String(user.id);
@@ -24,12 +38,31 @@ export async function markUserOnline(user) {
         ratingScore = 1000;
       }
     }
+
+    let location = user.location != null ? normalizeLocation(user.location) : null;
+    let roomId = user.roomId != null ? String(user.roomId) : "";
+    let roomTitle = user.roomTitle != null ? String(user.roomTitle) : "";
+
+    if (location == null) {
+      try {
+        const prev = await redisClient.hGetAll(ONLINE_META_PREFIX + userId);
+        location = normalizeLocation(prev?.location || "lobby");
+        if (!roomId) roomId = prev?.roomId || "";
+        if (!roomTitle) roomTitle = prev?.roomTitle || "";
+      } catch {
+        location = "lobby";
+      }
+    }
+
     await redisClient.sAdd(ONLINE_SET_KEY, userId);
     const fields = {
       userId,
       username: String(user.username || ""),
       displayName: String(user.displayName || user.username || userId),
       ratingScore: String(Number(ratingScore) || 1000),
+      location,
+      roomId,
+      roomTitle,
       updatedAt: new Date().toISOString(),
     };
     if (user.equippedTitleId != null) {
@@ -38,6 +71,41 @@ export async function markUserOnline(user) {
     await redisClient.hSet(ONLINE_META_PREFIX + userId, fields);
   } catch (err) {
     console.error("[markUserOnline] " + err.message);
+  }
+}
+
+export async function updateUserLocation(user, patch = {}) {
+  if (!user?.id) return null;
+  const userId = String(user.id);
+  try {
+    const prev = await redisClient.hGetAll(ONLINE_META_PREFIX + userId);
+    const next = {
+      ...user,
+      ratingScore:
+        patch.ratingScore != null
+          ? patch.ratingScore
+          : prev?.ratingScore != null
+            ? Number(prev.ratingScore)
+            : user.ratingScore,
+      equippedTitleId:
+        patch.equippedTitleId != null
+          ? patch.equippedTitleId
+          : prev?.equippedTitleId || user.equippedTitleId,
+      location: patch.location != null ? patch.location : prev?.location || "lobby",
+      roomId: patch.roomId != null ? patch.roomId : prev?.roomId || "",
+      roomTitle: patch.roomTitle != null ? patch.roomTitle : prev?.roomTitle || "",
+    };
+    await markUserOnline(next);
+    return {
+      userId,
+      location: normalizeLocation(next.location),
+      roomId: String(next.roomId || ""),
+      roomTitle: String(next.roomTitle || ""),
+      ratingScore: Number(next.ratingScore || 1000),
+    };
+  } catch (err) {
+    console.error("[updateUserLocation] " + err.message);
+    return null;
   }
 }
 
@@ -65,6 +133,9 @@ export async function listOnlineUsers() {
           displayName: meta.displayName || meta.username || meta.userId,
           equippedTitleId: meta.equippedTitleId || null,
           ratingScore: Number(meta.ratingScore || 1000),
+          location: normalizeLocation(meta.location || "lobby"),
+          roomId: meta.roomId || "",
+          roomTitle: meta.roomTitle || "",
         });
       }
     }

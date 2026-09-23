@@ -181,3 +181,34 @@ export async function spinRoulette(userId) {
     items,
   };
 }
+
+export async function listMyMatchHistory(userId) {
+  const listMatchCodeHistory = getModelFunction("listMatchCodeHistory");
+  const entries = await listMatchCodeHistory(userId);
+  return { entries };
+}
+
+export async function saveMyMatchHistory(userId, input) {
+  const upsertMatchCodeHistory = getModelFunction("upsertMatchCodeHistory");
+  const historyId =
+    input.historyId ||
+    `${input.roomId || "solo"}::${input.submittedAt || Date.now()}`;
+  await upsertMatchCodeHistory({
+    historyId,
+    userId,
+    roomId: String(input.roomId || ""),
+    submittedAt: input.submittedAt || new Date().toISOString(),
+    lang: input.lang || "UNKNOWN",
+    mode: input.mode || null,
+    code: input.code || "",
+    codes: Array.isArray(input.codes) ? input.codes : [],
+    problems: Array.isArray(input.problems) ? input.problems : [],
+  });
+  return { historyId };
+}
+
+export async function deleteMyMatchHistory(userId, historyIds) {
+  const deleteMatchCodeHistory = getModelFunction("deleteMatchCodeHistory");
+  const deleted = await deleteMatchCodeHistory(userId, historyIds);
+  return { deleted };
+}

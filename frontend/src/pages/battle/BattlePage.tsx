@@ -53,6 +53,8 @@ import {
 } from '../../services/roomSocket';
 import { leaveRoom, getRoomErrorMessage } from '../../services/roomService';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
+import { emitUpdateLocation } from '../../services/roomSocket';
+import { collectSolvedProblemKeys, isPreviouslySolvedProblem } from '../../utils/codeHistoryUtils';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
 import { loadAudioSettings } from '../../utils/audio/audioSettings';
 import { applyAudioSettings, BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
@@ -246,6 +248,7 @@ export default function BattlePage() {
     () => normalizeBattleProblem(problems[currentIndex] || ({} as BattleProblem)),
     [problems, currentIndex],
   );
+  const solvedProblemKeys = useMemo(() => collectSolvedProblemKeys(), []);
   const currentCaps = useMemo(
     () =>
       resolveProblemCapabilities(currentProblem, {
@@ -675,6 +678,15 @@ export default function BattlePage() {
     }
     return () => BattleBGM.stop();
   }, []);
+
+  useEffect(() => {
+    void emitUpdateLocation({
+      location: 'battle',
+      roomId: String(roomId || ''),
+      roomTitle: roomId ? `${roomId}번 방` : '',
+      ratingScore: getRatingScore(),
+    }).catch(() => undefined);
+  }, [roomId]);
 
   useEffect(() => {
     if (!loadAudioSettings().battleMusic) return;
@@ -1880,6 +1892,7 @@ export default function BattlePage() {
   );
 
   const activeProblem = demoSpectating ? displayedProblem : currentProblem;
+  const previouslySolved = !demoSpectating && isPreviouslySolvedProblem(activeProblem, solvedProblemKeys);
   const activeCaps = demoSpectating ? displayedCaps : currentCaps;
   const activeProblemIndex = demoSpectating ? myViewProblemIndex : currentIndex;
   const activeSelectedOption = demoSpectating ? displayedSelectedOption : selectedOption;
@@ -1963,6 +1976,11 @@ export default function BattlePage() {
               {revealHint && !demoSpectating && (
                 <div className="battle-item-hint-banner">
                   💡 힌트: {revealHint}
+                </div>
+              )}
+              {previouslySolved && (
+                <div className="battle-item-hint-banner" style={{ color: 'var(--px-warning)' }}>
+                  이미 푼 적 있는 문제입니다.
                 </div>
               )}
               <div key={`problem-summary-${activeProblemIndex}`} className="code-problem-summary">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
+import { emitUpdateLocation } from '../../services/roomSocket';
 import { DEFAULT_TEMPLATE } from '../../utils/battle/codeUtils';
 import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSimulator';
 import { BuildCodeEditor } from '../../components/build/BuildCodeEditor';
@@ -25,6 +26,13 @@ export default function BuildPage() {
   const [status, setStatus] = useState<BuildStatus>('idle');
   const consoleRef = useRef<HTMLDivElement>(null);
   const buildTokenRef = useRef(0);
+
+  useEffect(() => {
+    void emitUpdateLocation({ location: 'build' }).catch(() => undefined);
+    return () => {
+      void emitUpdateLocation({ location: 'lobby' }).catch(() => undefined);
+    };
+  }, []);
 
   const scrollConsoleToBottom = useCallback(() => {
     const el = consoleRef.current;

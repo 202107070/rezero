@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react';
 import { CHARACTERS } from '../../../constants/roomConstants';
 import type { RoomPlayer } from '../../../types/room';
-import { getTierByUserName, getTierIconByTier } from '../../../utils/tierUtils';
+import { getTierIconByTier } from '../../../utils/tierUtils';
 
 interface DuelSideProps {
   player: RoomPlayer | null;
@@ -37,7 +37,7 @@ function DuelSide({
       <div className="duel-name">
         {player ? (
           <>
-            <span className="duel-rank">{getTierIconByTier(player.rank || getTierByUserName(player.name))}</span>
+            <span className="duel-rank">{getTierIconByTier(player.rank || '브론즈')}</span>
             {player.name}
           </>
         ) : (

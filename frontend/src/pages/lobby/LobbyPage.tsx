@@ -26,16 +26,17 @@ import {
   fetchRooms,
   getRoomErrorMessage,
   leaveRoom,
-  setPendingInviteToken,
+  setPendingInviteMeta,
   setPendingJoinPassword,
 } from '../../services/roomService';
-import { getCurrentDisplayName, getCurrentUserName } from '../../services/authService';
+import { getCurrentDisplayName, getCurrentUserName, refreshMeProfile } from '../../services/authService';
 import { ApiError, apiRequest } from '../../services/apiClient';
 import {
   emitFriendRemove,
   emitFriendRequest,
   emitFriendRequestResult,
   emitRoomInviteResponse,
+  emitUpdateLocation,
   emitUpdateTitle,
   getActiveRoomId,
   joinRoomSocket,
@@ -54,7 +55,6 @@ import {
   getFollowRoomPath,
   getFriendNames,
   getFriendUserIds,
-  getUserPresence,
   isFriend,
   removeFriend,
   removeFriendByUserId,
@@ -69,7 +69,11 @@ import {
   setItemInventory as persistItemInventory,
 } from '../../services/userService';
 import type { ChatMessage, CodeHistoryEntry, GameMode, LobbyUser, Room } from '../../types/lobby';
-import { persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtils';
+import {
+  deleteMatchHistoryEntries,
+  fetchMatchHistory,
+  readCodeHistory,
+} from '../../utils/codeHistoryUtils';
 import { EMPTY_ROOM_FILTER } from '../../types/roomFilter';
 import type { RoomFilterState } from '../../types/roomFilter';
 import { getRoomFilterSummary, matchesRoomFilter } from '../../utils/roomFilterUtils';
@@ -117,27 +121,84 @@ function inventoryFromItems(items: unknown): ItemInventory {
 }
 
 function syncFriendPresenceFromOnline(
-  online: Array<{ userId?: string; username?: string; displayName?: string }>,
+  online: Array<{
+    userId?: string;
+    username?: string;
+    displayName?: string;
+    location?: string;
+    roomId?: string;
+    roomTitle?: string;
+  }>,
 ) {
-  const onlineNames = new Set<string>();
-  const onlineIds = new Set<string>();
-  for (const user of online) {
-    if (user.displayName) onlineNames.add(user.displayName);
-    if (user.username) onlineNames.add(user.username);
-    if (user.userId) onlineIds.add(String(user.userId));
-  }
-  for (const name of getFriendNames()) {
-    const friendId = findFriendUserId(name);
-    const inLobby =
-      onlineNames.has(name) || (friendId ? onlineIds.has(String(friendId)) : false);
-    if (inLobby) {
-      const current = getUserPresence(name);
-      if (!current || current.status !== 'room') {
-        setUserPresence(name, { status: 'lobby' });
-      }
+  const applyRemote = (
+    name: string,
+    remote: {
+      location?: string;
+      roomId?: string;
+      roomTitle?: string;
+    },
+  ) => {
+    const location = String(remote.location || 'lobby');
+    const roomId = remote.roomId ? String(remote.roomId) : undefined;
+    const roomTitle = remote.roomTitle ? String(remote.roomTitle) : undefined;
+    if (location === 'practice') {
+      setUserPresence(name, { status: 'practice' });
+    } else if (location === 'build') {
+      setUserPresence(name, { status: 'build' });
+    } else if (location === 'battle') {
+      setUserPresence(name, {
+        status: 'battle',
+        roomId,
+        roomTitle,
+        roomQuery: roomId ? `id=${roomId}` : undefined,
+      });
+    } else if (location === 'result') {
+      setUserPresence(name, {
+        status: 'result',
+        roomId,
+        roomTitle,
+        roomQuery: roomId ? `id=${roomId}` : undefined,
+      });
+    } else if (location === 'room') {
+      setUserPresence(name, {
+        status: 'room',
+        roomId,
+        roomTitle,
+        roomQuery: roomId ? `id=${roomId}` : undefined,
+      });
     } else {
-      setUserPresence(name, { status: 'offline' });
+      setUserPresence(name, { status: 'lobby' });
     }
+  };
+
+  const onlineByName = new Map<string, (typeof online)[number]>();
+  const onlineById = new Map<string, (typeof online)[number]>();
+  const onlineNames = new Set<string>();
+
+  for (const user of online) {
+    if (user.displayName) {
+      onlineByName.set(user.displayName, user);
+      onlineNames.add(user.displayName);
+      applyRemote(user.displayName, user);
+    }
+    if (user.username) {
+      onlineByName.set(user.username, user);
+      onlineNames.add(user.username);
+      applyRemote(user.username, user);
+    }
+    if (user.userId) onlineById.set(String(user.userId), user);
+  }
+
+  for (const name of getFriendNames()) {
+    if (onlineNames.has(name)) continue;
+    const friendId = findFriendUserId(name);
+    const remote =
+      onlineByName.get(name) || (friendId ? onlineById.get(String(friendId)) : undefined);
+    if (!remote) {
+      setUserPresence(name, { status: 'offline' });
+      continue;
+    }
+    applyRemote(name, remote);
   }
 }
 
@@ -180,6 +241,7 @@ export default function LobbyPage() {
   const [selectedHistoryProblemIndex, setSelectedHistoryProblemIndex] = useState(0);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
   const [gold, setGoldState] = useState(getGold);
+  const [profileRating, setProfileRating] = useState(getRatingScore);
   const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [showMyInfoModal, setShowMyInfoModal] = useState(false);
   const [myInfoMode, setMyInfoMode] = useState<'self' | 'public'>('self');
@@ -195,6 +257,9 @@ export default function LobbyPage() {
         displayName?: string;
         equippedTitleId?: string | null;
         ratingScore?: number;
+        location?: string;
+        roomId?: string;
+        roomTitle?: string;
       }>,
     ) => {
       const meName = authUser.displayName || authUser.username;
@@ -488,11 +553,27 @@ export default function LobbyPage() {
     const username = getCurrentUserName();
     setUserPresence(me, { status: 'lobby' });
     if (username && username !== me) setUserPresence(username, { status: 'lobby' });
+    void emitUpdateLocation({ location: 'lobby' }).catch(() => undefined);
+    void refreshMeProfile().then(() => {
+      setProfileRating(getRatingScore());
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.userId === authUser.id || user.name === me
+            ? { ...user, rank: getTierByRating(getRatingScore()), title: getEquippedTitleId() }
+            : user,
+        ),
+      );
+    });
+    void fetchMatchHistory()
+      .then((entries) => {
+        setCodeHistory(entries);
+      })
+      .catch(() => undefined);
     return () => {
       setUserPresence(me, { status: 'lobby' });
       if (username && username !== me) setUserPresence(username, { status: 'lobby' });
     };
-  }, []);
+  }, [authUser.id]);
 
   useEffect(() => {
     void refreshRooms();
@@ -804,12 +885,12 @@ export default function LobbyPage() {
 
   const handleDeleteSelectedHistory = () => {
     if (selectedHistoryIds.length === 0) return;
-    const nextHistory = codeHistory.filter((entry) => !selectedHistoryIds.includes(entry.historyId));
-    persistCodeHistory(nextHistory);
-    setCodeHistory(nextHistory);
-    setSelectedHistoryIds([]);
-    setSelectedHistoryIndex((prev) => (nextHistory.length === 0 ? 0 : Math.min(prev, nextHistory.length - 1)));
-    setSelectedHistoryProblemIndex(0);
+    void deleteMatchHistoryEntries(selectedHistoryIds).then((nextHistory) => {
+      setCodeHistory(nextHistory);
+      setSelectedHistoryIds([]);
+      setSelectedHistoryIndex((prev) => (nextHistory.length === 0 ? 0 : Math.min(prev, nextHistory.length - 1)));
+      setSelectedHistoryProblemIndex(0);
+    });
   };
 
   const handleSelectAllHistory = () => {
@@ -881,6 +962,7 @@ export default function LobbyPage() {
               username={authUser.username}
               displayName={authUser.displayName}
               titleData={titleData}
+              ratingScore={profileRating}
               onOpenMyInfo={() => {
                 setMyInfoMode('self');
                 setMyInfoPublicUser(null);
@@ -1141,9 +1223,12 @@ export default function LobbyPage() {
           const invite = pendingRoomInvite;
           setPendingRoomInvite(null);
           if (invite.inviteToken) {
-            setPendingInviteToken(invite.inviteToken);
+            setPendingInviteMeta({
+              token: invite.inviteToken,
+              fromUserId: invite.fromUserId,
+              roomId: String(invite.roomId || ''),
+            });
           }
-          void emitRoomInviteResponse(invite.fromUserId, true, invite.roomId);
           const query = invite.roomQuery.replace(/^\?/, '');
           navigate(`${ROUTES.ROOM}?${query}`);
         }}

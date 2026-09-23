@@ -6,6 +6,7 @@ export interface RoomParticipant {
   name: string;
   displayName?: string;
   username?: string;
+  ratingScore?: number;
   slotIndex: number;
   isHost: boolean;
   isReady: boolean;
@@ -40,7 +41,14 @@ export interface CodeHistoryEntry {
   roomId: string;
   submittedAt: string;
   lang: string;
-  problems: Array<{ title?: string; question?: string; explanation?: string; answer?: Record<string, string[]>; lang?: string }>;
+  problems: Array<{
+    id?: string;
+    title?: string;
+    question?: string;
+    explanation?: string;
+    answer?: Record<string, string[]>;
+    lang?: string;
+  }>;
   codes: string[];
   code: string;
   mode?: string;

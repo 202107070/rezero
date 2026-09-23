@@ -1,7 +1,8 @@
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../services/authService';
 import type { RoomPlayer, CharacterOption, LanguageOption } from '../types/room';
 import { getKickedCount } from '../services/roomStore';
-import { getTierByUserName } from '../utils/tierUtils';
+import { getRatingScore } from '../services/userService';
+import { getTierByRating } from '../utils/tierUtils';
 
 export const LANGUAGES: LanguageOption[] = [
   { id: 'java', icon: '☕', label: 'Java' },
@@ -51,7 +52,7 @@ export function buildInitialPlayers(): (RoomPlayer | null)[] {
     {
       id: 1,
       name: playerName,
-      rank: getTierByUserName(playerName),
+      rank: getTierByRating(getRatingScore()),
       isHost: true,
       isReady: false,
       language: '☕',

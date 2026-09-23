@@ -33,6 +33,9 @@ export async function restoreSession(): Promise<AuthUser | null> {
     const me = await fetchMeProfile();
     applyUserProfile(me);
     currentUser = toAuthUser(me);
+    void import('../utils/codeHistoryUtils').then(({ fetchMatchHistory }) => {
+      void fetchMatchHistory().catch(() => undefined);
+    });
     return currentUser;
   } catch {
     currentUser = null;
@@ -113,6 +116,9 @@ export async function login(username: string, password: string): Promise<AuthRes
     setAccessToken(result.token);
     applyUserProfile(result.user);
     currentUser = toAuthUser(result.user);
+    void import('../utils/codeHistoryUtils').then(({ fetchMatchHistory }) => {
+      void fetchMatchHistory().catch(() => undefined);
+    });
     return { ok: true, user: currentUser };
   } catch (error) {
     setAccessToken(null);

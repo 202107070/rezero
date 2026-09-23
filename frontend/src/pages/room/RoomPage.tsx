@@ -37,6 +37,7 @@ import {
   kickRoomParticipant,
   leaveRoom,
   mapParticipantsToPlayers,
+  peekPendingInviteMeta,
   peekPendingInviteToken,
   peekPendingJoinPassword,
   startRoom as startRoomApi,
@@ -53,7 +54,9 @@ import {
   emitFriendRequest,
   emitFriendRequestResult,
   emitRoomInvite,
+  emitRoomInviteResponse,
   emitUpdateCharacter,
+  emitUpdateLocation,
   joinRoomSocket,
   onRoomEvent,
   ROOM_SOCKET_EVENTS,
@@ -136,6 +139,7 @@ export default function RoomPage() {
 
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
   const battleNavLockRef = useRef(false);
+  const leavingToGameRef = useRef(false);
   const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
   const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
@@ -232,7 +236,6 @@ export default function RoomPage() {
       roomTitle,
       roomQuery,
     });
-    // username 키도 함께 기록 (따라가기 호환)
     const username = getCurrentUserName();
     if (username && username !== me) {
       setUserPresence(username, {
@@ -242,9 +245,17 @@ export default function RoomPage() {
         roomQuery,
       });
     }
+    void emitUpdateLocation({
+      location: 'room',
+      roomId,
+      roomTitle,
+    }).catch(() => undefined);
+
     return () => {
+      if (leavingToGameRef.current) return;
       setUserPresence(me, { status: 'lobby' });
       if (username && username !== me) setUserPresence(username, { status: 'lobby' });
+      void emitUpdateLocation({ location: 'lobby' }).catch(() => undefined);
     };
   }, [roomId, roomTitle, roomQuery]);
 
@@ -259,6 +270,7 @@ export default function RoomPage() {
         return;
       }
 
+      const inviteMeta = peekPendingInviteMeta();
       let joinedThisAttempt = false;
       try {
         let room = await fetchRoom(numericRoomId);
@@ -277,19 +289,31 @@ export default function RoomPage() {
             });
             joinedThisAttempt = true;
             clearPendingJoinPassword();
+            if (inviteMeta?.fromUserId) {
+              void emitRoomInviteResponse(inviteMeta.fromUserId, true, inviteMeta.roomId || String(numericRoomId));
+            }
             clearPendingInviteToken();
           } catch (error) {
             if (!isAlreadyJoinedError(error)) {
               clearPendingJoinPassword();
+              if (inviteMeta?.fromUserId) {
+                void emitRoomInviteResponse(inviteMeta.fromUserId, false, inviteMeta.roomId || String(numericRoomId));
+              }
               clearPendingInviteToken();
               throw error;
             }
             clearPendingJoinPassword();
+            if (inviteMeta?.fromUserId) {
+              void emitRoomInviteResponse(inviteMeta.fromUserId, true, inviteMeta.roomId || String(numericRoomId));
+            }
             clearPendingInviteToken();
             room = await fetchRoom(numericRoomId);
           }
         } else {
           clearPendingJoinPassword();
+          if (inviteMeta?.fromUserId) {
+            void emitRoomInviteResponse(inviteMeta.fromUserId, true, inviteMeta.roomId || String(numericRoomId));
+          }
           clearPendingInviteToken();
         }
 
@@ -303,6 +327,7 @@ export default function RoomPage() {
               if (battleNavLockRef.current || cancelled) return;
               if (!matchLike?.matchId || !Array.isArray(matchLike.problems)) return;
               battleNavLockRef.current = true;
+              leavingToGameRef.current = true;
               const match = matchLike as unknown as MatchStartResponse;
               const roster = playersRef.current.filter((player): player is RoomPlayer => player !== null);
               applyMatchStart({
@@ -933,9 +958,11 @@ export default function RoomPage() {
       if (matchId) battleParams.set('matchId', matchId);
 
       battleNavLockRef.current = true;
+      leavingToGameRef.current = true;
       navigate(`${ROUTES.BATTLE}?${battleParams.toString()}`);
     } catch (error) {
       battleNavLockRef.current = false;
+      leavingToGameRef.current = false;
       showStartAlert(getMatchErrorMessage(error) || getRoomErrorMessage(error));
     } finally {
       setRoomBusy(false);

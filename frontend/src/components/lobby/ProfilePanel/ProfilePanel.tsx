@@ -6,12 +6,19 @@ interface ProfilePanelProps {
   username: string;
   displayName: string;
   titleData: TitleData;
+  ratingScore?: number;
   onOpenMyInfo: () => void;
 }
 
-export function ProfilePanel({ username, displayName, titleData, onOpenMyInfo }: ProfilePanelProps) {
+export function ProfilePanel({
+  username,
+  displayName,
+  titleData,
+  ratingScore,
+  onOpenMyInfo,
+}: ProfilePanelProps) {
   const equipped = getEquippedTitle(titleData);
-  const rating = getRatingScore();
+  const rating = typeof ratingScore === 'number' ? ratingScore : getRatingScore();
   const tier = getTierByRating(rating);
 
   return (

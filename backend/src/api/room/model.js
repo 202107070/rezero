@@ -142,6 +142,7 @@ export async function findRoomParticipants(roomId) {
        rp.user_id AS userId,
        u.username AS username,
        u.display_name AS displayName,
+       u.rating_score AS ratingScore,
        rp.slot_index AS slotIndex,
        rp.is_host AS isHost,
        rp.is_ready AS isReady,

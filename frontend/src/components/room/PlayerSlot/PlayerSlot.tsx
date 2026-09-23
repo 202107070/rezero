@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react';
 import { CHARACTERS } from '../../../constants/roomConstants';
 import type { RoomPlayer } from '../../../types/room';
-import { getTierByUserName, getTierIconByTier } from '../../../utils/tierUtils';
+import { getTierIconByTier } from '../../../utils/tierUtils';
 
 interface PlayerSlotProps {
   player: RoomPlayer | null;
@@ -37,7 +37,7 @@ export function PlayerSlot({
       <div className="slot-name" style={{ color: player ? '#ddd' : '#555' }}>
         {player ? (
           <>
-            <span className="slot-rank">{getTierIconByTier(player.rank || getTierByUserName(player.name))}</span>
+            <span className="slot-rank">{getTierIconByTier(player.rank || '브론즈')}</span>
             {player.name}
           </>
         ) : (

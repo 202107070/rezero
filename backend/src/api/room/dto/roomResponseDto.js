@@ -25,6 +25,7 @@ export function toParticipantResponse(participant) {
     name: displayName,
     displayName,
     username: participant.username ? String(participant.username) : undefined,
+    ratingScore: Number(participant.ratingScore ?? 1000),
     slotIndex: Number(participant.slotIndex),
     isHost: toBool(participant.isHost),
     isReady: toBool(participant.isReady),

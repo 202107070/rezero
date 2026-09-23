@@ -193,11 +193,23 @@ export function RankingBoard({
                         <UserTitleBadge titleId={u.title} />
                         {activeTab === '친구' && (
                           <span className={`friend-presence-badge ${online ? 'is-online' : 'is-offline'}`}>
-                            {online
-                              ? presence?.status === 'room'
-                                ? '방'
-                                : '온라인'
-                              : '오프라인'}
+                            {!online
+                              ? '오프라인'
+                              : presence?.status === 'practice'
+                                ? '연습'
+                                : presence?.status === 'build'
+                                  ? '빌드'
+                                  : presence?.status === 'battle'
+                                    ? presence.roomId
+                                      ? `${presence.roomId}번·게임`
+                                      : '게임중'
+                                    : presence?.status === 'result'
+                                      ? '결과'
+                                      : presence?.status === 'room'
+                                        ? presence.roomId
+                                          ? `${presence.roomId}번 방`
+                                          : '대기방'
+                                        : '로비'}
                           </span>
                         )}
                       </>

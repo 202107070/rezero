@@ -15,6 +15,7 @@ import {
   markUserOffline,
   broadcastLobbyPresence,
   listOnlineUsers,
+  updateUserLocation,
   LOBBY_ROOM_ID,
 } from "#service/socketService.js";
 import gameStartService from "#service/manageGameService.js";
@@ -22,6 +23,7 @@ import { gameWorker } from "#docker/worker/gameWorker.js";
 import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { pool as dbPool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
+import * as roomModel from "../api/room/model.js";
 
 function userLabel(user) {
   const display = String(user?.displayName || "").trim();
@@ -60,7 +62,11 @@ export function registerSocketHandlers(io, socket) {
       console.log(userLabel(socket.user) + " 님이 [" + roomId + "] 방에 입장함");
 
       if (roomId === LOBBY_ROOM_ID) {
-        await markUserOnline(socket.user);
+        await updateUserLocation(socket.user, {
+          location: "lobby",
+          roomId: "",
+          roomTitle: "",
+        });
         await broadcastLobbyPresence(io);
         if (typeof callback === "function") {
           callback({
@@ -70,6 +76,23 @@ export function registerSocketHandlers(io, socket) {
           });
         }
         return;
+      }
+
+      // 숫자 방이면 대기방 위치로 표시
+      if (/^\d+$/.test(String(roomId))) {
+        let roomTitle = "";
+        try {
+          const room = await roomModel.findRoomById(roomId);
+          roomTitle = room?.title ? String(room.title) : `${roomId}번 방`;
+        } catch {
+          roomTitle = `${roomId}번 방`;
+        }
+        await updateUserLocation(socket.user, {
+          location: "room",
+          roomId: String(roomId),
+          roomTitle,
+        });
+        await broadcastLobbyPresence(io);
       }
 
       // Valkey에서 게임 진행 상태 확인 후 재접속 복원 처리
@@ -559,19 +582,15 @@ export function registerSocketHandlers(io, socket) {
       if (!toUserId) throw new Error("초대 대상이 없습니다.");
       if (!roomId) throw new Error("방 정보가 없습니다.");
       const inviteToken = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      try {
-        await redisClient.set(
-          `room:invite:${inviteToken}`,
-          JSON.stringify({
-            roomId,
-            toUserId,
-            fromUserId: String(socket.user.id),
-          }),
-          { EX: 300 },
-        );
-      } catch (redisError) {
-        console.error("[ROOM_INVITE] redis:", redisError.message);
-      }
+      await redisClient.set(
+        `room:invite:${inviteToken}`,
+        JSON.stringify({
+          roomId,
+          toUserId,
+          fromUserId: String(socket.user.id),
+        }),
+        { EX: 300 },
+      );
       const payload = {
         fromUserId: String(socket.user.id),
         fromUserName: userLabel(socket.user),
@@ -585,6 +604,30 @@ export function registerSocketHandlers(io, socket) {
       io.to("user:" + toUserId).emit(SOCKET_EVENTS.ROOM_INVITE, payload);
       if (typeof callback === "function") {
         callback({ success: true, inviteToken });
+      }
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.UPDATE_LOCATION, async function (data, callback) {
+    try {
+      const location = data?.location ? String(data.location) : "lobby";
+      const roomId = data?.roomId != null ? String(data.roomId) : "";
+      const roomTitle = data?.roomTitle != null ? String(data.roomTitle) : "";
+      const ratingScore =
+        data?.ratingScore != null ? Number(data.ratingScore) : undefined;
+      await updateUserLocation(socket.user, {
+        location,
+        roomId,
+        roomTitle,
+        ratingScore,
+      });
+      await broadcastLobbyPresence(io);
+      if (typeof callback === "function") {
+        callback({ success: true });
       }
     } catch (error) {
       if (typeof callback === "function") {

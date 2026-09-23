@@ -170,3 +170,89 @@ export async function findUserTitleData(userId) {
 
   return rows.length > 0 ? rows[0] : null;
 }
+
+function parseJsonColumn(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+export async function listMatchCodeHistory(userId) {
+  const rows = await pool.query(
+    `SELECT
+       history_id AS historyId,
+       user_id AS userId,
+       room_id AS roomId,
+       submitted_at AS submittedAt,
+       lang,
+       mode,
+       code,
+       codes,
+       problems
+     FROM match_code_history
+     WHERE user_id = ?
+     ORDER BY submitted_at DESC
+     LIMIT 100`,
+    [userId],
+  );
+
+  return rows.map(function (row) {
+    return {
+      historyId: row.historyId,
+      userId: row.userId,
+      roomId: String(row.roomId || ""),
+      submittedAt:
+        row.submittedAt instanceof Date
+          ? row.submittedAt.toISOString()
+          : String(row.submittedAt || ""),
+      lang: row.lang || "UNKNOWN",
+      mode: row.mode || null,
+      code: row.code || "",
+      codes: parseJsonColumn(row.codes, []),
+      problems: parseJsonColumn(row.problems, []),
+    };
+  });
+}
+
+export async function upsertMatchCodeHistory(entry) {
+  await pool.query(
+    `INSERT INTO match_code_history
+       (history_id, user_id, room_id, submitted_at, lang, mode, code, codes, problems)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       lang = VALUES(lang),
+       mode = VALUES(mode),
+       code = VALUES(code),
+       codes = VALUES(codes),
+       problems = VALUES(problems)`,
+    [
+      entry.historyId,
+      entry.userId,
+      entry.roomId || "",
+      entry.submittedAt || new Date(),
+      entry.lang || "UNKNOWN",
+      entry.mode || null,
+      entry.code || "",
+      JSON.stringify(Array.isArray(entry.codes) ? entry.codes : []),
+      JSON.stringify(Array.isArray(entry.problems) ? entry.problems : []),
+    ],
+  );
+}
+
+export async function deleteMatchCodeHistory(userId, historyIds) {
+  if (!Array.isArray(historyIds) || historyIds.length === 0) return 0;
+  const placeholders = historyIds.map(function () {
+    return "?";
+  }).join(", ");
+  const result = await pool.query(
+    `DELETE FROM match_code_history
+     WHERE user_id = ?
+       AND history_id IN (${placeholders})`,
+    [userId, ...historyIds],
+  );
+  return Number(result?.affectedRows || 0);
+}

@@ -39,7 +39,7 @@ function getJwtExpiresIn() {
   if (process.env.JWT_EXPIRES_IN) {
     return process.env.JWT_EXPIRES_IN;
   }
-  return "1h";
+  return "12h";
 }
 
 export const env = {

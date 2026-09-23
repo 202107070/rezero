@@ -6,11 +6,13 @@ import app from "../app.js";
 import { env } from "#config/envConfig.js";
 import { pool, testDbConnection } from "#config/dbConfig.js";
 import { redisClient, connectRedis } from "#config/redisConfig.js";
-import { initSocket } from "#config/socketConfig.js";
+import { getSocket, initSocket } from "#config/socketConfig.js";
 
 const server = http.createServer(app);
 
 initSocket(server);
+
+let shuttingDown = false;
 
 async function startServer() {
   await testDbConnection();
@@ -22,15 +24,54 @@ async function startServer() {
 }
 
 async function stopServer(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(signal + " received. Backend is shutting down.");
 
-  server.close(async function () {
-    if (redisClient.isOpen) {
-      await redisClient.quit();
+  const forceTimer = setTimeout(function () {
+    console.error("Force exit after shutdown timeout.");
+    process.exit(1);
+  }, 5000);
+  if (typeof forceTimer.unref === "function") forceTimer.unref();
+
+  try {
+    const io = getSocket();
+    if (io) {
+      await new Promise(function (resolve) {
+        io.close(function () {
+          resolve();
+        });
+      });
     }
-    await pool.end();
+  } catch (err) {
+    console.error("Socket.IO close error:", err?.message || err);
+  }
+
+  server.close(async function () {
+    try {
+      if (redisClient.isOpen) {
+        await redisClient.quit();
+      }
+    } catch (err) {
+      console.error("Redis quit error:", err?.message || err);
+    }
+    try {
+      await pool.end();
+    } catch (err) {
+      console.error("DB pool end error:", err?.message || err);
+    }
     process.exit(0);
   });
+
+  if (typeof server.closeAllConnections === "function") {
+    setTimeout(function () {
+      try {
+        server.closeAllConnections();
+      } catch {
+        // ignore
+      }
+    }, 2000);
+  }
 }
 
 server.on("error", function (error) {
@@ -38,11 +79,11 @@ server.on("error", function (error) {
   process.exit(1);
 });
 
-process.on("SIGINT", function () {
+process.once("SIGINT", function () {
   stopServer("SIGINT");
 });
 
-process.on("SIGTERM", function () {
+process.once("SIGTERM", function () {
   stopServer("SIGTERM");
 });
 

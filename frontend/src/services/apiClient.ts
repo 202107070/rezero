@@ -100,7 +100,7 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const body = (payload || {}) as ErrorBody;
     const code = body.error?.code || 'REQUEST_FAILED';
-    if (response.status === 401 && (code === 'TOKEN_EXPIRED' || code === 'UNAUTHORIZED' || code === 'INVALID_TOKEN')) {
+    if (response.status === 401 && (code === 'TOKEN_EXPIRED' || code === 'UNAUTHORIZED' || code === 'INVALID_TOKEN' || code === 'TOKEN_INVALID')) {
       dispatchAuthExpired(code);
     }
     throw new ApiError(

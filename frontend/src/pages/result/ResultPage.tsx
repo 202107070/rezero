@@ -29,6 +29,7 @@ import {
   emitFriendRemove,
   emitFriendRequest,
   emitFriendRequestResult,
+  emitUpdateLocation,
   getActiveRoomId,
   joinRoomSocket,
   onRoomEvent,
@@ -55,6 +56,7 @@ import {
   getRatingScore,
   saveTitles,
   setNewTitleIds,
+  setRatingScore,
   getTitles,
 } from '../../services/userService';
 import {
@@ -77,7 +79,7 @@ import {
   shouldAutoAcceptReviewInvite,
 } from '../../services/reviewSessionService';
 import type { DemoBot } from '../../utils/battle/demoBots';
-import { normalizeCodeHistoryEntry, persistCodeHistory, readCodeHistory } from '../../utils/codeHistoryUtils';
+import { normalizeCodeHistoryEntry, saveMatchHistoryEntry } from '../../utils/codeHistoryUtils';
 import type { BattleProblem } from '../../types/battle';
 import type { FinalRankingSnapshot } from '../../utils/battle/rankUtils';
 import { getLangKey } from '../../utils/battle/codeUtils';
@@ -501,16 +503,34 @@ export default function ResultPage() {
               ratingDelta,
               newTitleIds,
             });
+            const resolvedAfter =
+              typeof ratingDelta === 'number'
+                ? Math.max(0, ratingBefore + ratingDelta)
+                : getRatingScore();
+            setRatingScore(resolvedAfter);
+            setLiveRatingScore(resolvedAfter);
+            setLiveRatingTier(getTierByRating(resolvedAfter));
             if (typeof earned === 'number') setApiRewardGold(earned);
             setTotalGold(getGold());
             rewardsAppliedRef.current = true;
 
             void refreshMeProfile().then(() => {
-              const after = getRatingScore();
-              const resolvedAfter =
-                typeof ratingDelta === 'number' ? Math.max(0, ratingBefore + ratingDelta) : after;
-              setLiveRatingScore(resolvedAfter);
-              setLiveRatingTier(getTierByRating(resolvedAfter));
+              const serverScore = getRatingScore();
+              // 서버가 아직 반영 전이면 로컬 계산값 유지
+              const finalScore =
+                typeof ratingDelta === 'number' &&
+                ((ratingDelta < 0 && serverScore > resolvedAfter) ||
+                  (ratingDelta > 0 && serverScore < resolvedAfter))
+                  ? resolvedAfter
+                  : serverScore || resolvedAfter;
+              setRatingScore(finalScore);
+              setLiveRatingScore(finalScore);
+              setLiveRatingTier(getTierByRating(finalScore));
+              void emitUpdateLocation({
+                location: 'result',
+                roomId: String(roomId || ''),
+                ratingScore: finalScore,
+              }).catch(() => undefined);
             });
           }
         }
@@ -643,12 +663,19 @@ export default function ResultPage() {
         mode: submission.mode,
       });
       if (!entry) return;
-      const history = readCodeHistory().filter((item) => item.historyId !== entry.historyId);
-      persistCodeHistory([entry, ...history].slice(0, 50));
+      void saveMatchHistoryEntry(entry);
     } catch (e) {
       console.error('코드 히스토리 저장 실패:', e);
     }
   }, [roomId, submission, mySubmissionCodes]);
+
+  useEffect(() => {
+    void emitUpdateLocation({
+      location: 'result',
+      roomId: String(roomId || ''),
+      ratingScore: getRatingScore(),
+    }).catch(() => undefined);
+  }, [roomId]);
 
   useEffect(() => {
     const onBeforeUnload = () => removeMyPresence(myUserId);

@@ -148,5 +148,6 @@ export function clearUserSession(): void {
   titleData = defaultTitleData();
   ratingScore = 1000;
   newTitleIds = [];
+  // 매치 스토리는 DB에 보관 — 로그아웃시 메모리만 비우지 않고 로그인 시 다시 로드
   codeHistory = [];
 }

@@ -1,7 +1,7 @@
 import { useEffect, type MouseEvent, useState } from 'react';
 import { canSummonFriend, getFriendPresences, isFriendOnline } from '../../../services/friendStore';
 import type { FriendPresence } from '../../../types/friend';
-import { getTierByUserName, getTierIconByTier } from '../../../utils/tierUtils';
+import { getTierIconByTier } from '../../../utils/tierUtils';
 
 interface RoomFriendMessengerProps {
   roomId: string;
@@ -13,10 +13,18 @@ interface RoomFriendMessengerProps {
 }
 
 function presenceLabel(presence: FriendPresence) {
-  if (presence.status === 'room') {
-    return presence.roomId ? `방 · ${presence.roomTitle || presence.roomId}` : '대기방';
+  if (presence.status === 'practice') return '연습 모드';
+  if (presence.status === 'build') return '빌드 시스템';
+  if (presence.status === 'battle') {
+    return presence.roomId ? `${presence.roomId}번 방 · 게임중` : '게임 중';
   }
-  if (presence.status === 'lobby') return '온라인';
+  if (presence.status === 'result') {
+    return presence.roomId ? `${presence.roomId}번 방 · 결과` : '결과창';
+  }
+  if (presence.status === 'room') {
+    return presence.roomId ? `${presence.roomId}번 방` : '대기방';
+  }
+  if (presence.status === 'lobby') return '로비';
   return '오프라인';
 }
 
@@ -78,9 +86,7 @@ export function RoomFriendMessenger({
                               : '오프라인'
                         }
                       >
-                        <td className="room-friend-tier-cell">
-                          {getTierIconByTier(getTierByUserName(friend.userName))}
-                        </td>
+                        <td className="room-friend-tier-cell">{getTierIconByTier('실버')}</td>
                         <td
                           className="room-friend-name-cell"
                           onContextMenu={(event) => {
@@ -88,10 +94,12 @@ export function RoomFriendMessenger({
                             onFriendContextMenu?.(event, friend.userName);
                           }}
                         >
-                          <span>{friend.userName}</span>
-                          <span className={`friend-presence-badge ${online ? 'is-online' : 'is-offline'}`}>
-                            {presenceLabel(friend)}
-                          </span>
+                          <div className="room-friend-name-inner">
+                            <span className="room-friend-name-text">{friend.userName}</span>
+                            <span className={`friend-presence-badge ${online ? 'is-online' : 'is-offline'}`}>
+                              {presenceLabel(friend)}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     );

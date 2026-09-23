@@ -38,8 +38,21 @@ interface MyInfoModalProps {
 function presenceText(userName: string) {
   const presence = getUserPresence(userName);
   if (!presence || presence.status === 'offline') return '오프라인';
+  if (presence.status === 'practice') return '연습 모드';
+  if (presence.status === 'build') return '빌드 시스템';
+  if (presence.status === 'battle') {
+    return presence.roomId ? `${presence.roomId}번 방 · 게임 중` : '게임 중';
+  }
+  if (presence.status === 'result') {
+    return presence.roomId ? `${presence.roomId}번 방 · 결과` : '결과창';
+  }
   if (presence.status === 'room') {
-    return presence.roomTitle ? `방 · ${presence.roomTitle}` : '대기방';
+    if (presence.roomId) {
+      return presence.roomTitle
+        ? `${presence.roomId}번 방 · ${presence.roomTitle}`
+        : `${presence.roomId}번 방`;
+    }
+    return '대기방';
   }
   return '온라인 (로비)';
 }

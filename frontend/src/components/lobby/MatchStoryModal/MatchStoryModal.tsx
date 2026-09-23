@@ -47,14 +47,14 @@ export function MatchStoryModal({
         )}
         {codeHistory.length === 0 ? (
           <div className="pixel-card" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
-            저장된 문제가 없습니다.
+            저장된 게임이 없습니다.
           </div>
         ) : (
           <div className="match-story-layout">
             <div className="pixel-card match-story-list">
               {codeHistory.map((entry, idx) => (
                 <button
-                  key={`${entry.submittedAt}-${idx}`}
+                  key={`${entry.historyId}-${idx}`}
                   type="button"
                   className="profile-btn w-100 text-start"
                   style={{
@@ -70,8 +70,8 @@ export function MatchStoryModal({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                     <div style={{ fontSize: '14px' }}>
-                      #{idx + 1}
-                      {entry.roomId ? ` · ROOM ${entry.roomId}` : ''}
+                      게임 #{idx + 1}
+                      {entry.roomId ? ` · ${entry.roomId}번 방` : ''}
                     </div>
                     <button
                       type="button"
@@ -105,7 +105,8 @@ export function MatchStoryModal({
               </div>
               <div className="match-story-meta">
                 <div>언어: {selectedHistory?.lang || 'UNKNOWN'}</div>
-                <div>제출 시각: {selectedHistory ? new Date(selectedHistory.submittedAt).toLocaleString() : '-'}</div>
+                <div>게임 시각: {selectedHistory ? new Date(selectedHistory.submittedAt).toLocaleString() : '-'}</div>
+                <div>문제 수: {selectedProblems.length || selectedHistory?.codes?.length || 0}</div>
                 <div className="match-story-question">{selectedProblem?.question || '문제 설명이 없습니다.'}</div>
               </div>
               <div className="match-story-problem-tabs">

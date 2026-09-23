@@ -231,9 +231,11 @@ export async function joinRoom(roomId, userId, input) {
   }
 
   let inviteBypass = false;
+  let inviteTokenKey = null;
   if (input.inviteToken) {
     try {
-      const raw = await redisClient.get(`room:invite:${input.inviteToken}`);
+      inviteTokenKey = `room:invite:${input.inviteToken}`;
+      const raw = await redisClient.get(inviteTokenKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (
@@ -241,11 +243,14 @@ export async function joinRoom(roomId, userId, input) {
           String(parsed.toUserId) === String(userId)
         ) {
           inviteBypass = true;
-          await redisClient.del(`room:invite:${input.inviteToken}`);
+        } else {
+          inviteTokenKey = null;
         }
+      } else {
+        inviteTokenKey = null;
       }
     } catch {
-      // ignore
+      inviteTokenKey = null;
     }
   }
 
@@ -255,6 +260,15 @@ export async function joinRoom(roomId, userId, input) {
       : false;
 
     if (!passwordMatches) {
+      // StrictMode 등 중복 조인으로 토큰이 이미 소비된 경우: 이미 참가 중이면 성공 처리
+      const existing = await roomModel.findRoomParticipants(roomId);
+      if (
+        (existing || []).some(
+          (participant) => String(participant.userId) === String(userId),
+        )
+      ) {
+        return toRoomResponse(room, existing);
+      }
       throw new AppError(
         403,
         "ROOM_PASSWORD_INVALID",
@@ -290,10 +304,32 @@ export async function joinRoom(roomId, userId, input) {
   };
 
   if (!result.success) {
+    if (result.reason === "ROOM_ALREADY_JOINED") {
+      const existing = await roomModel.findRoomParticipants(roomId);
+      if (inviteTokenKey) {
+        try {
+          await redisClient.del(inviteTokenKey);
+        } catch {
+          // ignore
+        }
+      }
+      return toRoomResponse(
+        (await roomModel.findRoomById(roomId)) || room,
+        existing,
+      );
+    }
     throw (
       errors[result.reason] ||
       new AppError(409, "ROOM_JOIN_FAILED", "방에 입장할 수 없습니다.")
     );
+  }
+
+  if (inviteTokenKey) {
+    try {
+      await redisClient.del(inviteTokenKey);
+    } catch {
+      // ignore
+    }
   }
 
   const updatedRoom = await roomModel.findRoomById(roomId);

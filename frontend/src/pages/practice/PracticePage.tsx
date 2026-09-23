@@ -8,6 +8,7 @@ import { PracticeProblemViewer } from '../../components/practice/PracticeProblem
 import { PracticeProgressPanel } from '../../components/practice/PracticeProgressPanel/PracticeProgressPanel';
 import { PracticeSetupModal } from '../../components/practice/PracticeSetupModal/PracticeSetupModal';
 import { ROUTES } from '../../constants/routes';
+import { emitUpdateLocation } from '../../services/roomSocket';
 import { getLangKey } from '../../utils/battle/codeUtils';
 import { isBlankBasedType } from '../../utils/problemTypeUtils';
 import {
@@ -63,6 +64,13 @@ export default function PracticePage() {
   useEffect(() => {
     if (hasUrlParams) startPractice();
   }, [hasUrlParams, startPractice]);
+
+  useEffect(() => {
+    void emitUpdateLocation({ location: 'practice' }).catch(() => undefined);
+    return () => {
+      void emitUpdateLocation({ location: 'lobby' }).catch(() => undefined);
+    };
+  }, []);
 
   const currentEx = exercises[currentIndex] || ({} as PracticeExercise);
   const isChecked = checked.has(currentIndex);

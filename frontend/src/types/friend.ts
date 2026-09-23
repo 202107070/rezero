@@ -1,4 +1,11 @@
-export type FriendPresenceStatus = 'lobby' | 'room' | 'offline';
+export type FriendPresenceStatus =
+  | 'lobby'
+  | 'room'
+  | 'battle'
+  | 'practice'
+  | 'build'
+  | 'result'
+  | 'offline';
 
 export interface FriendPresence {
   userName: string;

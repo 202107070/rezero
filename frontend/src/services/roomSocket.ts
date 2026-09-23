@@ -35,6 +35,7 @@ export const ROOM_SOCKET_EVENTS = {
   USER_KICKED: 'user_kicked',
   UPDATE_TITLE: 'update_title',
   TITLE_CHANGED: 'title_changed',
+  UPDATE_LOCATION: 'update_location',
 } as const;
 
 export const LOBBY_ROOM_ID = 'lobby';
@@ -45,6 +46,9 @@ export interface LobbyPresenceUser {
   displayName?: string;
   equippedTitleId?: string | null;
   ratingScore?: number;
+  location?: string;
+  roomId?: string;
+  roomTitle?: string;
 }
 
 export interface LobbyPresencePayload {
@@ -247,13 +251,16 @@ export function getRoomSocket(): Socket {
   });
 
   socket.on('connect_error', (error: Error) => {
-    const message = String(error?.message || '').toUpperCase();
-    if (
-      message.includes('TOKEN_EXPIRED') ||
-      message.includes('UNAUTHORIZED') ||
-      message.includes('INVALID_TOKEN') ||
-      message.includes('AUTHENTICATION')
-    ) {
+    const message = String(error?.message || '');
+    const upper = message.toUpperCase();
+    const isAuthFail =
+      upper.includes('TOKEN_EXPIRED') ||
+      upper.includes('TOKEN_INVALID') ||
+      upper.includes('UNAUTHORIZED') ||
+      upper.includes('INVALID_TOKEN') ||
+      message.includes('만료된 토큰') ||
+      message.includes('유효하지 않');
+    if (isAuthFail) {
       dispatchAuthExpired('SOCKET_AUTH_ERROR');
     }
   });
@@ -515,6 +522,32 @@ export function emitUpdateTitle(
     client.emit(
       ROOM_SOCKET_EVENTS.UPDATE_TITLE,
       { titleId: titleId || '' },
+      (response?: { success?: boolean; message?: string }) => {
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitUpdateLocation(params: {
+  location: string;
+  roomId?: string;
+  roomTitle?: string;
+  ratingScore?: number;
+}): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve) => {
+    client.emit(
+      ROOM_SOCKET_EVENTS.UPDATE_LOCATION,
+      {
+        location: params.location,
+        roomId: params.roomId || '',
+        roomTitle: params.roomTitle || '',
+        ratingScore: params.ratingScore,
+      },
       (response?: { success?: boolean; message?: string }) => {
         resolve({
           success: Boolean(response?.success),
