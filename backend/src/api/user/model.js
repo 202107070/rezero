@@ -256,3 +256,59 @@ export async function deleteMatchCodeHistory(userId, historyIds) {
   );
   return Number(result?.affectedRows || 0);
 }
+
+export async function deleteUserById(userId) {
+  const result = await pool.query(`DELETE FROM users WHERE id = ?`, [userId]);
+  return Number(result?.affectedRows || 0);
+}
+
+/** AI 분석용: 유저의 최근 매치 제출·메타 집계 */
+export async function findUserMatchAnalytics(userId, limit = 40) {
+  const rows = await pool.query(
+    `SELECT
+       ms.match_id AS matchId,
+       ms.ingame_score AS ingameScore,
+       ms.rating_delta AS ratingDelta,
+       ms.solve_times AS solveTimes,
+       ms.problem_results AS problemResults,
+       ms.solved_problems AS solvedProblems,
+       ms.total_solve_time AS totalSolveTime,
+       ms.completion_time AS completionTime,
+       m.lang AS language,
+       m.difficulty,
+       m.game_mode AS gameMode,
+       m.room_mode AS roomMode,
+       m.problem_count AS problemCount,
+       m.finished_at AS finishedAt
+     FROM match_submissions ms
+     JOIN matches m ON m.id = ms.match_id
+     WHERE ms.user_id = ?
+     ORDER BY COALESCE(m.finished_at, m.started_at) DESC
+     LIMIT ?`,
+    [userId, Math.max(1, Math.min(100, Number(limit) || 40))],
+  );
+
+  return rows.map(function (row) {
+    return {
+      matchId: row.matchId,
+      ingameScore: Number(row.ingameScore || 0),
+      ratingDelta: Number(row.ratingDelta || 0),
+      solveTimes: parseJsonColumn(row.solveTimes, []),
+      problemResults: parseJsonColumn(row.problemResults, []),
+      solvedProblems: parseJsonColumn(row.solvedProblems, []),
+      totalSolveTime: Number(row.totalSolveTime || 0),
+      completionTime: Number(row.completionTime || 0),
+      language: row.language || "UNKNOWN",
+      difficulty: row.difficulty || "",
+      gameMode: row.gameMode || "",
+      roomMode: row.roomMode || "",
+      problemCount: Number(row.problemCount || 0),
+      finishedAt:
+        row.finishedAt instanceof Date
+          ? row.finishedAt.toISOString()
+          : row.finishedAt
+            ? String(row.finishedAt)
+            : null,
+    };
+  });
+}

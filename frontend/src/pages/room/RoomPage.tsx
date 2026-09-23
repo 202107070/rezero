@@ -63,6 +63,7 @@ import {
   toggleReadySocket,
   sendRoomMessage,
   setActiveRoomId,
+  type LobbyPresencePayload,
   type RoomReadyStatePayload,
   type ChatMessagePayload,
   type GameStartedPayload,
@@ -71,10 +72,12 @@ import {
 } from '../../services/roomSocket';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
+import { AiUserAnalysisModal } from '../../components/lobby/AiUserAnalysisModal/AiUserAnalysisModal';
 import {
   addFriend,
   canSummonFriend,
   findFriendUserId,
+  getFriendNames,
   getFriendUserIds,
   isFriend,
   isFriendOnline,
@@ -82,6 +85,7 @@ import {
   removeFriendByUserId,
   setUserPresence,
 } from '../../services/friendStore';
+import type { FriendPresenceStatus } from '../../types/friend';
 import { getStartBlockReason, hasLocalBots } from '../../utils/room/roomStartValidation';
 import {
   UserListContextMenu,
@@ -167,6 +171,7 @@ export default function RoomPage() {
     fromUserId: string;
     fromUserName: string;
   } | null>(null);
+  const [aiTarget, setAiTarget] = useState<{ userId: string; userName: string } | null>(null);
 
   const roomTitle = roomDetail?.title || fallbackTitle;
   const isPrivate = roomDetail?.isPrivate ?? (fallbackPwd.length > 0 && fallbackPwd !== 'protected');
@@ -227,6 +232,51 @@ export default function RoomPage() {
       setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapped));
     }
   }, [parsedMaxPlayers, urlTimeRaw]);
+
+  useEffect(() => {
+    const applyPresence = (users: LobbyPresencePayload['users']) => {
+      const onlineByName = new Map<string, (typeof users)[number]>();
+      const onlineById = new Map<string, (typeof users)[number]>();
+      for (const user of users || []) {
+        if (user.displayName) onlineByName.set(user.displayName, user);
+        if (user.username) onlineByName.set(user.username, user);
+        if (user.userId) onlineById.set(String(user.userId), user);
+      }
+      for (const name of getFriendNames()) {
+        const friendId = findFriendUserId(name);
+        const remote =
+          onlineByName.get(name) || (friendId ? onlineById.get(String(friendId)) : undefined);
+        if (!remote) {
+          setUserPresence(name, { status: 'offline' });
+          continue;
+        }
+        const location = String(remote.location || 'lobby') as FriendPresenceStatus;
+        const roomIdValue = remote.roomId ? String(remote.roomId) : undefined;
+        const roomTitleValue = remote.roomTitle ? String(remote.roomTitle) : undefined;
+        if (
+          location === 'practice' ||
+          location === 'build' ||
+          location === 'battle' ||
+          location === 'result' ||
+          location === 'room'
+        ) {
+          setUserPresence(name, {
+            status: location,
+            roomId: roomIdValue,
+            roomTitle: roomTitleValue,
+            roomQuery: roomIdValue ? `id=${roomIdValue}` : undefined,
+          });
+        } else {
+          setUserPresence(name, { status: 'lobby' });
+        }
+      }
+    };
+
+    const unsub = onRoomEvent(ROOM_SOCKET_EVENTS.LOBBY_PRESENCE, (payload: LobbyPresencePayload) => {
+      applyPresence(payload.users || []);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const me = getCurrentDisplayName() || getCurrentUserName();
@@ -1137,6 +1187,18 @@ export default function RoomPage() {
           setKickTarget({ index, name });
           setShowKickModal(true);
         }}
+        onAiAnalyze={(player) => {
+          if (!player.userId) return;
+          setShowProfileModal(false);
+          setAiTarget({ userId: String(player.userId), userName: player.name });
+        }}
+      />
+
+      <AiUserAnalysisModal
+        open={Boolean(aiTarget)}
+        userId={aiTarget?.userId || ''}
+        userName={aiTarget?.userName || ''}
+        onClose={() => setAiTarget(null)}
       />
 
       {contextMenu && (

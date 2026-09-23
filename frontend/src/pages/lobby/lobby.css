@@ -207,6 +207,86 @@
   padding: 7px 16px;
 }
 
+.settings-account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-account-btn {
+  width: 100%;
+  font-size: 14px;
+}
+
+.settings-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-delete-warning {
+  color: var(--px-danger);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-delete-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-analysis-modal {
+  width: min(520px, 92vw);
+  max-height: min(78vh, 640px);
+  overflow-y: auto;
+}
+
+.ai-analysis-subtitle {
+  text-align: center;
+  color: #ddd;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.ai-analysis-loading,
+.ai-analysis-error {
+  text-align: center;
+  padding: 24px 12px;
+  color: #bbb;
+}
+
+.ai-analysis-error {
+  color: var(--px-danger);
+}
+
+.ai-analysis-stats {
+  background: #1a1e21;
+  border: 2px solid var(--px-border);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #ccc;
+  line-height: 1.5;
+}
+
+.ai-analysis-body {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  color: #eee;
+  font-size: 14px;
+  background: #15191c;
+  border: 2px solid var(--px-border);
+  padding: 12px;
+  min-height: 120px;
+}
+
+.ai-analysis-source {
+  margin-top: 8px;
+  text-align: right;
+  font-size: 11px;
+  color: #888;
+}
+
 .exit-confirm-modal {
   width: min(440px, 92vw);
   text-align: center;

@@ -42,10 +42,20 @@ function getJwtExpiresIn() {
   return "12h";
 }
 
+function getOpenAiApiKey() {
+  return process.env.OPENAI_API_KEY ? String(process.env.OPENAI_API_KEY).trim() : "";
+}
+
+function getOpenAiModel() {
+  return process.env.OPENAI_MODEL ? String(process.env.OPENAI_MODEL).trim() : "gpt-4o-mini";
+}
+
 export const env = {
   nodeEnv: getNodeEnv(),
   host: getHost(),
   port: getPort(),
   jwtSecret: getJwtSecret(),
   jwtExpiresIn: getJwtExpiresIn(),
+  openAiApiKey: getOpenAiApiKey(),
+  openAiModel: getOpenAiModel(),
 };

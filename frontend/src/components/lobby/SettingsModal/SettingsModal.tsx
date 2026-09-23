@@ -9,6 +9,8 @@ interface SettingsModalProps {
   audioSettings: AudioSettings;
   onClose: () => void;
   onConfirm: (displayMode: DisplayMode, audioSettings: AudioSettings) => void;
+  onLogout?: () => void;
+  onDeleteAccount?: () => void;
 }
 
 export function SettingsModal({
@@ -17,15 +19,21 @@ export function SettingsModal({
   audioSettings,
   onClose,
   onConfirm,
+  onLogout,
+  onDeleteAccount,
 }: SettingsModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [draftMode, setDraftMode] = useState<DisplayMode>(displayMode);
   const [draftAudio, setDraftAudio] = useState<AudioSettings>(audioSettings);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setDraftMode(displayMode);
       setDraftAudio(audioSettings);
+      setConfirmDelete(false);
+      setDeleting(false);
     }
   }, [open, displayMode, audioSettings]);
 
@@ -38,6 +46,16 @@ export function SettingsModal({
 
   const toggleAudio = (key: keyof AudioSettings) => {
     setDraftAudio((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleDelete = async () => {
+    if (!onDeleteAccount || deleting) return;
+    setDeleting(true);
+    try {
+      await onDeleteAccount();
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -99,6 +117,58 @@ export function SettingsModal({
                 {draftAudio.battleMusic ? 'ON' : 'OFF'}
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">계정</div>
+          <div className="settings-account-actions">
+            {onLogout && (
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-secondary settings-account-btn"
+                onClick={() => {
+                  onClose();
+                  onLogout();
+                }}
+              >
+                로그아웃
+              </button>
+            )}
+            {onDeleteAccount && !confirmDelete && (
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-danger settings-account-btn"
+                onClick={() => setConfirmDelete(true)}
+              >
+                회원 탈퇴
+              </button>
+            )}
+            {onDeleteAccount && confirmDelete && (
+              <div className="settings-delete-confirm">
+                <div className="settings-delete-warning">
+                  정말 탈퇴하시겠습니까? 계정과 게임 데이터가 모두 삭제되며 복구할 수 없습니다.
+                </div>
+                <div className="settings-delete-actions">
+                  <button
+                    type="button"
+                    className="pixel-btn pixel-btn-danger settings-account-btn"
+                    disabled={deleting}
+                    onClick={() => void handleDelete()}
+                  >
+                    {deleting ? '삭제 중...' : '탈퇴 확인'}
+                  </button>
+                  <button
+                    type="button"
+                    className="pixel-btn pixel-btn-secondary settings-account-btn"
+                    disabled={deleting}
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

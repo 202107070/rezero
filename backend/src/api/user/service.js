@@ -212,3 +212,70 @@ export async function deleteMyMatchHistory(userId, historyIds) {
   const deleted = await deleteMatchCodeHistory(userId, historyIds);
   return { deleted };
 }
+
+export async function deleteAccount(userId) {
+  const deleteUserById = getModelFunction("deleteUserById");
+  const deleted = await deleteUserById(userId);
+  if (!deleted) {
+    throw new AppError(404, ERROR_CODE.USER_NOT_FOUND, "사용자를 찾을 수 없습니다.");
+  }
+  return { deleted: true };
+}
+
+export async function analyzeUserProfile(targetUserId) {
+  const findUserById = getModelFunction("findUserById");
+  const findUserMatchAnalytics = getModelFunction("findUserMatchAnalytics");
+  const {
+    buildAnalyticsSummary,
+    buildLocalAnalysisText,
+    generateOpenAiAnalysis,
+  } = await import("./aiAnalysis.js");
+  const { env } = await import("#config/envConfig.js");
+
+  const user = await findUserById(targetUserId);
+  if (!user) {
+    throw new AppError(404, ERROR_CODE.USER_NOT_FOUND, "사용자를 찾을 수 없습니다.");
+  }
+
+  const profile = await getUserProfile(user);
+  const matches = await findUserMatchAnalytics(targetUserId, 40);
+  const summary = buildAnalyticsSummary(profile, matches);
+
+  if (!env.openAiApiKey) {
+    throw new AppError(
+      503,
+      "OPENAI_NOT_CONFIGURED",
+      "OPENAI_API_KEY가 backend/.env에 설정되어 있지 않습니다. ChatGPT API 키를 추가한 뒤 백엔드를 재시작하세요.",
+    );
+  }
+
+  try {
+    const aiText = await generateOpenAiAnalysis(summary);
+    if (!aiText) {
+      throw new Error("OpenAI 응답이 비어 있습니다.");
+    }
+    return {
+      userId: targetUserId,
+      displayName: summary.displayName,
+      source: "openai",
+      summary,
+      analysis: aiText,
+    };
+  } catch (error) {
+    console.error("[analyzeUserProfile] OpenAI error:", error.message);
+    // API 장애 시에만 규칙 기반 임시 안내 + 원인 표시
+    const fallback = buildLocalAnalysisText(summary);
+    return {
+      userId: targetUserId,
+      displayName: summary.displayName,
+      source: "local-fallback",
+      summary,
+      analysis:
+        "⚠️ ChatGPT 분석에 실패해 임시 규칙 기반 결과를 표시합니다.\n" +
+        "(원인: " +
+        (error.message || "unknown") +
+        ")\n\n" +
+        fallback,
+    };
+  }
+}

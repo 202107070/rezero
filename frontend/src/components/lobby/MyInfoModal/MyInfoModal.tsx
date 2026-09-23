@@ -33,6 +33,7 @@ interface MyInfoModalProps {
   onToggleSelection: (historyId: string) => void;
   onSelectAll: () => void;
   onDeleteSelected: () => void;
+  onAiAnalyze?: (userId: string, userName: string) => void;
 }
 
 function presenceText(userName: string) {
@@ -73,6 +74,7 @@ export function MyInfoModal({
   onToggleSelection,
   onSelectAll,
   onDeleteSelected,
+  onAiAnalyze,
 }: MyInfoModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [tab, setTab] = useState<MyInfoTab>('stats');
@@ -241,7 +243,20 @@ export function MyInfoModal({
         )}
 
         {(tab === 'stats' || !isSelf) && (
-          <div className="d-flex justify-content-end mt-3">
+          <div className="d-flex justify-content-end mt-3" style={{ gap: '8px', flexWrap: 'wrap' }}>
+            {onAiAnalyze && (isSelf || publicUser?.userId) && (
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-primary"
+                onClick={() => {
+                  const targetId = isSelf ? '' : String(publicUser?.userId || '');
+                  // self: empty means backend uses req.user.id — pass a sentinel for frontend
+                  onAiAnalyze(isSelf ? '__self__' : targetId, isSelf ? '나' : displayName);
+                }}
+              >
+                AI 사용자 분석
+              </button>
+            )}
             <button type="button" className="pixel-btn pixel-btn-secondary" onClick={onClose}>
               닫기
             </button>

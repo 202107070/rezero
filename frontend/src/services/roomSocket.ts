@@ -36,6 +36,7 @@ export const ROOM_SOCKET_EVENTS = {
   UPDATE_TITLE: 'update_title',
   TITLE_CHANGED: 'title_changed',
   UPDATE_LOCATION: 'update_location',
+  USER_LOGOUT: 'user_logout',
 } as const;
 
 export const LOBBY_ROOM_ID = 'lobby';
@@ -556,6 +557,29 @@ export function emitUpdateLocation(params: {
       },
     );
   });
+}
+
+export function emitUserLogout(): Promise<{ success: boolean; message?: string }> {
+  try {
+    const client = getRoomSocket();
+    if (!client.connected) {
+      return Promise.resolve({ success: false, message: 'not connected' });
+    }
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => {
+        resolve({ success: false, message: 'timeout' });
+      }, 1500);
+      client.emit(ROOM_SOCKET_EVENTS.USER_LOGOUT, {}, (response?: { success?: boolean; message?: string }) => {
+        window.clearTimeout(timer);
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      });
+    });
+  } catch {
+    return Promise.resolve({ success: false, message: 'socket error' });
+  }
 }
 
 export function emitReviewInviteResponse(

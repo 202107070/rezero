@@ -10,6 +10,7 @@ interface RoomProfileModalProps {
   isHost: boolean;
   onClose: () => void;
   onKick: (index: number, name: string) => void;
+  onAiAnalyze?: (player: RoomPlayer) => void;
 }
 
 export function RoomProfileModal({
@@ -20,6 +21,7 @@ export function RoomProfileModal({
   isHost,
   onClose,
   onKick,
+  onAiAnalyze,
 }: RoomProfileModalProps) {
   const { shaking, triggerShake } = useModalShake();
   if (!open || !player) return null;
@@ -29,7 +31,7 @@ export function RoomProfileModal({
 
   return (
     <div className="problem-modal-overlay" onClick={triggerShake}>
-      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} style={{ width: '320px' }} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} style={{ width: '360px' }} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '16px', fontSize: '22px' }}>
           USER PROFILE
         </h3>
@@ -38,12 +40,22 @@ export function RoomProfileModal({
           <div style={{ fontSize: '22px', color: '#eee' }}>{player.name}</div>
           {player.isHost && <div className="slot-host-badge" style={{ visibility: 'visible', fontSize: '18px' }}>HOST</div>}
         </div>
-        <div className="text-center">
+        <div className="text-center" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+          {player.userId && onAiAnalyze && (
+            <button
+              type="button"
+              className="pixel-btn pixel-btn-primary"
+              style={{ minWidth: '140px' }}
+              onClick={() => onAiAnalyze(player)}
+            >
+              AI 사용자 분석
+            </button>
+          )}
           {isHost && !player.isHost && playerIndex !== null && (
             <button
               type="button"
               className="pixel-btn pixel-btn-danger room-kick-btn"
-              style={{ minWidth: '120px', marginRight: '8px' }}
+              style={{ minWidth: '120px' }}
               onClick={() => {
                 onClose();
                 onKick(playerIndex, player.name);

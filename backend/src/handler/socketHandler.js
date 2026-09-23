@@ -682,6 +682,22 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
+  socket.on(SOCKET_EVENTS.USER_LOGOUT, async function (data, callback) {
+    try {
+      await markUserOffline(socket.user?.id);
+      await broadcastLobbyPresence(io);
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+      // 명시적 로그아웃 후 소켓 종료 (disconnect 핸들러가 한 번 더 offline 처리해도 안전)
+      socket.disconnect(true);
+    } catch (error) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: error.message });
+      }
+    }
+  });
+
   socket.on("disconnect", async function () {
     console.log(
       "[Socket 연결 종료] " +

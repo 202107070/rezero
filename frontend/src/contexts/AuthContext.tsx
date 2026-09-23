@@ -8,7 +8,9 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  getCurrentDisplayName,
   getCurrentUser,
+  getCurrentUserName,
   login as authLogin,
   logout as authLogout,
   restoreSession,
@@ -17,8 +19,12 @@ import {
   type AuthUser,
 } from '../services/authService';
 import { leaveRoom } from '../services/roomService';
-import { disconnectRoomSocket, getActiveRoomId } from '../services/roomSocket';
-import { switchFriendOwner } from '../services/friendStore';
+import {
+  disconnectRoomSocket,
+  emitUserLogout,
+  getActiveRoomId,
+} from '../services/roomSocket';
+import { setUserPresence, switchFriendOwner } from '../services/friendStore';
 import { AUTH_EXPIRED_EVENT } from '../services/apiClient';
 import { ConnectionLostModal } from '../components/lobby/ConnectionLostModal/ConnectionLostModal';
 import { quitApp } from '../utils/windowBridge';
@@ -29,7 +35,7 @@ interface AuthContextValue {
   authReady: boolean;
   login: (username: string, password: string) => Promise<AuthResult>;
   signup: (username: string, password: string, displayName?: string) => Promise<AuthResult>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -80,7 +86,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const me = getCurrentDisplayName() || getCurrentUserName();
+    const username = getCurrentUserName();
+    if (me) setUserPresence(me, { status: 'offline' });
+    if (username && username !== me) setUserPresence(username, { status: 'offline' });
+
+    try {
+      await emitUserLogout();
+    } catch {
+      // ignore
+    }
+
     const roomId = getActiveRoomId();
     const numericRoomId = roomId ? Number(roomId) : NaN;
     if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
@@ -110,8 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       <ConnectionLostModal
         open={connectionLost}
         onConfirm={() => {
-          logout();
-          void quitApp();
+          void logout().then(() => quitApp());
         }}
       />
     </AuthContext.Provider>

@@ -14,6 +14,11 @@ initSocket(server);
 
 let shuttingDown = false;
 
+function logShutdown(step, detail) {
+  const suffix = detail ? " — " + detail : "";
+  console.log("[shutdown] " + step + suffix);
+}
+
 async function startServer() {
   await testDbConnection();
   await connectRedis();
@@ -23,55 +28,121 @@ async function startServer() {
   });
 }
 
-async function stopServer(signal) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log(signal + " received. Backend is shutting down.");
+function forceExit(code) {
+  console.error("[shutdown] Force exit (code=" + code + "). 프로세스를 강제 종료합니다.");
+  process.exit(code);
+}
 
+async function stopServer(signal) {
+  if (shuttingDown) {
+    logShutdown("already-in-progress", signal + " ignored");
+    return;
+  }
+  shuttingDown = true;
+  logShutdown("start", signal + " received");
+
+  // unref 하지 않음 — 열린 핸들이 있어도 강제 종료 타이머가 반드시 동작해야 함
   const forceTimer = setTimeout(function () {
-    console.error("Force exit after shutdown timeout.");
-    process.exit(1);
-  }, 5000);
-  if (typeof forceTimer.unref === "function") forceTimer.unref();
+    forceExit(1);
+  }, 4000);
 
   try {
     const io = getSocket();
     if (io) {
-      await new Promise(function (resolve) {
-        io.close(function () {
-          resolve();
-        });
-      });
+      logShutdown("socketio", "disconnectSockets(true)");
+      try {
+        io.disconnectSockets(true);
+      } catch (err) {
+        console.error("[shutdown] disconnectSockets error:", err?.message || err);
+      }
+      logShutdown("socketio", "closing server (max 1.5s)");
+      await Promise.race([
+        new Promise(function (resolve) {
+          io.close(function () {
+            logShutdown("socketio", "closed");
+            resolve();
+          });
+        }),
+        new Promise(function (resolve) {
+          setTimeout(function () {
+            logShutdown("socketio", "close timeout — continue");
+            resolve();
+          }, 1500);
+        }),
+      ]);
+    } else {
+      logShutdown("socketio", "not initialized");
     }
   } catch (err) {
-    console.error("Socket.IO close error:", err?.message || err);
+    console.error("[shutdown] Socket.IO close error:", err?.message || err);
   }
-
-  server.close(async function () {
-    try {
-      if (redisClient.isOpen) {
-        await redisClient.quit();
-      }
-    } catch (err) {
-      console.error("Redis quit error:", err?.message || err);
-    }
-    try {
-      await pool.end();
-    } catch (err) {
-      console.error("DB pool end error:", err?.message || err);
-    }
-    process.exit(0);
-  });
 
   if (typeof server.closeAllConnections === "function") {
-    setTimeout(function () {
-      try {
-        server.closeAllConnections();
-      } catch {
-        // ignore
-      }
-    }, 2000);
+    try {
+      logShutdown("http", "closeAllConnections()");
+      server.closeAllConnections();
+    } catch (err) {
+      console.error("[shutdown] closeAllConnections error:", err?.message || err);
+    }
   }
+
+  logShutdown("http", "server.close (max 1.5s)");
+  await new Promise(function (resolve) {
+    server.close(function () {
+      logShutdown("http", "server closed");
+      resolve();
+    });
+    setTimeout(function () {
+      logShutdown("http", "server.close timeout — continue");
+      resolve();
+    }, 1500);
+  });
+
+  try {
+    if (redisClient.isOpen) {
+      logShutdown("redis", "quit (max 1s)");
+      await Promise.race([
+        redisClient.quit().then(function () {
+          logShutdown("redis", "quit ok");
+        }),
+        new Promise(function (_, reject) {
+          setTimeout(function () {
+            reject(new Error("redis quit timeout"));
+          }, 1000);
+        }),
+      ]);
+    } else {
+      logShutdown("redis", "already closed");
+    }
+  } catch (err) {
+    console.error("[shutdown] Redis quit error:", err?.message || err);
+    try {
+      redisClient.disconnect();
+      logShutdown("redis", "disconnect() fallback");
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    logShutdown("db", "pool.end (max 1s)");
+    await Promise.race([
+      pool.end().then(function () {
+        logShutdown("db", "pool ended");
+      }),
+      new Promise(function (_, reject) {
+        setTimeout(function () {
+          reject(new Error("pool end timeout"));
+        }, 1000);
+      }),
+    ]);
+  } catch (err) {
+    console.error("[shutdown] DB pool end error:", err?.message || err);
+  }
+
+  clearTimeout(forceTimer);
+  logShutdown("done", "process.exit(0)");
+  process.exit(0);
 }
 
 server.on("error", function (error) {
@@ -87,11 +158,24 @@ process.once("SIGTERM", function () {
   stopServer("SIGTERM");
 });
 
+// Windows Ctrl+Break
+process.once("SIGBREAK", function () {
+  stopServer("SIGBREAK");
+});
+
 startServer().catch(async function (error) {
   console.error("Backend startup failed:", error.message);
-  if (redisClient.isOpen) {
-    await redisClient.quit();
+  try {
+    if (redisClient.isOpen) {
+      await redisClient.quit();
+    }
+  } catch {
+    // ignore
   }
-  await pool.end();
+  try {
+    await pool.end();
+  } catch {
+    // ignore
+  }
   process.exit(1);
 });

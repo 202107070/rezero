@@ -149,7 +149,8 @@ export async function listOnlineUsers() {
 export async function broadcastLobbyPresence(io) {
   if (!io) return;
   const users = await listOnlineUsers();
-  io.to(LOBBY_ROOM_ID).emit(SOCKET_EVENTS.LOBBY_PRESENCE, { users });
+  // 로비뿐 아니라 대기방/배틀 등 모든 소켓에 전파 (로그아웃 오프라인 동기화)
+  io.emit(SOCKET_EVENTS.LOBBY_PRESENCE, { users });
 }
 
 export const saveInfoService = {

@@ -4,6 +4,7 @@ import { InventoryPanel } from '../../components/lobby/InventoryPanel/InventoryP
 import { InventoryItemsModal } from '../../components/lobby/InventoryItemsModal/InventoryItemsModal';
 import { LobbyChatPanel } from '../../components/lobby/LobbyChatPanel/LobbyChatPanel';
 import { MyInfoModal } from '../../components/lobby/MyInfoModal/MyInfoModal';
+import { AiUserAnalysisModal } from '../../components/lobby/AiUserAnalysisModal/AiUserAnalysisModal';
 import { RoomFilterModal } from '../../components/lobby/RoomFilterModal/RoomFilterModal';
 import { PracticeModal } from '../../components/lobby/PracticeModal/PracticeModal';
 import { ProfilePanel } from '../../components/lobby/ProfilePanel/ProfilePanel';
@@ -18,7 +19,7 @@ import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitCo
 import { SettingsModal } from '../../components/lobby/SettingsModal/SettingsModal';
 import { ROULETTE_COST, ROULETTE_ITEMS, type ItemInventory } from '../../constants/itemTypes';
 import { ROUTES } from '../../constants/routes';
-import { useAuthUser } from '../../contexts/AuthContext';
+import { useAuth, useAuthUser } from '../../contexts/AuthContext';
 import { loadTitles, type TitleData } from '../../constants/titleTypes';
 import {
   buildRoomSearchParams,
@@ -211,6 +212,7 @@ function loadInitialUsers(): LobbyUser[] {
 export default function LobbyPage() {
   const navigate = useNavigate();
   const authUser = useAuthUser();
+  const { logout } = useAuth();
 
   const [showModal, setShowModal] = useState(false);
   const [showPracticeModal, setShowPracticeModal] = useState(false);
@@ -244,6 +246,7 @@ export default function LobbyPage() {
   const [profileRating, setProfileRating] = useState(getRatingScore);
   const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [showMyInfoModal, setShowMyInfoModal] = useState(false);
+  const [aiTarget, setAiTarget] = useState<{ userId: string; userName: string } | null>(null);
   const [myInfoMode, setMyInfoMode] = useState<'self' | 'public'>('self');
   const [myInfoPublicUser, setMyInfoPublicUser] = useState<LobbyUser | null>(null);
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
@@ -911,6 +914,26 @@ export default function LobbyPage() {
     void applyDisplayMode(mode);
   };
 
+  const handleLogout = () => {
+    setShowSettingsModal(false);
+    void logout().then(() => {
+      navigate(ROUTES.LOGIN);
+    });
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      await apiRequest('/users/me', { method: 'DELETE' });
+      setShowSettingsModal(false);
+      await logout();
+      navigate(ROUTES.LOGIN);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : '회원 탈퇴에 실패했습니다.';
+      appendSystemChat(message);
+      throw error;
+    }
+  };
+
   const startPractice = () => {
     const params = new URLSearchParams({
       lang: practiceLang,
@@ -1033,6 +1056,19 @@ export default function LobbyPage() {
         }
         onSelectAll={handleSelectAllHistory}
         onDeleteSelected={handleDeleteSelectedHistory}
+        onAiAnalyze={(userId, userName) => {
+          const targetId = userId === '__self__' ? authUser.id : userId;
+          if (!targetId) return;
+          setShowMyInfoModal(false);
+          setAiTarget({ userId: targetId, userName });
+        }}
+      />
+
+      <AiUserAnalysisModal
+        open={Boolean(aiTarget)}
+        userId={aiTarget?.userId || ''}
+        userName={aiTarget?.userName || ''}
+        onClose={() => setAiTarget(null)}
       />
 
       <RoomCreateModal
@@ -1152,11 +1188,17 @@ export default function LobbyPage() {
         audioSettings={audioSettings}
         onClose={() => setShowSettingsModal(false)}
         onConfirm={handleSettingsConfirm}
+        onLogout={handleLogout}
+        onDeleteAccount={handleDeleteAccount}
       />
 
       <ExitConfirmModal
         open={showExitModal}
-        onConfirm={() => void quitApp()}
+        onConfirm={() => {
+          void logout().finally(() => {
+            void quitApp();
+          });
+        }}
         onCancel={() => setShowExitModal(false)}
       />
 

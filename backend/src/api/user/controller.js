@@ -1,6 +1,8 @@
 import { parseLoginRequest } from "./dto/loginRequestDto.js";
 import { parseSignupRequest } from "./dto/signupRequestDto.js";
 import {
+  analyzeUserProfile,
+  deleteAccount,
   deleteMyMatchHistory,
   getCurrentUser,
   listMyMatchHistory,
@@ -9,7 +11,12 @@ import {
   signupUser,
   spinRoulette,
 } from "./service.js";
-import { listOnlineUsers } from "#service/socketService.js";
+import {
+  broadcastLobbyPresence,
+  listOnlineUsers,
+  markUserOffline,
+} from "#service/socketService.js";
+import { getSocket } from "#config/socketConfig.js";
 import { sendSuccess } from "#utils/responseHelper.js";
 import { AppError } from "#utils/appError.js";
 
@@ -91,6 +98,43 @@ export async function removeMatchHistory(req, res, next) {
       throw new AppError(400, "INVALID_MATCH_HISTORY", "삭제할 기록이 없습니다.");
     }
     const result = await deleteMyMatchHistory(req.user.id, ids);
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function removeMe(req, res, next) {
+  try {
+    const userId = req.user.id;
+    await markUserOffline(userId);
+    await broadcastLobbyPresence(getSocket());
+    const result = await deleteAccount(userId);
+    try {
+      const io = getSocket();
+      if (io) {
+        for (const [, socket] of io.of("/").sockets) {
+          if (String(socket.user?.id) === String(userId)) {
+            socket.disconnect(true);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function postUserAiAnalysis(req, res, next) {
+  try {
+    const targetUserId = String(req.body?.userId || req.user.id || "").trim();
+    if (!targetUserId) {
+      throw new AppError(400, "INVALID_USER", "분석 대상 유저가 없습니다.");
+    }
+    const result = await analyzeUserProfile(targetUserId);
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);
