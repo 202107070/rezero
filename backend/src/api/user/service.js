@@ -228,7 +228,7 @@ export async function analyzeUserProfile(targetUserId) {
   const {
     buildAnalyticsSummary,
     buildLocalAnalysisText,
-    generateOpenAiAnalysis,
+    generateCursorAnalysis,
   } = await import("./aiAnalysis.js");
   const { env } = await import("#config/envConfig.js");
 
@@ -241,29 +241,28 @@ export async function analyzeUserProfile(targetUserId) {
   const matches = await findUserMatchAnalytics(targetUserId, 40);
   const summary = buildAnalyticsSummary(profile, matches);
 
-  if (!env.openAiApiKey) {
+  if (!env.cursorApiKey) {
     throw new AppError(
       503,
-      "OPENAI_NOT_CONFIGURED",
-      "OPENAI_API_KEY가 backend/.env에 설정되어 있지 않습니다. ChatGPT API 키를 추가한 뒤 백엔드를 재시작하세요.",
+      "CURSOR_NOT_CONFIGURED",
+      "CURSOR_API_KEY가 backend/.env에 설정되어 있지 않습니다. Cursor Dashboard → API Keys에서 키를 발급해 추가한 뒤 백엔드를 재시작하세요.",
     );
   }
 
   try {
-    const aiText = await generateOpenAiAnalysis(summary);
+    const aiText = await generateCursorAnalysis(summary);
     if (!aiText) {
-      throw new Error("OpenAI 응답이 비어 있습니다.");
+      throw new Error("Cursor AI 응답이 비어 있습니다.");
     }
     return {
       userId: targetUserId,
       displayName: summary.displayName,
-      source: "openai",
+      source: "cursor",
       summary,
       analysis: aiText,
     };
   } catch (error) {
-    console.error("[analyzeUserProfile] OpenAI error:", error.message);
-    // API 장애 시에만 규칙 기반 임시 안내 + 원인 표시
+    console.error("[analyzeUserProfile] Cursor AI error:", error.message);
     const fallback = buildLocalAnalysisText(summary);
     return {
       userId: targetUserId,
@@ -271,7 +270,7 @@ export async function analyzeUserProfile(targetUserId) {
       source: "local-fallback",
       summary,
       analysis:
-        "⚠️ ChatGPT 분석에 실패해 임시 규칙 기반 결과를 표시합니다.\n" +
+        "⚠️ Cursor AI 분석에 실패해 임시 규칙 기반 결과를 표시합니다.\n" +
         "(원인: " +
         (error.message || "unknown") +
         ")\n\n" +

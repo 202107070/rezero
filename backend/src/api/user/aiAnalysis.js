@@ -230,42 +230,32 @@ export function buildLocalAnalysisText(summary) {
   return lines.join("\n");
 }
 
-export async function generateOpenAiAnalysis(summary) {
-  if (!env.openAiApiKey) return null;
+export async function generateCursorAnalysis(summary) {
+  if (!env.cursorApiKey) return null;
 
+  const { Agent } = await import("@cursor/sdk");
   const prompt =
-    "당신은 코딩 배틀 게임 코치입니다. 아래 JSON 통계를 보고 한국어로 친절하고 구체적인 사용자 분석을 작성하세요. " +
-    "강점/약점/언어별 특징/풀이 속도/추천 연습 방향을 포함하세요. 과장하지 말고 800자 이내로 작성하세요.\n\n" +
+    "당신은 코딩 배틀 게임 코치입니다. 아래 JSON 통계만 보고 한국어로 친절하고 구체적인 사용자 분석을 작성하세요. " +
+    "강점/약점/언어별 특징/풀이 속도/추천 연습 방향을 포함하세요. 과장하지 말고 800자 이내로 작성하세요. " +
+    "파일을 읽거나 수정하지 말고, 분석 문장만 출력하세요.\n\n" +
     JSON.stringify(summary, null, 2);
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + env.openAiApiKey,
-    },
-    body: JSON.stringify({
-      model: env.openAiModel || "gpt-4o-mini",
-      temperature: 0.7,
-      messages: [
-        {
-          role: "system",
-          content: "You are a helpful Korean coding battle coach.",
-        },
-        { role: "user", content: prompt },
-      ],
-    }),
+  const result = await Agent.prompt(prompt, {
+    apiKey: env.cursorApiKey,
+    model: { id: env.cursorModel || "composer-2.5" },
+    mode: "plan",
+    tools: [],
+    local: { cwd: process.cwd() },
   });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error("OpenAI API 오류: " + response.status + " " + text.slice(0, 200));
+  if (result.status === "error") {
+    const message = result.error?.message || "Cursor agent run failed";
+    throw new Error("Cursor AI 오류: " + message);
   }
 
-  const payload = await response.json();
-  const content = payload?.choices?.[0]?.message?.content;
-  if (!content || typeof content !== "string") {
-    throw new Error("OpenAI 응답이 비어 있습니다.");
+  const content = typeof result.result === "string" ? result.result.trim() : "";
+  if (!content) {
+    throw new Error("Cursor AI 응답이 비어 있습니다.");
   }
-  return content.trim();
+  return content;
 }

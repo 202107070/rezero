@@ -97,7 +97,11 @@ export function AiUserAnalysisModal({ open, userId, userName, onClose }: AiUserA
             )}
             <div className="ai-analysis-body">{result.analysis || '분석 결과가 없습니다.'}</div>
             <div className="ai-analysis-source">
-              {result.source === 'openai' ? 'OpenAI 분석' : '규칙 기반 분석'}
+              {result.source === 'cursor'
+                ? 'Cursor AI 분석'
+                : result.source === 'local-fallback'
+                  ? '규칙 기반(임시)'
+                  : '규칙 기반 분석'}
             </div>
           </>
         )}

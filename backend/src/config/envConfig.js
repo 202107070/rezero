@@ -42,12 +42,14 @@ function getJwtExpiresIn() {
   return "12h";
 }
 
-function getOpenAiApiKey() {
-  return process.env.OPENAI_API_KEY ? String(process.env.OPENAI_API_KEY).trim() : "";
+function getCursorApiKey() {
+  return process.env.CURSOR_API_KEY ? String(process.env.CURSOR_API_KEY).trim() : "";
 }
 
-function getOpenAiModel() {
-  return process.env.OPENAI_MODEL ? String(process.env.OPENAI_MODEL).trim() : "gpt-4o-mini";
+function getCursorModel() {
+  return process.env.CURSOR_MODEL
+    ? String(process.env.CURSOR_MODEL).trim()
+    : "composer-2.5";
 }
 
 export const env = {
@@ -56,6 +58,6 @@ export const env = {
   port: getPort(),
   jwtSecret: getJwtSecret(),
   jwtExpiresIn: getJwtExpiresIn(),
-  openAiApiKey: getOpenAiApiKey(),
-  openAiModel: getOpenAiModel(),
+  cursorApiKey: getCursorApiKey(),
+  cursorModel: getCursorModel(),
 };
