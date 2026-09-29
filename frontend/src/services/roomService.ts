@@ -262,6 +262,10 @@ export function isAlreadyJoinedError(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'ROOM_ALREADY_JOINED';
 }
 
+export function isRoomKickedError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'ROOM_KICKED';
+}
+
 export function getRoomErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 'ROOM_KICKED') {

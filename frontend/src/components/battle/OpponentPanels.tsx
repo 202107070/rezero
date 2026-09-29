@@ -9,7 +9,7 @@ import {
 } from '../../utils/battle/demoBots';
 import { resolveProblemCapabilities } from '../../utils/problemCapabilities';
 import FillBlankRenderer from './FillBlankRenderer';
-import { getTierIconByUserName } from '../../utils/tierUtils';
+import { getTierIconByTier } from '../../utils/tierUtils';
 
 export interface BotView extends DemoBot {
   status: string;
@@ -220,7 +220,7 @@ export default function OpponentPanels({
       >
         <div className="mini-header">
           <span>
-            {bot.avatar} <span className="mini-tier">{getTierIconByUserName(bot.name)}</span> {bot.name}
+            {bot.avatar} <span className="mini-tier">{getTierIconByTier(bot.rank || '브론즈')}</span> {bot.name}
             <span className="mini-view-problem-label"> · Q{viewProblemIndex + 1}</span>
           </span>
           <span>
@@ -296,7 +296,7 @@ export default function OpponentPanels({
                 ◀ BACK
               </button>
             )}
-            {bot.avatar} <span className="mini-tier">{getTierIconByUserName(bot.name)}</span> {bot.name}
+            {bot.avatar} <span className="mini-tier">{getTierIconByTier(bot.rank || '브론즈')}</span> {bot.name}
             <span className="mini-view-problem-label"> · Q{viewProblemIndex + 1}</span>
           </span>
           <span>

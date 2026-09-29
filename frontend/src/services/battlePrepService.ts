@@ -84,6 +84,7 @@ export function applyMatchStart(params: {
         character: player.character,
         isHost: player.isHost,
         userId: player.userId,
+        rank: player.rank,
       })),
     });
   } catch (e) {
@@ -144,6 +145,7 @@ export function prepareBattleStart(params: {
         character: player.character,
         isHost: player.isHost,
         userId: player.userId,
+        rank: player.rank,
       })),
     });
 

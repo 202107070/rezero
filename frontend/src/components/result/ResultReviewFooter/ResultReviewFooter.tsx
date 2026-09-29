@@ -32,7 +32,6 @@ export function ResultReviewFooter({
               type="button"
               className="pixel-btn pixel-btn-primary review-footer-btn"
               onClick={onRequestReview}
-              disabled={selectedCount === 0}
             >
               리뷰 요청
             </button>

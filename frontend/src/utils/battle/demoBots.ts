@@ -6,6 +6,7 @@ export interface DemoBot {
   id: string;
   name: string;
   avatar: string;
+  rank?: string;
   style: string;
   tag: string;
   skill: number;
@@ -53,6 +54,7 @@ export interface BattleRoomPlayer {
   character: string;
   isHost: boolean;
   userId?: string;
+  rank?: string;
 }
 
 function buildBotFromProfile(
@@ -62,11 +64,13 @@ function buildBotFromProfile(
   name: string,
   avatar: string,
   id: string,
+  rank?: string,
 ): Omit<DemoBot, 'solveScheduleByProblem' | 'blankAnswersByProblem' | 'scoreBonusByProblem'> {
   return {
     id,
     name,
     avatar,
+    rank: rank || '브론즈',
     style: profile.style,
     tag: profile.tag,
     skill: clamp(0.55 + (botCount - index) * 0.06, 0.55, 0.95),
@@ -101,6 +105,7 @@ export function createDemoOpponentRoster(
         player.name,
         player.character,
         player.userId ? `player-${player.userId}` : `player-${player.id}`,
+        player.rank,
       ),
     );
   }

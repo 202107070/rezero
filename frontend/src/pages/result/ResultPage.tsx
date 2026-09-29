@@ -295,6 +295,7 @@ export default function ResultPage() {
   const [liveRatingTier, setLiveRatingTier] = useState(() => getTierByRating(getRatingScore()));
 
   const reviewSelectMode = reviewPhase === 'selecting';
+  const [reviewPulse, setReviewPulse] = useState(0);
 
   useEffect(() => {
     if (!roomId) return;
@@ -741,6 +742,7 @@ export default function ResultPage() {
   const handleStartReview = () => {
     setReviewPhase('selecting');
     setSelectedReviewProblems(new Set());
+    setReviewPulse((value) => value + 1);
   };
 
   const handleCancelReview = () => {
@@ -749,7 +751,10 @@ export default function ResultPage() {
   };
 
   const handleRequestReview = () => {
-    if (selectedReviewProblems.size === 0) return;
+    if (selectedReviewProblems.size === 0) {
+      setReviewPulse((value) => value + 1);
+      return;
+    }
     setInviteTargetIds(new Set());
     setShowInviteModal(true);
   };
@@ -1121,6 +1126,7 @@ export default function ResultPage() {
               departedUserIds={departedUserIds}
               myUserId={myUserId}
               reviewSelectMode={reviewSelectMode}
+              reviewPulse={reviewPulse}
               selectedReviewProblems={selectedReviewProblems}
               onToggleReviewProblem={toggleReviewProblem}
               onOpenProblemDetail={handleOpenProblemDetail}
@@ -1139,6 +1145,7 @@ export default function ResultPage() {
                 departedUserIds={departedUserIds}
                 myUserId={myUserId}
                 reviewSelectMode={reviewSelectMode}
+                reviewPulse={reviewPulse}
                 selectedReviewProblems={selectedReviewProblems}
                 onToggleReviewProblem={toggleReviewProblem}
                 onOpenProblemDetail={handleOpenProblemDetail}
@@ -1152,6 +1159,7 @@ export default function ResultPage() {
                 departedUserIds={departedUserIds}
                 myUserId={myUserId}
                 reviewSelectMode={reviewSelectMode}
+                reviewPulse={reviewPulse}
                 selectedReviewProblems={selectedReviewProblems}
                 onToggleReviewProblem={toggleReviewProblem}
                 onOpenProblemDetail={handleOpenProblemDetail}

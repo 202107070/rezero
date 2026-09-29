@@ -10,6 +10,7 @@ interface ResultRankingPanelProps {
   departedUserIds?: Set<string>;
   myUserId: string;
   reviewSelectMode: boolean;
+  reviewPulse?: number;
   selectedReviewProblems: Set<number>;
   onToggleReviewProblem: (index: number) => void;
   onOpenProblemDetail?: (player: ResultPlayer, problemIndex: number) => void;
@@ -26,6 +27,7 @@ export function ResultRankingPanel({
   departedUserIds,
   myUserId,
   reviewSelectMode,
+  reviewPulse = 0,
   selectedReviewProblems,
   onToggleReviewProblem,
   onOpenProblemDetail,
@@ -46,6 +48,7 @@ export function ResultRankingPanel({
             panelClass={`rank-${p.rank <= 3 ? p.rank : ''}`}
             departed={departedUserIds?.has(p.id) ?? false}
             reviewSelectMode={reviewSelectMode}
+            reviewPulse={reviewPulse}
             selectedReviewProblems={selectedReviewProblems}
             onToggleReviewProblem={onToggleReviewProblem}
             onOpenProblemDetail={

@@ -8,6 +8,7 @@ interface ResultTeamPanelProps {
   departedUserIds?: Set<string>;
   myUserId?: string;
   reviewSelectMode?: boolean;
+  reviewPulse?: number;
   selectedReviewProblems?: Set<number>;
   onToggleReviewProblem?: (index: number) => void;
   onOpenProblemDetail?: (player: ResultPlayer, problemIndex: number) => void;
@@ -20,6 +21,7 @@ export function ResultTeamPanel({
   departedUserIds,
   myUserId,
   reviewSelectMode = false,
+  reviewPulse = 0,
   selectedReviewProblems,
   onToggleReviewProblem,
   onOpenProblemDetail,
@@ -39,6 +41,7 @@ export function ResultTeamPanel({
             player={p}
             departed={departedUserIds?.has(p.id) ?? false}
             reviewSelectMode={reviewSelectMode}
+            reviewPulse={reviewPulse}
             selectedReviewProblems={selectedReviewProblems}
             onToggleReviewProblem={onToggleReviewProblem}
             onOpenProblemDetail={

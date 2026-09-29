@@ -629,6 +629,7 @@ export default function BattlePage() {
               ...bot,
               name: next.name || bot.name,
               avatar: next.avatar || bot.avatar,
+              rank: next.rank || bot.rank,
               solveScheduleByProblem: problems.map(() => -1),
             };
           });

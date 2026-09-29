@@ -11,6 +11,7 @@ interface ResultPlayerRowProps {
   onToggleReviewProblem?: (index: number) => void;
   onOpenProblemDetail?: (index: number) => void;
   isReviewSelectable?: boolean;
+  reviewPulse?: number;
   inviteSelectable?: boolean;
   inviteSelected?: boolean;
   onInviteSelect?: () => void;
@@ -27,6 +28,7 @@ export function ResultPlayerRow({
   onToggleReviewProblem,
   onOpenProblemDetail,
   isReviewSelectable = false,
+  reviewPulse = 0,
   inviteSelectable = false,
   inviteSelected = false,
   onInviteSelect,
@@ -101,7 +103,9 @@ export function ResultPlayerRow({
               })}
             </div>
             {(canOpenDetail || canSelectDots) && (
-              <div className="player-problem-hint">문제를 확인하세요.</div>
+              <div className="player-problem-hint">
+                {canSelectDots ? '내 문제를 선택하세요.' : '문제를 확인하세요.'}
+              </div>
             )}
           </div>
         )}
@@ -117,15 +121,19 @@ export function ResultPlayerRow({
     </>
   );
 
-  const rowClass = `player-row${showRank ? '' : ' no-rank'}${panelClass ? ` ${panelClass}` : ''}${departed ? ' departed' : ''}${inviteSelected ? ' invite-selected' : ''}${inviteSelectable ? ' invite-selectable' : ''}`;
+  const rowClass = `player-row${showRank ? '' : ' no-rank'}${panelClass ? ` ${panelClass}` : ''}${departed ? ' departed' : ''}${inviteSelected ? ' invite-selected' : ''}${inviteSelectable ? ' invite-selectable' : ''}${canSelectDots ? ' review-select-mine' : ''}`;
 
   if (inviteSelectable && onInviteSelect) {
     return (
-      <button type="button" className={rowClass} onClick={onInviteSelect}>
+      <button type="button" key={canSelectDots ? reviewPulse : undefined} className={rowClass} onClick={onInviteSelect}>
         {rowContent}
       </button>
     );
   }
 
-  return <div className={rowClass}>{rowContent}</div>;
+  return (
+    <div key={canSelectDots ? reviewPulse : undefined} className={rowClass}>
+      {rowContent}
+    </div>
+  );
 }

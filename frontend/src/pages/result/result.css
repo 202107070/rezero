@@ -308,6 +308,23 @@
   scrollbar-gutter: stable;
 }
 
+.player-row.review-select-mine {
+  animation: review-pick-pulse 0.7s ease-in-out 3;
+  border-color: var(--px-warning);
+}
+
+@keyframes review-pick-pulse {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    box-shadow: var(--px-shadow-hard);
+  }
+  40% {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 #000, 0 0 0 3px var(--px-warning);
+  }
+}
+
 .player-row {
   background: #252f3f;
   border: 4px solid var(--px-border);

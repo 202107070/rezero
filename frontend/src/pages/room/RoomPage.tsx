@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, type MouseEvent, useState } from 'react';
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../services/authService';
+import { getRatingScore } from '../../services/userService';
+import { getTierByRating } from '../../utils/tierUtils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BattleSettingsPanel } from '../../components/room/BattleSettingsPanel/BattleSettingsPanel';
 import { CharacterSelect } from '../../components/room/CharacterSelect/CharacterSelect';
@@ -32,6 +34,7 @@ import {
   emptyPlayerSlots,
   fetchRoom,
   getRoomErrorMessage,
+  isRoomKickedError,
   isAlreadyJoinedError,
   joinRoom,
   kickRoomParticipant,
@@ -72,7 +75,6 @@ import {
 } from '../../services/roomSocket';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
-import { AiUserAnalysisModal } from '../../components/lobby/AiUserAnalysisModal/AiUserAnalysisModal';
 import {
   addFriend,
   canSummonFriend,
@@ -171,7 +173,6 @@ export default function RoomPage() {
     fromUserId: string;
     fromUserName: string;
   } | null>(null);
-  const [aiTarget, setAiTarget] = useState<{ userId: string; userName: string } | null>(null);
 
   const roomTitle = roomDetail?.title || fallbackTitle;
   const isPrivate = roomDetail?.isPrivate ?? (fallbackPwd.length > 0 && fallbackPwd !== 'protected');
@@ -208,6 +209,7 @@ export default function RoomPage() {
         return {
           ...player,
           name: selfName || player.name || 'UNKNOWN',
+          rank: getTierByRating(getRatingScore()),
         };
       }
       return {
@@ -242,6 +244,19 @@ export default function RoomPage() {
         if (user.username) onlineByName.set(user.username, user);
         if (user.userId) onlineById.set(String(user.userId), user);
       }
+      setPlayers((prev) =>
+        prev.map((player) => {
+          if (!player?.userId) return player;
+          if (String(player.userId) === String(getCurrentUserId())) {
+            return { ...player, rank: getTierByRating(getRatingScore()) };
+          }
+          const remote = onlineById.get(String(player.userId));
+          if (remote && remote.ratingScore != null && Number.isFinite(Number(remote.ratingScore))) {
+            return { ...player, rank: getTierByRating(Number(remote.ratingScore)) };
+          }
+          return player;
+        }),
+      );
       for (const name of getFriendNames()) {
         const friendId = findFriendUserId(name);
         const remote =
@@ -432,41 +447,11 @@ export default function RoomPage() {
                   user?: { id?: string; displayName?: string; username?: string };
                 }) => {
                   const name = payload?.user?.displayName || payload?.user?.username;
-                  const joinedUserId = payload?.user?.id ? String(payload.user.id) : '';
                   if (name) {
                     setMessages((prev) => {
                       const line = `>> [${name}] 님이 입장하셨습니다.`;
                       if (prev.some((msg) => msg.type === 'sys' && msg.text === line)) return prev;
                       return [...prev, { type: 'sys', text: line }];
-                    });
-                  }
-                  if (joinedUserId && name) {
-                    setPlayers((prev) => {
-                      const exists = prev.some((player) => player && String(player.userId) === joinedUserId);
-                      if (exists) {
-                        return prev.map((player) =>
-                          player && String(player.userId) === joinedUserId
-                            ? { ...player, name }
-                            : player,
-                        );
-                      }
-                      const next = [...prev];
-                      const emptyIndex = next.findIndex((slot, index) => index > 0 && slot === null);
-                      const targetIndex = emptyIndex >= 0 ? emptyIndex : next.findIndex((slot) => slot === null);
-                      if (targetIndex >= 0) {
-                        next[targetIndex] = {
-                          id: Date.now(),
-                          userId: joinedUserId,
-                          name,
-                          rank: '브론즈',
-                          isHost: false,
-                          isReady: false,
-                          language: '☕',
-                          character: '🤺',
-                          status: 'WAITING',
-                        };
-                      }
-                      return next;
                     });
                   }
                   void fetchRoom(numericRoomId)
@@ -657,7 +642,7 @@ export default function RoomPage() {
                   try {
                     sessionStorage.setItem(
                       'rezero_kick_notice',
-                      payload?.message || '방에서 강퇴되었습니다.',
+                      '방장에 의해 강퇴되었습니다.',
                     );
                   } catch {
                     // ignore
@@ -685,6 +670,15 @@ export default function RoomPage() {
           }
         }
         clearPendingJoinPassword();
+        if (isRoomKickedError(error)) {
+          try {
+            sessionStorage.setItem('rezero_kick_notice', '강퇴당했으므로 입장이 불가합니다.');
+          } catch {
+            // ignore
+          }
+          navigate(ROUTES.LOBBY);
+          return;
+        }
         setAlertMessage(getRoomErrorMessage(error));
         setShowAlertModal(true);
         navigate(ROUTES.LOBBY);
@@ -1187,18 +1181,6 @@ export default function RoomPage() {
           setKickTarget({ index, name });
           setShowKickModal(true);
         }}
-        onAiAnalyze={(player) => {
-          if (!player.userId) return;
-          setShowProfileModal(false);
-          setAiTarget({ userId: String(player.userId), userName: player.name });
-        }}
-      />
-
-      <AiUserAnalysisModal
-        open={Boolean(aiTarget)}
-        userId={aiTarget?.userId || ''}
-        userName={aiTarget?.userName || ''}
-        onClose={() => setAiTarget(null)}
       />
 
       {contextMenu && (

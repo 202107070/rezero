@@ -10,7 +10,6 @@ interface RoomProfileModalProps {
   isHost: boolean;
   onClose: () => void;
   onKick: (index: number, name: string) => void;
-  onAiAnalyze?: (player: RoomPlayer) => void;
 }
 
 export function RoomProfileModal({
@@ -21,7 +20,6 @@ export function RoomProfileModal({
   isHost,
   onClose,
   onKick,
-  onAiAnalyze,
 }: RoomProfileModalProps) {
   const { shaking, triggerShake } = useModalShake();
   if (!open || !player) return null;
@@ -41,16 +39,6 @@ export function RoomProfileModal({
           {player.isHost && <div className="slot-host-badge" style={{ visibility: 'visible', fontSize: '18px' }}>HOST</div>}
         </div>
         <div className="text-center" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-          {player.userId && onAiAnalyze && (
-            <button
-              type="button"
-              className="pixel-btn pixel-btn-primary"
-              style={{ minWidth: '140px' }}
-              onClick={() => onAiAnalyze(player)}
-            >
-              AI 분석
-            </button>
-          )}
           {isHost && !player.isHost && playerIndex !== null && (
             <button
               type="button"
