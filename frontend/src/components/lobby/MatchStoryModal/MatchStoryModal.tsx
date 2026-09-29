@@ -15,6 +15,7 @@ interface MatchStoryModalProps {
   onToggleSelection: (historyId: string) => void;
   onSelectAll: () => void;
   onDeleteSelected: () => void;
+  onAnalyzeEntry?: (entry: CodeHistoryEntry) => void;
 }
 
 export function MatchStoryModal({
@@ -30,6 +31,7 @@ export function MatchStoryModal({
   onToggleSelection,
   onSelectAll,
   onDeleteSelected,
+  onAnalyzeEntry,
 }: MatchStoryModalProps) {
   const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
@@ -53,50 +55,57 @@ export function MatchStoryModal({
           <div className="match-story-layout">
             <div className="pixel-card match-story-list">
               {codeHistory.map((entry, idx) => (
-                <button
-                  key={`${entry.historyId}-${idx}`}
-                  type="button"
-                  className="profile-btn w-100 text-start"
-                  style={{
-                    marginBottom: '6px',
-                    background: selectedIds.includes(entry.historyId)
-                      ? 'rgba(231, 110, 85, 0.35)'
-                      : selectedIndex === idx
-                        ? 'var(--px-primary)'
-                        : 'var(--px-surface-light)',
-                    borderColor: selectedIds.includes(entry.historyId) ? 'var(--px-danger)' : undefined,
-                  }}
-                  onClick={() => onSelectEntry(idx)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    <div style={{ fontSize: '14px' }}>
-                      게임 #{idx + 1}
-                      {entry.roomId ? ` · ${entry.roomId}번 방` : ''}
+                <div key={`${entry.historyId}-${idx}`} className="match-story-entry">
+                  <button
+                    type="button"
+                    className="profile-btn match-story-entry-main text-start"
+                    style={{
+                      background: selectedIds.includes(entry.historyId)
+                        ? 'rgba(231, 110, 85, 0.35)'
+                        : selectedIndex === idx
+                          ? 'var(--px-primary)'
+                          : 'var(--px-surface-light)',
+                      borderColor: selectedIds.includes(entry.historyId) ? 'var(--px-danger)' : undefined,
+                    }}
+                    onClick={() => onSelectEntry(idx)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div style={{ fontSize: '14px' }}>
+                        게임 #{idx + 1}
+                        {entry.roomId ? ` · ${entry.roomId}번 방` : ''}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleSelection(entry.historyId);
+                        }}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          padding: 0,
+                          margin: 0,
+                          fontSize: '14px',
+                          color: selectedIds.includes(entry.historyId) ? 'var(--px-danger)' : '#ddd',
+                        }}
+                        aria-label={selectedIds.includes(entry.historyId) ? '선택 해제' : '선택'}
+                      >
+                        {selectedIds.includes(entry.historyId) ? '☑' : '☐'}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleSelection(entry.historyId);
-                      }}
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 0,
-                        margin: 0,
-                        fontSize: '14px',
-                        color: selectedIds.includes(entry.historyId) ? 'var(--px-danger)' : '#ddd',
-                      }}
-                      aria-label={selectedIds.includes(entry.historyId) ? '선택 해제' : '선택'}
-                    >
-                      {selectedIds.includes(entry.historyId) ? '☑' : '☐'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: '12px', marginTop: '4px' }}>{new Date(entry.submittedAt).toLocaleString()}</div>
-                  <div style={{ fontSize: '12px', marginTop: '2px', color: 'var(--px-warning)' }}>
-                    {(entry.problems?.length || entry.codes?.length || 1)}문제
-                  </div>
-                </button>
+                    <div style={{ fontSize: '12px', marginTop: '4px' }}>{new Date(entry.submittedAt).toLocaleString()}</div>
+                    <div style={{ fontSize: '12px', marginTop: '2px', color: 'var(--px-warning)' }}>
+                      {(entry.problems?.length || entry.codes?.length || 1)}문제
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className="pixel-btn pixel-btn-primary match-story-ai-btn"
+                    onClick={() => onAnalyzeEntry?.(entry)}
+                  >
+                    AI 분석
+                  </button>
+                </div>
               ))}
             </div>
             <div className="pixel-card match-story-detail">

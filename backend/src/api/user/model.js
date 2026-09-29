@@ -172,10 +172,24 @@ export async function findUserTitleData(userId) {
 }
 
 function toSqlDate(value) {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
-  const parsed = new Date(value || Date.now());
-  if (Number.isNaN(parsed.getTime())) return new Date();
-  return parsed;
+  const date = value instanceof Date ? value : new Date(value || Date.now());
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  const pad = function (n) {
+    return String(n).padStart(2, "0");
+  };
+  return (
+    safe.getFullYear() +
+    "-" +
+    pad(safe.getMonth() + 1) +
+    "-" +
+    pad(safe.getDate()) +
+    " " +
+    pad(safe.getHours()) +
+    ":" +
+    pad(safe.getMinutes()) +
+    ":" +
+    pad(safe.getSeconds())
+  );
 }
 
 function parseJsonColumn(value, fallback) {
@@ -223,6 +237,41 @@ export async function listMatchCodeHistory(userId) {
       problems: parseJsonColumn(row.problems, []),
     };
   });
+}
+
+export async function findMatchCodeHistoryById(userId, historyId) {
+  const rows = await pool.query(
+    `SELECT
+       history_id AS historyId,
+       user_id AS userId,
+       room_id AS roomId,
+       submitted_at AS submittedAt,
+       lang,
+       mode,
+       code,
+       codes,
+       problems
+     FROM match_code_history
+     WHERE user_id = ? AND history_id = ?
+     LIMIT 1`,
+    [userId, historyId],
+  );
+  if (!rows.length) return null;
+  const row = rows[0];
+  return {
+    historyId: row.historyId,
+    userId: row.userId,
+    roomId: String(row.roomId || ""),
+    submittedAt:
+      row.submittedAt instanceof Date
+        ? row.submittedAt.toISOString()
+        : String(row.submittedAt || ""),
+    lang: row.lang || "UNKNOWN",
+    mode: row.mode || null,
+    code: row.code || "",
+    codes: parseJsonColumn(row.codes, []),
+    problems: parseJsonColumn(row.problems, []),
+  };
 }
 
 export async function upsertMatchCodeHistory(entry) {

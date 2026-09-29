@@ -33,6 +33,7 @@ interface MyInfoModalProps {
   onToggleSelection: (historyId: string) => void;
   onSelectAll: () => void;
   onDeleteSelected: () => void;
+  onAnalyzeEntry?: (entry: CodeHistoryEntry) => void;
   onAiAnalyze?: (userId: string, userName: string) => void;
 }
 
@@ -74,6 +75,7 @@ export function MyInfoModal({
   onToggleSelection,
   onSelectAll,
   onDeleteSelected,
+  onAnalyzeEntry,
   onAiAnalyze,
 }: MyInfoModalProps) {
   const { shaking, triggerShake } = useModalShake();
@@ -206,6 +208,7 @@ export function MyInfoModal({
                   onToggleSelection={onToggleSelection}
                   onSelectAll={onSelectAll}
                   onDeleteSelected={onDeleteSelected}
+                  onAnalyzeEntry={onAnalyzeEntry}
                 />
               </div>
             )}
@@ -244,17 +247,15 @@ export function MyInfoModal({
 
         {(tab === 'stats' || !isSelf) && (
           <div className="d-flex justify-content-end mt-3" style={{ gap: '8px', flexWrap: 'wrap' }}>
-            {onAiAnalyze && (isSelf || publicUser?.userId) && (
+            {onAiAnalyze && !isSelf && publicUser?.userId && (
               <button
                 type="button"
                 className="pixel-btn pixel-btn-primary"
                 onClick={() => {
-                  const targetId = isSelf ? '' : String(publicUser?.userId || '');
-                  // self: empty means backend uses req.user.id — pass a sentinel for frontend
-                  onAiAnalyze(isSelf ? '__self__' : targetId, isSelf ? '나' : displayName);
+                  onAiAnalyze(String(publicUser.userId), displayName);
                 }}
               >
-                AI 사용자 분석
+                AI 분석
               </button>
             )}
             <button type="button" className="pixel-btn pixel-btn-secondary" onClick={onClose}>

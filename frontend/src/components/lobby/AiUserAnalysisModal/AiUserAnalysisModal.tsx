@@ -6,6 +6,7 @@ interface AiUserAnalysisModalProps {
   open: boolean;
   userId: string;
   userName: string;
+  historyId?: string;
   onClose: () => void;
 }
 
@@ -13,6 +14,9 @@ interface AiAnalysisResponse {
   displayName?: string;
   source?: string;
   analysis?: string;
+  roomId?: string;
+  lang?: string;
+  historyId?: string;
   summary?: {
     totalWins?: number;
     losses?: number;
@@ -23,24 +27,27 @@ interface AiAnalysisResponse {
     avgSolveTimeSec?: number;
     solveRate?: number;
     recentMatchCount?: number;
+    roomId?: string;
+    lang?: string;
+    problemCount?: number;
   };
 }
 
-export function AiUserAnalysisModal({ open, userId, userName, onClose }: AiUserAnalysisModalProps) {
+export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose }: AiUserAnalysisModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<AiAnalysisResponse | null>(null);
 
   useEffect(() => {
-    if (!open || !userId) return;
+    if (!open || (!userId && !historyId)) return;
     let cancelled = false;
     setLoading(true);
     setError('');
     setResult(null);
     void apiRequest<AiAnalysisResponse>('/users/ai-analysis', {
       method: 'POST',
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify(historyId ? { historyId } : { userId }),
     })
       .then((payload) => {
         if (cancelled) return;
@@ -56,7 +63,7 @@ export function AiUserAnalysisModal({ open, userId, userName, onClose }: AiUserA
     return () => {
       cancelled = true;
     };
-  }, [open, userId]);
+  }, [open, userId, historyId]);
 
   if (!open) return null;
 
@@ -69,13 +76,19 @@ export function AiUserAnalysisModal({ open, userId, userName, onClose }: AiUserA
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-center pixel-text-primary" style={{ marginBottom: '10px', fontSize: '20px' }}>
-          AI 사용자 분석
+          AI 분석
         </h3>
-        <div className="ai-analysis-subtitle">{result?.displayName || userName}</div>
+        <div className="ai-analysis-subtitle">
+          {historyId
+            ? `${result?.roomId ? `${result.roomId}번 방` : userName}${
+                result?.lang || result?.summary?.lang ? ` · ${result.lang || result.summary?.lang}` : ''
+              }`
+            : result?.displayName || userName}
+        </div>
 
         {loading && (
           <div className="ai-analysis-loading">
-            사용자 데이터를 수집하고 분석 중입니다...
+            {historyId ? '이 방의 기록을 분석하고 있습니다...' : '사용자 데이터를 수집하고 분석 중입니다...'}
           </div>
         )}
 
@@ -83,7 +96,7 @@ export function AiUserAnalysisModal({ open, userId, userName, onClose }: AiUserA
 
         {!loading && !error && result && (
           <>
-            {summary && (
+            {summary && !historyId && (
               <div className="ai-analysis-stats">
                 <div>레이팅 {summary.ratingScore ?? '-'} · 승률 {summary.winrate ?? 0}%</div>
                 <div>
@@ -92,6 +105,13 @@ export function AiUserAnalysisModal({ open, userId, userName, onClose }: AiUserA
                 <div>
                   강점 언어 {summary.strongestWinLang || summary.favoriteLang || '-'} · 해결률{' '}
                   {summary.solveRate ?? 0}%
+                </div>
+              </div>
+            )}
+            {historyId && (
+              <div className="ai-analysis-stats">
+                <div>
+                  {(result?.summary?.problemCount ?? 0)}문제 · 언어 {result?.lang || result?.summary?.lang || '-'}
                 </div>
               </div>
             )}

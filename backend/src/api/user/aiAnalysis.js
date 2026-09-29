@@ -235,9 +235,10 @@ export async function generateCursorAnalysis(summary) {
 
   const { Agent } = await import("@cursor/sdk");
   const prompt =
-    "당신은 코딩 배틀 게임 코치입니다. 아래 JSON 통계만 보고 한국어로 친절하고 구체적인 사용자 분석을 작성하세요. " +
-    "강점/약점/언어별 특징/풀이 속도/추천 연습 방향을 포함하세요. 과장하지 말고 800자 이내로 작성하세요. " +
-    "파일을 읽거나 수정하지 말고, 분석 문장만 출력하세요.\n\n" +
+    "당신은 코딩 배틀 게임 코치입니다. 아래 JSON만 보고 한국어로 친절하게 분석하세요. " +
+    "프로그래밍 언어 이름(Java, Python, JavaScript, TypeScript, C, SQL)만 영어를 허용하고 나머지 단어는 모두 한국어로 쓰세요. " +
+    "마크다운 기호(**, *, #, `)는 쓰지 마세요. 문장과 '• ' 불릿만 사용하세요. " +
+    "과장하지 말고 800자 이내로 작성하세요. 파일을 읽거나 수정하지 말고 분석 문장만 출력하세요.\n\n" +
     JSON.stringify(summary, null, 2);
 
   const result = await Agent.prompt(prompt, {
@@ -257,5 +258,75 @@ export async function generateCursorAnalysis(summary) {
   if (!content) {
     throw new Error("Cursor AI 응답이 비어 있습니다.");
   }
-  return content;
+  return polishAnalysisText(content);
+}
+
+const ENGLISH_TO_KOREAN = [
+  [/\bwin\s*rate\b/gi, "승률"],
+  [/\brating\b/gi, "레이팅"],
+  [/\bstrengths?\b/gi, "강점"],
+  [/\bweakness(?:es)?\b/gi, "약점"],
+  [/\bpractice\b/gi, "연습"],
+  [/\bmatch(?:es)?\b/gi, "매치"],
+  [/\bgame(?:s)?\b/gi, "게임"],
+  [/\bproblem(?:s)?\b/gi, "문제"],
+  [/\bcode\b/gi, "코드"],
+  [/\bspeed\b/gi, "속도"],
+  [/\baccuracy\b/gi, "정확도"],
+  [/\bdifficulty\b/gi, "난이도"],
+  [/\beasy\b/gi, "쉬움"],
+  [/\bnormal\b/gi, "보통"],
+  [/\bhard\b/gi, "어려움"],
+  [/\bunknown\b/gi, "알 수 없음"],
+  [/\btip:?\b/gi, "팁:"],
+  [/\brecommend(?:ation|ed)?\b/gi, "추천"],
+  [/\bsummary\b/gi, "요약"],
+  [/\banaly(?:sis|ze)\b/gi, "분석"],
+  [/\bcorrect\b/gi, "정답"],
+  [/\bwrong\b/gi, "오답"],
+  [/\btime\b/gi, "시간"],
+  [/\bscore\b/gi, "점수"],
+  [/\buser\b/gi, "사용자"],
+  [/\broom\b/gi, "방"],
+];
+
+export function polishAnalysisText(text) {
+  let out = String(text || "");
+  out = out.replace(/\*\*|__|~~/g, "");
+  out = out.replace(/`+/g, "");
+  out = out.replace(/^#{1,6}\s*/gm, "");
+  out = out.replace(/^\s*[-*]\s+/gm, "• ");
+  for (let i = 0; i < ENGLISH_TO_KOREAN.length; i++) {
+    out = out.replace(ENGLISH_TO_KOREAN[i][0], ENGLISH_TO_KOREAN[i][1]);
+  }
+  return out.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+export function buildMatchAnalysisText(entry) {
+  const problems = Array.isArray(entry?.problems) ? entry.problems : [];
+  const codes = Array.isArray(entry?.codes) ? entry.codes : [];
+  const lang = entry?.lang || "UNKNOWN";
+  const roomLabel = entry?.roomId ? entry.roomId + "번 방" : "개인 매치";
+  const lines = [];
+  lines.push(roomLabel + "에서 " + lang + "로 진행한 한 판입니다.");
+  lines.push("문제 수는 " + (problems.length || codes.length || 0) + "개입니다.");
+  if (problems.length > 0) {
+    const titles = problems
+      .map(function (problem, index) {
+        return problem?.title || "문제 " + (index + 1);
+      })
+      .slice(0, 5);
+    lines.push("다룬 문제: " + titles.join(", "));
+  }
+  const emptyCodes = codes.filter(function (code) {
+    return !String(code || "").trim();
+  }).length;
+  if (codes.length > 0 && emptyCodes === codes.length) {
+    lines.push("제출 코드가 비어 있어, 풀이 습관은 확인하기 어렵습니다.");
+  } else if (codes.length > 0) {
+    lines.push("제출 코드가 남아 있어 이 판의 풀이 흐름을 다시 볼 수 있습니다.");
+  }
+  lines.push("");
+  lines.push("이 방에서 막힌 문제는 같은 언어로 짧게 다시 풀어 보는 것이 좋습니다.");
+  return lines.join("\n");
 }

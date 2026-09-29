@@ -188,11 +188,18 @@ export async function listMyMatchHistory(userId) {
   return { entries };
 }
 
+function buildHistoryId(userId, input) {
+  const raw = String(input.historyId || "").trim();
+  const submitted = input.submittedAt || new Date().toISOString();
+  const room = String(input.roomId || "solo");
+  const suffix = raw || `${room}::${submitted}`;
+  const prefixed = suffix.startsWith(`${userId}::`) ? suffix : `${userId}::${suffix}`;
+  return prefixed.slice(0, 128);
+}
+
 export async function saveMyMatchHistory(userId, input) {
   const upsertMatchCodeHistory = getModelFunction("upsertMatchCodeHistory");
-  const historyId =
-    input.historyId ||
-    `${input.roomId || "solo"}::${input.submittedAt || Date.now()}`;
+  const historyId = buildHistoryId(userId, input);
   await upsertMatchCodeHistory({
     historyId,
     userId,
@@ -229,6 +236,7 @@ export async function analyzeUserProfile(targetUserId) {
     buildAnalyticsSummary,
     buildLocalAnalysisText,
     generateCursorAnalysis,
+    polishAnalysisText,
   } = await import("./aiAnalysis.js");
   const { env } = await import("#config/envConfig.js");
 
@@ -269,12 +277,102 @@ export async function analyzeUserProfile(targetUserId) {
       displayName: summary.displayName,
       source: "local-fallback",
       summary,
-      analysis:
-        "⚠️ Cursor AI 분석에 실패해 임시 규칙 기반 결과를 표시합니다.\n" +
-        "(원인: " +
-        (error.message || "unknown") +
-        ")\n\n" +
-        fallback,
+      analysis: polishAnalysisText(
+        "AI 분석을 잠시 불러오지 못해, 전적을 바탕으로 간단히 정리했습니다.\n\n" + fallback,
+      ),
+    };
+  }
+}
+
+export async function analyzeMatchHistory(userId, historyId) {
+  const findUserById = getModelFunction("findUserById");
+  const findMatchCodeHistoryById = getModelFunction("findMatchCodeHistoryById");
+  const {
+    buildMatchAnalysisText,
+    generateCursorAnalysis,
+    polishAnalysisText,
+  } = await import("./aiAnalysis.js");
+  const { env } = await import("#config/envConfig.js");
+
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new AppError(404, ERROR_CODE.USER_NOT_FOUND, "사용자를 찾을 수 없습니다.");
+  }
+
+  const entry = await findMatchCodeHistoryById(userId, historyId);
+  if (!entry) {
+    throw new AppError(404, "MATCH_HISTORY_NOT_FOUND", "해당 방의 매치 기록을 찾을 수 없습니다.");
+  }
+
+  const problems = Array.isArray(entry.problems) ? entry.problems : [];
+  const codes = Array.isArray(entry.codes) ? entry.codes : [];
+  const summary = {
+    scope: "한 판",
+    displayName: user.displayName || user.username || userId,
+    roomId: entry.roomId || "",
+    lang: entry.lang || "UNKNOWN",
+    submittedAt: entry.submittedAt,
+    mode: entry.mode || "",
+    problemCount: problems.length || codes.length || 0,
+    problems: problems.slice(0, 8).map(function (problem, index) {
+      return {
+        order: index + 1,
+        title: problem?.title || "문제 " + (index + 1),
+        question: String(problem?.question || "").slice(0, 500),
+      };
+    }),
+    codes: (codes.length > 0 ? codes : [entry.code || ""]).slice(0, 8).map(function (code) {
+      return String(code || "").slice(0, 1500);
+    }),
+  };
+
+  const roomLabel = entry.roomId ? entry.roomId + "번 방" : "개인 매치";
+
+  if (!env.cursorApiKey) {
+    throw new AppError(
+      503,
+      "CURSOR_NOT_CONFIGURED",
+      "CURSOR_API_KEY가 backend/.env에 설정되어 있지 않습니다. Cursor Dashboard → API Keys에서 키를 발급해 추가한 뒤 백엔드를 재시작하세요.",
+    );
+  }
+
+  try {
+    const aiText = await generateCursorAnalysis(summary);
+    if (!aiText) {
+      throw new Error("Cursor AI 응답이 비어 있습니다.");
+    }
+    return {
+      userId,
+      displayName: summary.displayName,
+      historyId: entry.historyId,
+      roomId: entry.roomId,
+      lang: entry.lang,
+      source: "cursor",
+      summary: {
+        roomId: entry.roomId,
+        lang: entry.lang,
+        problemCount: summary.problemCount,
+      },
+      analysis: aiText,
+    };
+  } catch (error) {
+    console.error("[analyzeMatchHistory] Cursor AI error:", error.message);
+    return {
+      userId,
+      displayName: summary.displayName,
+      historyId: entry.historyId,
+      roomId: entry.roomId,
+      lang: entry.lang,
+      source: "local-fallback",
+      summary: {
+        roomId: entry.roomId,
+        lang: entry.lang,
+        problemCount: summary.problemCount,
+      },
+      analysis: polishAnalysisText(
+        roomLabel + " 분석을 잠시 불러오지 못해, 이 판 기록으로 간단히 정리했습니다.\n\n" +
+          buildMatchAnalysisText(entry),
+      ),
     };
   }
 }

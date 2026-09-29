@@ -246,7 +246,7 @@ export default function LobbyPage() {
   const [profileRating, setProfileRating] = useState(getRatingScore);
   const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [showMyInfoModal, setShowMyInfoModal] = useState(false);
-  const [aiTarget, setAiTarget] = useState<{ userId: string; userName: string } | null>(null);
+  const [aiTarget, setAiTarget] = useState<{ userId: string; userName: string; historyId?: string } | null>(null);
   const [myInfoMode, setMyInfoMode] = useState<'self' | 'public'>('self');
   const [myInfoPublicUser, setMyInfoPublicUser] = useState<LobbyUser | null>(null);
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
@@ -1056,6 +1056,14 @@ export default function LobbyPage() {
         }
         onSelectAll={handleSelectAllHistory}
         onDeleteSelected={handleDeleteSelectedHistory}
+        onAnalyzeEntry={(entry) => {
+          setShowMyInfoModal(false);
+          setAiTarget({
+            userId: '',
+            historyId: entry.historyId,
+            userName: entry.roomId ? `${entry.roomId}번 방` : '개인 매치',
+          });
+        }}
         onAiAnalyze={(userId, userName) => {
           const targetId = userId === '__self__' ? authUser.id : userId;
           if (!targetId) return;
@@ -1068,6 +1076,7 @@ export default function LobbyPage() {
         open={Boolean(aiTarget)}
         userId={aiTarget?.userId || ''}
         userName={aiTarget?.userName || ''}
+        historyId={aiTarget?.historyId}
         onClose={() => setAiTarget(null)}
       />
 

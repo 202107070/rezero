@@ -1,6 +1,7 @@
 import type { CodeHistoryEntry } from '../types/lobby';
 import { persistUserCodeHistory, readUserCodeHistory } from '../services/userService';
 import { apiRequest } from '../services/apiClient';
+import { getCurrentUserId } from '../services/authService';
 import problems from '../data/problems.js';
 import { getLangKey } from './battle/codeUtils';
 import { getProblemAnswersForLang } from './problemTypeUtils';
@@ -43,10 +44,59 @@ export function readCodeHistory(): CodeHistoryEntry[] {
 
 export function persistCodeHistory(nextHistory: CodeHistoryEntry[]): void {
   persistUserCodeHistory(nextHistory);
+  writeStoredHistory(nextHistory);
+}
+
+function historyStorageKey(): string {
+  const userId = getCurrentUserId();
+  return userId ? `rezero.matchHistory.${userId}` : '';
+}
+
+function readStoredHistory(): CodeHistoryEntry[] {
+  const key = historyStorageKey();
+  if (!key) return [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(normalizeCodeHistoryEntry)
+      .filter((entry): entry is CodeHistoryEntry => Boolean(entry));
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredHistory(entries: CodeHistoryEntry[]): void {
+  const key = historyStorageKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(entries.slice(0, 100)));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function mergeHistory(primary: CodeHistoryEntry[], extra: CodeHistoryEntry[]): CodeHistoryEntry[] {
+  const byId = new Map<string, CodeHistoryEntry>();
+  for (const entry of extra) byId.set(entry.historyId, entry);
+  for (const entry of primary) byId.set(entry.historyId, entry);
+  return Array.from(byId.values())
+    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+    .slice(0, 100);
+}
+
+async function postMatchHistoryEntry(entry: CodeHistoryEntry): Promise<string> {
+  const result = await apiRequest<{ historyId?: string }>('/users/me/match-history', {
+    method: 'POST',
+    body: JSON.stringify(entry),
+  });
+  return result.historyId || entry.historyId;
 }
 
 export async function fetchMatchHistory(): Promise<CodeHistoryEntry[]> {
-  const localEntries = readCodeHistory();
+  const localEntries = mergeHistory(readCodeHistory(), readStoredHistory());
   try {
     const result = await apiRequest<{ entries?: unknown[] }>('/users/me/match-history');
     const serverEntries = Array.isArray(result.entries)
@@ -55,26 +105,25 @@ export async function fetchMatchHistory(): Promise<CodeHistoryEntry[]> {
           .filter((entry): entry is CodeHistoryEntry => Boolean(entry))
       : [];
 
-    // 서버가 비어 있으면 로컬을 지우지 않음 (레이스로 빈 응답이 와도 매치스토리 유지)
-    if (serverEntries.length === 0) {
-      return localEntries;
+    const serverIds = new Set(serverEntries.map((entry) => entry.historyId));
+    const missing = localEntries.filter((entry) => !serverIds.has(entry.historyId));
+    const uploaded: CodeHistoryEntry[] = [];
+    for (const entry of missing.slice(0, 30)) {
+      try {
+        const historyId = await postMatchHistoryEntry(entry);
+        uploaded.push({ ...entry, historyId });
+      } catch (error) {
+        console.error('매치 히스토리 서버 저장 실패:', error);
+        uploaded.push(entry);
+      }
     }
 
-    const byId = new Map<string, CodeHistoryEntry>();
-    for (const entry of localEntries) {
-      byId.set(entry.historyId, entry);
-    }
-    for (const entry of serverEntries) {
-      byId.set(entry.historyId, entry);
-    }
-
-    const merged = Array.from(byId.values())
-      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
-      .slice(0, 100);
+    const merged = mergeHistory(mergeHistory(serverEntries, missing.slice(30)), uploaded);
     persistCodeHistory(merged);
     return readCodeHistory();
   } catch {
-    return localEntries;
+    if (localEntries.length > 0) persistCodeHistory(localEntries);
+    return localEntries.length > 0 ? readCodeHistory() : readCodeHistory();
   }
 }
 
@@ -82,10 +131,13 @@ export async function saveMatchHistoryEntry(entry: CodeHistoryEntry): Promise<vo
   const history = readCodeHistory().filter((item) => item.historyId !== entry.historyId);
   persistCodeHistory([entry, ...history].slice(0, 100));
   try {
-    await apiRequest('/users/me/match-history', {
-      method: 'POST',
-      body: JSON.stringify(entry),
-    });
+    const historyId = await postMatchHistoryEntry(entry);
+    if (historyId !== entry.historyId) {
+      const next = readCodeHistory().map((item) =>
+        item.historyId === entry.historyId ? { ...item, historyId } : item,
+      );
+      persistCodeHistory(next);
+    }
   } catch (error) {
     console.error('매치 히스토리 서버 저장 실패:', error);
   }

@@ -1,6 +1,7 @@
 import { parseLoginRequest } from "./dto/loginRequestDto.js";
 import { parseSignupRequest } from "./dto/signupRequestDto.js";
 import {
+  analyzeMatchHistory,
   analyzeUserProfile,
   deleteAccount,
   deleteMyMatchHistory,
@@ -130,6 +131,11 @@ export async function removeMe(req, res, next) {
 
 export async function postUserAiAnalysis(req, res, next) {
   try {
+    const historyId = String(req.body?.historyId || "").trim();
+    if (historyId) {
+      const result = await analyzeMatchHistory(req.user.id, historyId);
+      return sendSuccess(res, result);
+    }
     const targetUserId = String(req.body?.userId || req.user.id || "").trim();
     if (!targetUserId) {
       throw new AppError(400, "INVALID_USER", "분석 대상 유저가 없습니다.");

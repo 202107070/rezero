@@ -48,7 +48,7 @@ export function RoomProfileModal({
               style={{ minWidth: '140px' }}
               onClick={() => onAiAnalyze(player)}
             >
-              AI 사용자 분석
+              AI 분석
             </button>
           )}
           {isHost && !player.isHost && playerIndex !== null && (
