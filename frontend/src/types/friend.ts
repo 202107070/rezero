@@ -13,6 +13,7 @@ export interface FriendPresence {
   roomId?: string;
   roomTitle?: string;
   roomQuery?: string;
+  ratingScore?: number;
   updatedAt: number;
 }
 

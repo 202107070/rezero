@@ -220,6 +220,20 @@ export async function deleteMyMatchHistory(userId, historyIds) {
   return { deleted };
 }
 
+export async function listPublicProfiles(userIds) {
+  const findUsersByIds = getModelFunction("findUsersByIds");
+  const ids = Array.isArray(userIds) ? userIds.slice(0, 40) : [];
+  const rows = await findUsersByIds(ids);
+  return rows.map(function (row) {
+    return {
+      userId: String(row.userId),
+      username: row.username || "",
+      displayName: row.displayName || row.username || "",
+      ratingScore: Number(row.ratingScore) || 1000,
+    };
+  });
+}
+
 export async function deleteAccount(userId) {
   const deleteUserById = getModelFunction("deleteUserById");
   const deleted = await deleteUserById(userId);
@@ -286,8 +300,10 @@ export async function analyzeUserProfile(targetUserId) {
 
 export async function analyzeMatchHistory(userId, historyId) {
   const findUserById = getModelFunction("findUserById");
+  const findUserMatchAnalytics = getModelFunction("findUserMatchAnalytics");
   const findMatchCodeHistoryById = getModelFunction("findMatchCodeHistoryById");
   const {
+    buildAnalyticsSummary,
     buildMatchAnalysisText,
     generateCursorAnalysis,
     polishAnalysisText,
@@ -304,29 +320,33 @@ export async function analyzeMatchHistory(userId, historyId) {
     throw new AppError(404, "MATCH_HISTORY_NOT_FOUND", "해당 방의 매치 기록을 찾을 수 없습니다.");
   }
 
+  const profile = await getUserProfile(user);
+  const matches = await findUserMatchAnalytics(userId, 40);
+  const career = buildAnalyticsSummary(profile, matches);
   const problems = Array.isArray(entry.problems) ? entry.problems : [];
   const codes = Array.isArray(entry.codes) ? entry.codes : [];
   const summary = {
-    scope: "한 판",
-    displayName: user.displayName || user.username || userId,
-    roomId: entry.roomId || "",
+    analysisTarget: "user",
+    displayName: career.displayName || user.displayName || user.username || userId,
+    ratingScore: career.ratingScore,
+    winrate: career.winrate,
+    totalWins: career.totalWins,
+    losses: career.losses,
+    solveRate: career.solveRate,
+    strongestWinLang: career.strongestWinLang,
+    fastestLang: career.fastestLang,
+    slowestLang: career.slowestLang,
+    avgSolveTimeSec: career.avgSolveTimeSec,
     lang: entry.lang || "UNKNOWN",
-    submittedAt: entry.submittedAt,
-    mode: entry.mode || "",
     problemCount: problems.length || codes.length || 0,
-    problems: problems.slice(0, 8).map(function (problem, index) {
+    userSubmissions: (codes.length > 0 ? codes : [entry.code || ""]).slice(0, 8).map(function (code, index) {
       return {
         order: index + 1,
-        title: problem?.title || "문제 " + (index + 1),
-        question: String(problem?.question || "").slice(0, 500),
+        title: problems[index]?.title || "문제 " + (index + 1),
+        submittedCode: String(code || "").slice(0, 1500),
       };
     }),
-    codes: (codes.length > 0 ? codes : [entry.code || ""]).slice(0, 8).map(function (code) {
-      return String(code || "").slice(0, 1500);
-    }),
   };
-
-  const roomLabel = entry.roomId ? entry.roomId + "번 방" : "개인 매치";
 
   if (!env.cursorApiKey) {
     throw new AppError(
@@ -370,8 +390,8 @@ export async function analyzeMatchHistory(userId, historyId) {
         problemCount: summary.problemCount,
       },
       analysis: polishAnalysisText(
-        roomLabel + " 분석을 잠시 불러오지 못해, 이 판 기록으로 간단히 정리했습니다.\n\n" +
-          buildMatchAnalysisText(entry),
+        "사용자 분석을 잠시 불러오지 못해, 이 판의 제출과 전적으로 간단히 정리했습니다.\n\n" +
+          buildMatchAnalysisText(entry, career),
       ),
     };
   }

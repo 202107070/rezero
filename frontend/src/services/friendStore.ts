@@ -142,19 +142,41 @@ export function setUserPresence(
     roomId?: string;
     roomTitle?: string;
     roomQuery?: string;
+    ratingScore?: number;
   },
 ) {
   if (!userName) return;
   const map = readPresenceMap();
-  const entry = {
+  const prev = map[userName];
+  const ratingScore =
+    patch.ratingScore != null && Number.isFinite(Number(patch.ratingScore))
+      ? Number(patch.ratingScore)
+      : prev?.ratingScore;
+  map[userName] = {
     userName,
     status: patch.status,
     roomId: patch.roomId,
     roomTitle: patch.roomTitle,
     roomQuery: patch.roomQuery,
+    ratingScore,
     updatedAt: Date.now(),
   };
-  map[userName] = entry;
+  writePresenceMap(map);
+}
+
+export function rememberFriendRating(userName: string, ratingScore: number) {
+  if (!userName || !Number.isFinite(ratingScore)) return;
+  const map = readPresenceMap();
+  const prev = map[userName];
+  map[userName] = {
+    userName,
+    status: prev?.status || 'offline',
+    roomId: prev?.roomId,
+    roomTitle: prev?.roomTitle,
+    roomQuery: prev?.roomQuery,
+    ratingScore,
+    updatedAt: prev?.updatedAt || Date.now(),
+  };
   writePresenceMap(map);
 }
 

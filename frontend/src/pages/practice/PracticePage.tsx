@@ -10,7 +10,7 @@ import { PracticeSetupModal } from '../../components/practice/PracticeSetupModal
 import { ROUTES } from '../../constants/routes';
 import { emitUpdateLocation } from '../../services/roomSocket';
 import { getLangKey } from '../../utils/battle/codeUtils';
-import { isBlankBasedType } from '../../utils/problemTypeUtils';
+import { getProblemAnswersForLang, isBlankBasedType } from '../../utils/problemTypeUtils';
 import {
   createExercisePool,
   isExerciseCorrect,
@@ -75,7 +75,7 @@ export default function PracticePage() {
   const currentEx = exercises[currentIndex] || ({} as PracticeExercise);
   const isChecked = checked.has(currentIndex);
   const selectedOption = userAnswers[currentIndex];
-  const correctAnswers = currentEx.answer?.[langKey] || [];
+  const correctAnswers = getProblemAnswersForLang(currentEx.answer, langKey);
 
   const isMultipleChoiceCorrect =
     isChecked && currentEx.type === 'multiple_choice' && selectedOption === currentEx.correctIndex;
@@ -253,7 +253,7 @@ export default function PracticePage() {
       <ExitConfirmModal
         open={showExitConfirm}
         title="연습 종료"
-        message="연습을 종료하고 로비로 돌아가시겠습니까?"
+        message="로비로 이동하시겠습니까?"
         confirmLabel="로비로"
         cancelLabel="계속하기"
         onConfirm={() => navigate(ROUTES.LOBBY)}

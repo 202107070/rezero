@@ -2,7 +2,8 @@ import { useCallback, useState, type MouseEvent } from 'react';
 import { TITLE_DEFS } from '../../../constants/titleTypes';
 import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../../services/authService';
-import { getUserPresence, isFriend, isFriendOnline } from '../../../services/friendStore';
+import { findFriendUserId, getUserPresence, isFriend, isFriendOnline } from '../../../services/friendStore';
+import { getTierByRating } from '../../../utils/tierUtils';
 import { getActiveRoomId } from '../../../services/roomSocket';
 import type { LobbyUser } from '../../../types/lobby';
 import { getTierIconByTier } from '../../../utils/tierUtils';
@@ -49,7 +50,12 @@ function sortUsersForTab(users: LobbyUser[], activeTab: string, friendNames: str
   if (activeTab === '친구') {
     return friendNames.map((name) => {
       const found = users.find((user) => user.name === name);
-      return found ?? { name, rank: '-', title: null };
+      const presence = getUserPresence(name);
+      const storedTier =
+        presence?.ratingScore != null ? getTierByRating(presence.ratingScore) : '';
+      const rank = storedTier || (found?.rank && found.rank !== '-' ? found.rank : '브론즈');
+      if (found) return { ...found, rank };
+      return { name, rank, title: null, userId: findFriendUserId(name) || undefined };
     });
   }
 

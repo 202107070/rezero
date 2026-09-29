@@ -234,8 +234,14 @@ export async function generateCursorAnalysis(summary) {
   if (!env.cursorApiKey) return null;
 
   const { Agent } = await import("@cursor/sdk");
+  const userFocus = summary && summary.analysisTarget === "user";
+  const focusRule = userFocus
+    ? "분석 대상은 플레이어 본인입니다. 방 소개, 문제 나열, 게임 규칙 설명은 하지 마세요. " +
+      "이 판의 제출 코드와 전적을 근거로 실력, 장점, 부족한 점, 다음 연습 포인트를 쓰세요. "
+    : "사용자의 실력과 플레이 성향을 중심으로 분석하세요. ";
   const prompt =
     "당신은 코딩 배틀 게임 코치입니다. 아래 JSON만 보고 한국어로 친절하게 분석하세요. " +
+    focusRule +
     "프로그래밍 언어 이름(Java, Python, JavaScript, TypeScript, C, SQL)만 영어를 허용하고 나머지 단어는 모두 한국어로 쓰세요. " +
     "마크다운 기호(**, *, #, `)는 쓰지 마세요. 문장과 '• ' 불릿만 사용하세요. " +
     "과장하지 말고 800자 이내로 작성하세요. 파일을 읽거나 수정하지 말고 분석 문장만 출력하세요.\n\n" +
@@ -302,31 +308,50 @@ export function polishAnalysisText(text) {
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export function buildMatchAnalysisText(entry) {
-  const problems = Array.isArray(entry?.problems) ? entry.problems : [];
+export function buildMatchAnalysisText(entry, profileSummary) {
   const codes = Array.isArray(entry?.codes) ? entry.codes : [];
   const lang = entry?.lang || "UNKNOWN";
-  const roomLabel = entry?.roomId ? entry.roomId + "번 방" : "개인 매치";
-  const lines = [];
-  lines.push(roomLabel + "에서 " + lang + "로 진행한 한 판입니다.");
-  lines.push("문제 수는 " + (problems.length || codes.length || 0) + "개입니다.");
-  if (problems.length > 0) {
-    const titles = problems
-      .map(function (problem, index) {
-        return problem?.title || "문제 " + (index + 1);
-      })
-      .slice(0, 5);
-    lines.push("다룬 문제: " + titles.join(", "));
-  }
-  const emptyCodes = codes.filter(function (code) {
-    return !String(code || "").trim();
+  const name = profileSummary?.displayName || "이 사용자";
+  const filled = codes.filter(function (code) {
+    return String(code || "").trim().length > 0;
   }).length;
-  if (codes.length > 0 && emptyCodes === codes.length) {
-    lines.push("제출 코드가 비어 있어, 풀이 습관은 확인하기 어렵습니다.");
-  } else if (codes.length > 0) {
-    lines.push("제출 코드가 남아 있어 이 판의 풀이 흐름을 다시 볼 수 있습니다.");
+  const total = Math.max(codes.length, Array.isArray(entry?.problems) ? entry.problems.length : 0, 1);
+  const lines = [];
+  lines.push(name + " 님의 이 판 풀이를 기준으로 본 실력입니다.");
+  lines.push("• 사용 언어: " + lang);
+  if (profileSummary) {
+    lines.push(
+      "• 현재 레이팅 " +
+        (profileSummary.ratingScore || 1000) +
+        ", 승률 " +
+        (profileSummary.winrate || 0) +
+        "% (" +
+        (profileSummary.totalWins || 0) +
+        "승 " +
+        (profileSummary.losses || 0) +
+        "패)",
+    );
+    if (profileSummary.strongestWinLang) {
+      lines.push("• 장점: " + profileSummary.strongestWinLang + "에서 승리가 많습니다.");
+    }
+    if (profileSummary.slowestLang && profileSummary.slowestLang !== profileSummary.fastestLang) {
+      lines.push("• 부족한 점: " + profileSummary.slowestLang + " 풀이 속도가 상대적으로 느립니다.");
+    }
+  }
+  if (filled === 0) {
+    lines.push("• 제출 답안이 거의 비어 있어, 문제 접근 자체를 끝까지 밀고 가는 연습이 필요합니다.");
+  } else if (filled < total) {
+    lines.push(
+      "• " +
+        total +
+        "문제 중 " +
+        filled +
+        "문제에만 답안이 남아 있습니다. 막힌 문제를 비우지 않고 부분 답이라도 남기는 습관이 필요합니다.",
+    );
+  } else {
+    lines.push("• 모든 문제에 답안을 남겼습니다. 완성도를 끝까지 가져가는 점이 장점입니다.");
   }
   lines.push("");
-  lines.push("이 방에서 막힌 문제는 같은 언어로 짧게 다시 풀어 보는 것이 좋습니다.");
+  lines.push("다음 판에서는 약한 언어를 짧게 반복하고, 이번 판에서 비었던 유형을 먼저 연습하는 것이 좋습니다.");
   return lines.join("\n");
 }

@@ -115,6 +115,14 @@ export function getResultPlayerAnswer(params: {
   myBlankAnswers?: string[][];
   mySelectedOptions?: Record<number, number>;
   demoBots: DemoBot[];
+  opponentAnswers?: Record<
+    string,
+    {
+      codes?: string[];
+      blankAnswers?: string[][];
+      selectedOptions?: Record<number, number | null>;
+    }
+  >;
 }): string {
   const {
     playerId,
@@ -126,6 +134,7 @@ export function getResultPlayerAnswer(params: {
     myBlankAnswers,
     mySelectedOptions,
     demoBots,
+    opponentAnswers,
   } = params;
 
   const isMe = playerId === myUserId || playerId === 'me';
@@ -137,6 +146,20 @@ export function getResultPlayerAnswer(params: {
       blankAnswers: myBlankAnswers?.[problemIndex],
       selectedOption: mySelectedOptions?.[problemIndex] ?? null,
       assembledCode: mySubmissionCodes[problemIndex],
+    });
+  }
+
+  const opponent =
+    opponentAnswers?.[playerId] ||
+    opponentAnswers?.[playerId.replace(/^player-/, '')] ||
+    opponentAnswers?.[`player-${playerId}`];
+  if (opponent) {
+    return formatSubmittedAnswer({
+      problem,
+      langKey,
+      blankAnswers: opponent.blankAnswers?.[problemIndex],
+      selectedOption: opponent.selectedOptions?.[problemIndex] ?? null,
+      assembledCode: opponent.codes?.[problemIndex],
     });
   }
 

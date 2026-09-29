@@ -15,6 +15,7 @@ import {
   UserListContextMenu,
   type UserListMenuAction,
 } from '../../components/lobby/UserListContextMenu/UserListContextMenu';
+import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
 import { CHARACTERS } from '../../constants/roomConstants';
 import { checkNewTitles, type TitleDef } from '../../constants/titleTypes';
 import { ROUTES } from '../../constants/routes';
@@ -166,6 +167,17 @@ export default function ResultPage() {
 
   const [rankingSnapshot, setRankingSnapshot] = useState(() => readFinalRankingSnapshot(sessionId));
   const [apiRankingReady, setApiRankingReady] = useState(false);
+  const [showLobbyConfirm, setShowLobbyConfirm] = useState(false);
+  const [opponentAnswers, setOpponentAnswers] = useState<
+    Record<
+      string,
+      {
+        codes?: string[];
+        blankAnswers?: string[][];
+        selectedOptions?: Record<number, number | null>;
+      }
+    >
+  >({});
 
   const roomUsers = useMemo(() => getRoomUsers(), []);
 
@@ -484,6 +496,28 @@ export default function ResultPage() {
         };
         setRankingSnapshot(snapshot);
         saveFinalRankingSnapshot(snapshot);
+        const packs: typeof opponentAnswers = {};
+        for (const player of ranking.players) {
+          const selectedRaw = player.selectedOptions;
+          const selectedOptions: Record<number, number | null> = {};
+          if (Array.isArray(selectedRaw)) {
+            selectedRaw.forEach((value, index) => {
+              selectedOptions[index] = value == null || Number.isNaN(Number(value)) ? null : Number(value);
+            });
+          } else if (selectedRaw && typeof selectedRaw === 'object') {
+            for (const [key, value] of Object.entries(selectedRaw)) {
+              const index = Number(key);
+              if (!Number.isInteger(index)) continue;
+              selectedOptions[index] = value == null || Number.isNaN(Number(value)) ? null : Number(value);
+            }
+          }
+          packs[String(player.id)] = {
+            codes: Array.isArray(player.codes) ? player.codes.map((code) => String(code ?? '')) : [],
+            blankAnswers: Array.isArray(player.blankAnswers) ? player.blankAnswers : [],
+            selectedOptions,
+          };
+        }
+        setOpponentAnswers(packs);
         setApiRankingReady(true);
 
         if (!rewardsAppliedRef.current) {
@@ -905,6 +939,7 @@ export default function ResultPage() {
       myBlankAnswers,
       mySelectedOptions,
       demoBots,
+      opponentAnswers,
     });
   }, [
     problemDetailModal,
@@ -915,6 +950,7 @@ export default function ResultPage() {
     myBlankAnswers,
     mySelectedOptions,
     demoBots,
+    opponentAnswers,
   ]);
 
   const reviewProblems = useMemo(() => {
@@ -1196,7 +1232,7 @@ export default function ResultPage() {
         </div>
 
         <div className="result-action-slot">
-          <ResultActionBar onReplay={replayToRoom} onExit={clearSessionAndNavigateLobby} />
+          <ResultActionBar onReplay={replayToRoom} onExit={() => setShowLobbyConfirm(true)} />
         </div>
       </div>
 
@@ -1278,6 +1314,19 @@ export default function ResultPage() {
           </div>
         </div>
       )}
+
+      <ExitConfirmModal
+        open={showLobbyConfirm}
+        title="로비 이동"
+        message="로비로 이동하시겠습니까?"
+        confirmLabel="이동"
+        cancelLabel="취소"
+        onConfirm={() => {
+          setShowLobbyConfirm(false);
+          void clearSessionAndNavigateLobby();
+        }}
+        onCancel={() => setShowLobbyConfirm(false)}
+      />
 
       <ResultPopup
         show={resultPopup.show}

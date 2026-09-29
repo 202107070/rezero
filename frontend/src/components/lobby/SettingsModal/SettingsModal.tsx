@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ExitConfirmModal } from '../ExitConfirmModal/ExitConfirmModal';
 import { useModalShake } from '../../../hooks/useModalShake';
 import type { AudioSettings } from '../../../types/audioSettings';
 import type { DisplayMode } from '../../../types/electron';
@@ -26,6 +27,7 @@ export function SettingsModal({
   const [draftMode, setDraftMode] = useState<DisplayMode>(displayMode);
   const [draftAudio, setDraftAudio] = useState<AudioSettings>(audioSettings);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export function SettingsModal({
       setDraftMode(displayMode);
       setDraftAudio(audioSettings);
       setConfirmDelete(false);
+      setConfirmLogout(false);
       setDeleting(false);
     }
   }, [open, displayMode, audioSettings]);
@@ -127,15 +130,12 @@ export function SettingsModal({
               <button
                 type="button"
                 className="pixel-btn pixel-btn-secondary settings-account-btn"
-                onClick={() => {
-                  onClose();
-                  onLogout();
-                }}
+                onClick={() => setConfirmLogout(true)}
               >
                 로그아웃
               </button>
             )}
-            {onDeleteAccount && !confirmDelete && (
+            {onDeleteAccount && (
               <button
                 type="button"
                 className="pixel-btn pixel-btn-danger settings-account-btn"
@@ -143,31 +143,6 @@ export function SettingsModal({
               >
                 회원 탈퇴
               </button>
-            )}
-            {onDeleteAccount && confirmDelete && (
-              <div className="settings-delete-confirm">
-                <div className="settings-delete-warning">
-                  정말 탈퇴하시겠습니까? 계정과 게임 데이터가 모두 삭제되며 복구할 수 없습니다.
-                </div>
-                <div className="settings-delete-actions">
-                  <button
-                    type="button"
-                    className="pixel-btn pixel-btn-danger settings-account-btn"
-                    disabled={deleting}
-                    onClick={() => void handleDelete()}
-                  >
-                    {deleting ? '삭제 중...' : '탈퇴 확인'}
-                  </button>
-                  <button
-                    type="button"
-                    className="pixel-btn pixel-btn-secondary settings-account-btn"
-                    disabled={deleting}
-                    onClick={() => setConfirmDelete(false)}
-                  >
-                    취소
-                  </button>
-                </div>
-              </div>
             )}
           </div>
         </div>
@@ -181,6 +156,46 @@ export function SettingsModal({
           </button>
         </div>
       </div>
+      <ExitConfirmModal
+        open={confirmLogout}
+        title="로그아웃"
+        message="로그아웃 하시겠습니까?"
+        confirmLabel="로그아웃"
+        cancelLabel="취소"
+        onConfirm={() => {
+          setConfirmLogout(false);
+          onLogout?.();
+        }}
+        onCancel={() => setConfirmLogout(false)}
+      />
+      {confirmDelete && (
+        <div className="modal-overlay" style={{ zIndex: 5000 }} onClick={() => { if (!deleting) setConfirmDelete(false); }}>
+          <div className="modal-content settings-delete-modal" onClick={(event) => event.stopPropagation()}>
+            <h3 className="text-center pixel-text-warning" style={{ marginBottom: '12px' }}>회원 탈퇴</h3>
+            <p className="settings-delete-warning">
+              정말 탈퇴하시겠습니까? 계정과 게임 데이터가 모두 삭제되며 복구할 수 없습니다.
+            </p>
+            <div className="settings-delete-actions">
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-danger"
+                disabled={deleting}
+                onClick={() => void handleDelete()}
+              >
+                {deleting ? '삭제 중...' : '탈퇴 확인'}
+              </button>
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-secondary"
+                disabled={deleting}
+                onClick={() => setConfirmDelete(false)}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

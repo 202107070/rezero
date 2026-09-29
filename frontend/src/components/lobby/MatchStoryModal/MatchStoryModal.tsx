@@ -134,23 +134,22 @@ export function MatchStoryModal({
                   <span className="match-story-problem-tab-placeholder">문제 1</span>
                 )}
               </div>
-              <div className="pixel-card-header match-story-detail-subheader">
-                <span style={{ color: 'var(--px-success)' }}>✅ 정답</span>
+              <div className="match-story-answer-head">
+                <span>내 답</span>
+                <span>정답</span>
               </div>
-              <div className="match-story-grid match-story-grid-answer-only">
+              <div className="match-story-grid">
                 <div className="match-answer-box">
-                  <pre
-                    style={{
-                      margin: 0,
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-all',
-                      fontFamily: 'var(--font-pixel)',
-                      fontSize: '14px',
-                      color: 'var(--px-text)',
-                    }}
-                  >
-                    {getSolution(selectedProblem)}
+                  <pre className="match-story-pre">
+                    {String(
+                      selectedHistory?.codes?.[selectedProblemIndex] ||
+                        (selectedProblemIndex === 0 ? selectedHistory?.code : '') ||
+                        '',
+                    ).trim() || '(미입력)'}
                   </pre>
+                </div>
+                <div className="match-answer-box">
+                  <pre className="match-story-pre">{getSolution(selectedProblem)}</pre>
                 </div>
               </div>
             </div>

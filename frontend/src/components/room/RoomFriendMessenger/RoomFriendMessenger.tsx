@@ -1,7 +1,7 @@
 import { useEffect, type MouseEvent, useState } from 'react';
 import { canSummonFriend, getFriendPresences, isFriendOnline } from '../../../services/friendStore';
 import type { FriendPresence } from '../../../types/friend';
-import { getTierIconByTier } from '../../../utils/tierUtils';
+import { getTierByRating, getTierIconByTier } from '../../../utils/tierUtils';
 
 interface RoomFriendMessengerProps {
   roomId: string;
@@ -86,7 +86,11 @@ export function RoomFriendMessenger({
                               : '오프라인'
                         }
                       >
-                        <td className="room-friend-tier-cell">{getTierIconByTier('실버')}</td>
+                        <td className="room-friend-tier-cell">
+                          {getTierIconByTier(
+                            friend.ratingScore != null ? getTierByRating(friend.ratingScore) : '브론즈',
+                          )}
+                        </td>
                         <td
                           className="room-friend-name-cell"
                           onContextMenu={(event) => {

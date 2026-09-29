@@ -1387,11 +1387,20 @@ export default function BattlePage() {
     setShowSaveModal(true);
   };
 
+  const cancelFinalSubmit = () => {
+    setShowSaveModal(false);
+    if (!demoSpectating && !spectatorLocked && currentIndex >= problems.length - 1) {
+      setProblemSolved(false);
+    }
+  };
+
   const finalizeSaveAndSpectate = async () => {
     if (saveModalTimerRef.current) clearTimeout(saveModalTimerRef.current);
+    if (currentIndex >= problems.length - 1) {
+      const submitted = await submitCurrentProblem({ force: true });
+      if (!submitted) return;
+    }
     setShowSaveModal(false);
-    setLocalSolvedProblems((prev) => Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b));
-    markProblemSubmitted(sessionId, Array.from(new Set([...localSolvedProblems, currentIndex])).sort((a, b) => a - b));
     setDemoSpectating(true);
     setSpectatorLocked(true);
     setRevealHint(null);
@@ -1428,8 +1437,9 @@ export default function BattlePage() {
     });
   };
 
-  const submitCurrentProblem = async () => {
-    if (demoSpectating || spectatorLocked || problemSolved) return false;
+  const submitCurrentProblem = async (options?: { force?: boolean }) => {
+    if (demoSpectating || spectatorLocked) return false;
+    if (problemSolved && !options?.force) return false;
     if (!hasCurrentAnswerAttempted()) return false;
     if (answerSubmittingRef.current) return false;
     answerSubmittingRef.current = true;
@@ -1493,13 +1503,14 @@ export default function BattlePage() {
       setShowAnswerRequiredModal(true);
       return;
     }
-    const submitted = await submitCurrentProblem();
-    if (!submitted) return;
-
     if (currentIndex >= problems.length - 1) {
+      setProblemSolved(true);
       lockAndSpectate();
       return;
     }
+
+    const submitted = await submitCurrentProblem();
+    if (!submitted) return;
 
     setCurrentIndex((prev) => prev + 1);
     setProblemSolved(false);
@@ -1875,7 +1886,7 @@ export default function BattlePage() {
   const renderMySpectatorProblemTabs = () => (
     <div className="battle-my-problem-tabs">
       {Array.from({ length: totalProblems }).map((_, idx) => {
-        const checked = localSolvedProblems.includes(idx);
+        const checked = idx <= currentIndex;
         const isActive = myViewProblemIndex === idx;
         return (
           <span
@@ -1947,7 +1958,7 @@ export default function BattlePage() {
                     <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
                   </div>
                   <span className="code-card-progress-text">
-                    {demoSpectating ? `${myViewProblemIndex + 1}/${totalProblems}` : problemProgressText}
+                    {problemProgressText}
                   </span>
                 </div>
               </div>
@@ -2178,7 +2189,7 @@ export default function BattlePage() {
               <button type="button" className="pixel-btn pixel-btn-success" onClick={finalizeSaveAndSpectate}>
                 제출 후 관전
               </button>
-              <button type="button" className="pixel-btn pixel-btn-secondary" onClick={() => setShowSaveModal(false)}>
+              <button type="button" className="pixel-btn pixel-btn-secondary" onClick={cancelFinalSubmit}>
                 취소
               </button>
             </div>
@@ -2227,6 +2238,10 @@ export default function BattlePage() {
 
       <ExitConfirmModal
         open={showLeaveConfirm}
+        title="로비 이동"
+        message="로비로 이동하시겠습니까?"
+        confirmLabel="이동"
+        cancelLabel="취소"
         onConfirm={() => void confirmLeaveBattle()}
         onCancel={() => setShowLeaveConfirm(false)}
       />

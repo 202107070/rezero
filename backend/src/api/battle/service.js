@@ -343,10 +343,36 @@ function toRankingPlayer(participant, submission, match) {
   };
 }
 
+function attachSubmissionAnswers(players, submissions) {
+  const byUserId = new Map(
+    (submissions || []).map(function (submission) {
+      return [String(submission.userId), submission];
+    }),
+  );
+  return (players || []).map(function (player) {
+    const submission = byUserId.get(String(player.id));
+    if (!submission) return player;
+    return {
+      ...player,
+      codes: parseJson(submission.codes, []),
+      blankAnswers: parseJson(submission.blankAnswers, []),
+      selectedOptions: parseJson(submission.selectedOptions, {}),
+    };
+  });
+}
+
 async function getStoredRanking(matchId) {
   const ranking = await battleModel.findMatchRanking(matchId);
   if (!ranking) {
     return null;
+  }
+
+  const players = parseJson(ranking.rankingsJson, []);
+  let submissions = [];
+  try {
+    submissions = await battleModel.findMatchSubmissions(matchId);
+  } catch (error) {
+    submissions = [];
   }
 
   return {
@@ -355,7 +381,7 @@ async function getStoredRanking(matchId) {
     elapsedSec: Number(ranking.elapsedSec),
     roundSeconds: Number(ranking.roundSeconds),
     totalProblems: Number(ranking.totalProblems),
-    players: parseJson(ranking.rankingsJson, []),
+    players: attachSubmissionAnswers(players, submissions),
   };
 }
 

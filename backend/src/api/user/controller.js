@@ -7,6 +7,7 @@ import {
   deleteMyMatchHistory,
   getCurrentUser,
   listMyMatchHistory,
+  listPublicProfiles,
   loginUser,
   saveMyMatchHistory,
   signupUser,
@@ -45,6 +46,21 @@ export async function getMe(req, res, next) {
   try {
     const user = await getCurrentUser(req.user.id);
     return sendSuccess(res, user);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getPublicProfiles(req, res, next) {
+  try {
+    const raw = String(req.query.ids || "");
+    const ids = raw
+      .split(",")
+      .map(function (id) { return id.trim(); })
+      .filter(function (id) { return /^[\w-]{1,64}$/.test(id); })
+      .slice(0, 40);
+    const users = await listPublicProfiles(ids);
+    return sendSuccess(res, { users });
   } catch (error) {
     return next(error);
   }

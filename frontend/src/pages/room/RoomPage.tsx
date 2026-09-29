@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, type MouseEvent, useState } from 'react';
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../services/authService';
-import { getRatingScore } from '../../services/userService';
+import { fetchPublicProfiles, getRatingScore } from '../../services/userService';
 import { getTierByRating } from '../../utils/tierUtils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BattleSettingsPanel } from '../../components/room/BattleSettingsPanel/BattleSettingsPanel';
 import { CharacterSelect } from '../../components/room/CharacterSelect/CharacterSelect';
 import { KickModal } from '../../components/room/KickModal/KickModal';
 import { RoomAlertModal } from '../../components/room/RoomAlertModal/RoomAlertModal';
+import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
 import { PlayerGrid } from '../../components/room/PlayerGrid/PlayerGrid';
 import { RoomActionBar } from '../../components/room/RoomActionBar/RoomActionBar';
 import { RoomChatPanel } from '../../components/room/RoomChatPanel/RoomChatPanel';
@@ -83,6 +84,8 @@ import {
   getFriendUserIds,
   isFriend,
   isFriendOnline,
+  loadFriends,
+  rememberFriendRating,
   removeFriend,
   removeFriendByUserId,
   setUserPresence,
@@ -140,11 +143,13 @@ export default function RoomPage() {
   const [kickTarget, setKickTarget] = useState<{ index: number; name: string } | null>(null);
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlertModal, setShowAlertModal] = useState(false);
+  const [showLobbyConfirm, setShowLobbyConfirm] = useState(false);
   const [kickedCount, setKickedCountState] = useState(() => getKickedCount(roomId));
   const [roomBusy, setRoomBusy] = useState(false);
 
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
   const battleNavLockRef = useRef(false);
+  const onlineUsersRef = useRef<LobbyPresencePayload['users']>([]);
   const leavingToGameRef = useRef(false);
   const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
@@ -236,7 +241,26 @@ export default function RoomPage() {
   }, [parsedMaxPlayers, urlTimeRaw]);
 
   useEffect(() => {
+    const ids = loadFriends()
+      .map((friend) => friend.userId)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) return;
+    void fetchPublicProfiles(ids)
+      .then((rows) => {
+        const friends = loadFriends();
+        for (const row of rows) {
+          const friend = friends.find((entry) => String(entry.userId) === String(row.userId));
+          const name = friend?.name || row.displayName;
+          if (!name) continue;
+          rememberFriendRating(name, Number(row.ratingScore) || 1000);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const applyPresence = (users: LobbyPresencePayload['users']) => {
+      onlineUsersRef.current = users || [];
       const onlineByName = new Map<string, (typeof users)[number]>();
       const onlineById = new Map<string, (typeof users)[number]>();
       for (const user of users || []) {
@@ -268,6 +292,8 @@ export default function RoomPage() {
         const location = String(remote.location || 'lobby') as FriendPresenceStatus;
         const roomIdValue = remote.roomId ? String(remote.roomId) : undefined;
         const roomTitleValue = remote.roomTitle ? String(remote.roomTitle) : undefined;
+        const remoteRating = Number(remote.ratingScore);
+        const ratingPatch = Number.isFinite(remoteRating) ? { ratingScore: remoteRating } : {};
         if (
           location === 'practice' ||
           location === 'build' ||
@@ -280,9 +306,10 @@ export default function RoomPage() {
             roomId: roomIdValue,
             roomTitle: roomTitleValue,
             roomQuery: roomIdValue ? `id=${roomIdValue}` : undefined,
+            ...ratingPatch,
           });
         } else {
-          setUserPresence(name, { status: 'lobby' });
+          setUserPresence(name, { status: 'lobby', ...ratingPatch });
         }
       }
     };
@@ -878,17 +905,30 @@ export default function RoomPage() {
           ? '[친구]'
           : '[전체]';
     const whisperTargetPlayer = players.find((player) => player?.name === whisperTarget);
+    const onlineWhisperUser = (onlineUsersRef.current || []).find(
+      (user) => user.displayName === whisperTarget || user.username === whisperTarget,
+    );
+    const whisperUserId = whisperTarget
+      ? whisperTargetPlayer?.userId || findFriendUserId(whisperTarget) || onlineWhisperUser?.userId || undefined
+      : undefined;
     const friendUserIds = getFriendUserIds(
       players
         .filter((player): player is NonNullable<typeof player> => Boolean(player))
         .map((player) => ({ name: player.name, userId: player.userId })),
     );
+    if (chatMode === 'WHISPER' && !whisperUserId) {
+      setMessages((prev) => [
+        ...prev,
+        { type: 'sys', text: `>> ${whisperTarget || '상대'} 님의 접속 정보를 찾지 못해 귓속말을 보내지 못했습니다.` },
+      ]);
+      return;
+    }
     setChatMsg('');
     setMessages((prev) => [...prev, { type: 'user', name: myName, text, mode: modeLabel }]);
     try {
       const result = await sendRoomMessage(numericRoomId, text, {
         mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
-        targetUserId: whisperTargetPlayer?.userId ? String(whisperTargetPlayer.userId) : undefined,
+        targetUserId: whisperUserId ? String(whisperUserId) : undefined,
         targetUserName: whisperTarget || undefined,
         friendUserIds,
       });
@@ -1144,7 +1184,7 @@ export default function RoomPage() {
                   myIsReady={myIsReady}
                   onReadyToggle={() => void handleMyReadyToggle()}
                   onStart={() => void handleStartGame()}
-                  onLeave={() => void handleLeaveToLobby()}
+                  onLeave={() => setShowLobbyConfirm(true)}
                 />
               </div>
             </div>
@@ -1158,6 +1198,19 @@ export default function RoomPage() {
         open={showAlertModal}
         message={alertMessage}
         onClose={() => setShowAlertModal(false)}
+      />
+
+      <ExitConfirmModal
+        open={showLobbyConfirm}
+        title="로비 이동"
+        message="로비로 이동하시겠습니까?"
+        confirmLabel="이동"
+        cancelLabel="취소"
+        onConfirm={() => {
+          setShowLobbyConfirm(false);
+          void handleLeaveToLobby();
+        }}
+        onCancel={() => setShowLobbyConfirm(false)}
       />
 
       <KickModal

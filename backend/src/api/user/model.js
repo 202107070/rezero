@@ -368,3 +368,21 @@ export async function findUserMatchAnalytics(userId, limit = 40) {
     };
   });
 }
+
+export async function findUsersByIds(userIds) {
+  const ids = Array.isArray(userIds)
+    ? userIds.map(function (id) { return String(id || "").trim(); }).filter(Boolean)
+    : [];
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(function () { return "?"; }).join(", ");
+  return pool.query(
+    `SELECT
+       id AS userId,
+       username,
+       display_name AS displayName,
+       rating_score AS ratingScore
+     FROM users
+     WHERE id IN (${placeholders})`,
+    ids,
+  );
+}

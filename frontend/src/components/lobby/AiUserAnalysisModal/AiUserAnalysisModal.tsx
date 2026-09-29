@@ -36,6 +36,7 @@ interface AiAnalysisResponse {
 export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose }: AiUserAnalysisModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState(40);
   const [error, setError] = useState('');
   const [result, setResult] = useState<AiAnalysisResponse | null>(null);
 
@@ -43,6 +44,7 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
     if (!open || (!userId && !historyId)) return;
     let cancelled = false;
     setLoading(true);
+    setCountdown(40);
     setError('');
     setResult(null);
     void apiRequest<AiAnalysisResponse>('/users/ai-analysis', {
@@ -64,6 +66,14 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
       cancelled = true;
     };
   }, [open, userId, historyId]);
+
+  useEffect(() => {
+    if (!open || !loading) return;
+    const timer = window.setInterval(() => {
+      setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [open, loading]);
 
   if (!open) return null;
 
@@ -88,7 +98,8 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
 
         {loading && (
           <div className="ai-analysis-loading">
-            {historyId ? '이 방의 기록을 분석하고 있습니다...' : '사용자 데이터를 수집하고 분석 중입니다...'}
+            <div className="ai-analysis-countdown">{countdown}</div>
+            <div className="ai-analysis-spinner" aria-hidden="true" />
           </div>
         )}
 

@@ -3,7 +3,7 @@ import FillBlankRenderer from '../../../components/battle/FillBlankRenderer';
 import ProblemVisualPreview from '../../../components/battle/ProblemVisualPreview';
 import { resolveProblemCapabilities } from '../../../utils/problemCapabilities';
 import type { PracticeExercise } from '../../../utils/practiceUtils';
-import { isBlankBasedType } from '../../../utils/problemTypeUtils';
+import { getProblemAnswersForLang } from '../../../utils/problemTypeUtils';
 
 interface PracticeAnswerSectionProps {
   exercise: PracticeExercise;
@@ -41,6 +41,17 @@ export function PracticeAnswerSection({
     [exercise],
   );
   const blankMarkerCount = (exercise.question || '').match(/_____/g)?.length || 0;
+  const resolvedAnswers = useMemo(() => {
+    if (correctAnswers.length > 0) return correctAnswers;
+    return getProblemAnswersForLang(exercise.answer, 'JAVA');
+  }, [correctAnswers, exercise.answer]);
+  const answerText = useMemo(() => {
+    if (exercise.type === 'multiple_choice' && exercise.correctIndex != null && exercise.options?.[exercise.correctIndex]) {
+      return `${String.fromCharCode(65 + exercise.correctIndex)}. ${exercise.options[exercise.correctIndex]}`;
+    }
+    if (resolvedAnswers.length > 0) return resolvedAnswers.join(', ');
+    return '정답을 찾지 못했습니다.';
+  }, [exercise.correctIndex, exercise.options, exercise.type, resolvedAnswers]);
   const treatAsFillBlank =
     caps.showCodePanel || (exercise.type === 'short_answer' && blankMarkerCount > 0);
   const shouldRenderVisual = caps.hasVisual || caps.hasImage;
@@ -109,26 +120,10 @@ export function PracticeAnswerSection({
           >
             {isCorrect ? '정답입니다!' : '틀렸습니다!'}
           </div>
-          {!isCorrect && exercise.type === 'multiple_choice' && exercise.correctIndex != null && (
-            <div className="answer-box">
-              <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>정답:</div>
-              <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>
-                {String.fromCharCode(65 + exercise.correctIndex)}. {exercise.options?.[exercise.correctIndex]}
-              </div>
-            </div>
-          )}
-          {!isCorrect && exercise.type === 'short_answer' && blankMarkerCount === 0 && (
-            <div className="answer-box">
-              <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>정답:</div>
-              <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>{correctAnswers[0] || ''}</div>
-            </div>
-          )}
-          {!isCorrect && (isBlankBasedType(exercise.type) || blankMarkerCount > 0) && (
-            <div className="answer-box">
-              <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>정답:</div>
-              <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>{correctAnswers.join(', ')}</div>
-            </div>
-          )}
+          <div className="answer-box">
+            <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>정답:</div>
+            <div style={{ color: 'var(--px-success)', fontSize: '18px' }}>{answerText}</div>
+          </div>
           <div className="explain-box">
             <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '4px' }}>해설:</div>
             <div style={{ fontSize: '16px', lineHeight: '1.5' }}>{exercise.explanation}</div>

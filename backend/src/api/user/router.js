@@ -4,6 +4,7 @@ import {
   getMe,
   getMatchHistory,
   getOnlineUsers,
+  getPublicProfiles,
   login,
   postMatchHistory,
   postRoulette,
@@ -21,6 +22,7 @@ router.post("/auth/login", login);
 router.get("/users/me", authenticate, getMe);
 router.delete("/users/me", authenticate, removeMe);
 router.get("/users/online", authenticate, getOnlineUsers);
+router.get("/users/public-profiles", authenticate, getPublicProfiles);
 router.post("/users/me/roulette", authenticate, postRoulette);
 router.get("/users/me/match-history", authenticate, getMatchHistory);
 router.post("/users/me/match-history", authenticate, postMatchHistory);

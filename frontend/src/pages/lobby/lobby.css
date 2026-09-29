@@ -255,6 +255,42 @@
   color: #bbb;
 }
 
+.ai-analysis-countdown {
+  font-size: 28px;
+  color: var(--px-warning);
+  margin-bottom: 10px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.ai-analysis-spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto;
+  border: 4px solid #333;
+  border-top-color: var(--px-primary);
+  animation: ai-analysis-spin 0.8s linear infinite;
+}
+
+@keyframes ai-analysis-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.settings-delete-modal {
+  width: min(460px, 92vw);
+}
+
+.settings-delete-modal .settings-delete-warning {
+  font-size: 16px;
+  text-align: center;
+  margin: 0 0 16px;
+}
+
+.settings-delete-modal .settings-delete-actions {
+  justify-content: center;
+}
+
 .ai-analysis-error {
   color: var(--px-danger);
 }
@@ -1558,6 +1594,26 @@
   padding: 4px 12px;
   font-size: 16px;
   flex-shrink: 0;
+}
+
+.match-story-answer-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 2px 0;
+  color: var(--px-success);
+  font-size: 16px;
+  text-align: center;
+}
+
+.match-story-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: var(--px-text);
 }
 
 .match-story-grid {

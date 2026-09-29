@@ -57,11 +57,14 @@ import {
   getFriendNames,
   getFriendUserIds,
   isFriend,
+  loadFriends,
+  rememberFriendRating,
   removeFriend,
   removeFriendByUserId,
   setUserPresence,
 } from '../../services/friendStore';
 import {
+  fetchPublicProfiles,
   getEquippedTitleId,
   getGold,
   getItemInventory,
@@ -129,6 +132,7 @@ function syncFriendPresenceFromOnline(
     location?: string;
     roomId?: string;
     roomTitle?: string;
+    ratingScore?: number;
   }>,
 ) {
   const applyRemote = (
@@ -137,21 +141,25 @@ function syncFriendPresenceFromOnline(
       location?: string;
       roomId?: string;
       roomTitle?: string;
+      ratingScore?: number;
     },
   ) => {
     const location = String(remote.location || 'lobby');
     const roomId = remote.roomId ? String(remote.roomId) : undefined;
     const roomTitle = remote.roomTitle ? String(remote.roomTitle) : undefined;
+    const ratingScore = Number(remote.ratingScore);
+    const ratingPatch = Number.isFinite(ratingScore) ? { ratingScore } : {};
     if (location === 'practice') {
-      setUserPresence(name, { status: 'practice' });
+      setUserPresence(name, { status: 'practice', ...ratingPatch });
     } else if (location === 'build') {
-      setUserPresence(name, { status: 'build' });
+      setUserPresence(name, { status: 'build', ...ratingPatch });
     } else if (location === 'battle') {
       setUserPresence(name, {
         status: 'battle',
         roomId,
         roomTitle,
         roomQuery: roomId ? `id=${roomId}` : undefined,
+        ...ratingPatch,
       });
     } else if (location === 'result') {
       setUserPresence(name, {
@@ -159,6 +167,7 @@ function syncFriendPresenceFromOnline(
         roomId,
         roomTitle,
         roomQuery: roomId ? `id=${roomId}` : undefined,
+        ...ratingPatch,
       });
     } else if (location === 'room') {
       setUserPresence(name, {
@@ -166,9 +175,10 @@ function syncFriendPresenceFromOnline(
         roomId,
         roomTitle,
         roomQuery: roomId ? `id=${roomId}` : undefined,
+        ...ratingPatch,
       });
     } else {
-      setUserPresence(name, { status: 'lobby' });
+      setUserPresence(name, { status: 'lobby', ...ratingPatch });
     }
   };
 
@@ -550,6 +560,25 @@ export default function LobbyPage() {
     }
     return () => LobbyBGM.stop();
   }, [audioSettings.lobbyMusic]);
+
+  useEffect(() => {
+    const ids = loadFriends()
+      .map((friend) => friend.userId)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) return;
+    void fetchPublicProfiles(ids)
+      .then((rows) => {
+        const friends = loadFriends();
+        for (const row of rows) {
+          const friend = friends.find((entry) => String(entry.userId) === String(row.userId));
+          const name = friend?.name || row.displayName;
+          if (!name) continue;
+          rememberFriendRating(name, Number(row.ratingScore) || 1000);
+        }
+        setFriendNames(getFriendNames());
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const me = getCurrentDisplayName() || getCurrentUserName();

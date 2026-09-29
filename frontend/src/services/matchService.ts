@@ -49,6 +49,9 @@ export interface MatchRankingPlayer {
   solvedProblems: number[];
   problemResults: boolean[];
   rank: number;
+  codes?: string[];
+  blankAnswers?: string[][];
+  selectedOptions?: Record<string, number> | Array<number | null>;
 }
 
 export interface MatchRanking {

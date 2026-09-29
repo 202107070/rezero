@@ -1,6 +1,7 @@
 import type { ItemInventory } from '../constants/itemTypes';
 import type { TitleData, TitleStats } from '../constants/titleTypes';
 import type { CodeHistoryEntry } from '../types/lobby';
+import { apiRequest } from './apiClient';
 
 const EMPTY_ITEM_INVENTORY: ItemInventory = {
   paint: 0,
@@ -140,6 +141,15 @@ export function applyUserProfile(profile: UserProfilePayload): void {
     ...(profile.itemInventory || {}),
   });
   saveTitles(profile.titleData || defaultTitleData());
+}
+
+export async function fetchPublicProfiles(userIds: string[]): Promise<Array<{ userId: string; ratingScore: number; displayName?: string }>> {
+  const ids = [...new Set(userIds.map((id) => String(id || '').trim()).filter(Boolean))].slice(0, 40);
+  if (ids.length === 0) return [];
+  const payload = await apiRequest<{ users?: Array<{ userId: string; ratingScore: number; displayName?: string }> }>(
+    `/users/public-profiles?ids=${encodeURIComponent(ids.join(','))}`,
+  );
+  return Array.isArray(payload.users) ? payload.users : [];
 }
 
 export function clearUserSession(): void {
