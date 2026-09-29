@@ -33,7 +33,7 @@ export function ResultPlayerRow({
   onNicknameContextMenu,
 }: ResultPlayerRowProps) {
   const canSelectDots = reviewSelectMode && isReviewSelectable;
-  const canOpenDetail = !reviewSelectMode && !!onOpenProblemDetail;
+  const canOpenDetail = !!onOpenProblemDetail && !canSelectDots;
 
   const ratingDeltaLabel =
     player.delta > 0 ? ` +${player.delta}` : player.delta < 0 ? ` ${player.delta}` : '';

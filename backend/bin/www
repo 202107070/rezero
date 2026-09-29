@@ -25,6 +25,9 @@ async function startServer() {
 
   server.listen(env.port, env.host, function () {
     console.log("Backend running on http://" + env.host + ":" + env.port);
+    console.log(
+      "[Cursor AI] API key " + (env.cursorApiKey ? "loaded" : "missing — backend/.env 의 CURSOR_API_KEY 확인 후 재시작"),
+    );
   });
 }
 

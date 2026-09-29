@@ -171,6 +171,13 @@ export async function findUserTitleData(userId) {
   return rows.length > 0 ? rows[0] : null;
 }
 
+function toSqlDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  const parsed = new Date(value || Date.now());
+  if (Number.isNaN(parsed.getTime())) return new Date();
+  return parsed;
+}
+
 function parseJsonColumn(value, fallback) {
   if (value == null) return fallback;
   if (typeof value !== "string") return value;
@@ -233,7 +240,7 @@ export async function upsertMatchCodeHistory(entry) {
       entry.historyId,
       entry.userId,
       entry.roomId || "",
-      entry.submittedAt || new Date(),
+      toSqlDate(entry.submittedAt),
       entry.lang || "UNKNOWN",
       entry.mode || null,
       entry.code || "",
