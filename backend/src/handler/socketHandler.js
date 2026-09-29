@@ -723,8 +723,14 @@ export function registerSocketHandlers(io, socket) {
     );
 
     try {
-      await markUserOffline(socket.user?.id);
-      await broadcastLobbyPresence(io);
+      const userId = socket.user?.id;
+      const stillThere = userId
+        ? io.sockets.adapter.rooms.get("user:" + String(userId))
+        : null;
+      if (!stillThere || stillThere.size === 0) {
+        await markUserOffline(userId);
+        await broadcastLobbyPresence(io);
+      }
 
       const { leaveRoom } = await import("../api/room/service.js");
       const joinedRooms = [...socket.rooms].filter(function (room) {

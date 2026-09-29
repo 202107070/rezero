@@ -1,3 +1,4 @@
+import { useServerDownChat } from '../../hooks/useServerDownChat';
 import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -223,6 +224,9 @@ export default function BattlePage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { sender: 'SYSTEM', text: '배틀 시작! 서로 화이팅 하세요.', time: '' },
   ]);
+  useServerDownChat((text) => {
+    setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text, time: '' }]);
+  });
   const [chatMsg, setChatMsg] = useState('');
   const [buildCodeByProblem, setBuildCodeByProblem] = useState<Record<number, string>>({});
   const [buildLogsByProblem, setBuildLogsByProblem] = useState<Record<number, BuildLogLine[]>>({});

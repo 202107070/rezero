@@ -160,7 +160,7 @@ export function MatchStoryModal({
                   </pre>
                 </div>
                 <div className="match-answer-box">
-                  <pre className="match-story-pre">{getSolution(selectedProblem)}</pre>
+                  <pre className="match-story-pre">{getSolution(selectedProblem, selectedHistory?.lang)}</pre>
                 </div>
               </div>
             </div>

@@ -280,6 +280,7 @@ export function disconnectRoomSocket(force = false): void {
   if (!socket) return;
   if (!force) return;
   intentionalDisconnect = true;
+  socket.io.reconnection(false);
   socket.removeAllListeners();
   socket.disconnect();
   socket = null;
@@ -573,6 +574,8 @@ export function emitUserLogout(): Promise<{ success: boolean; message?: string }
     if (!client.connected) {
       return Promise.resolve({ success: false, message: 'not connected' });
     }
+    client.io.reconnection(false);
+    intentionalDisconnect = true;
     return new Promise((resolve) => {
       const timer = window.setTimeout(() => {
         resolve({ success: false, message: 'timeout' });

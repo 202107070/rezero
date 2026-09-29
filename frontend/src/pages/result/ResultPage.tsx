@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useServerDownChat } from '../../hooks/useServerDownChat';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AiReviewerPanel, type AiMessage } from '../../components/result/AiReviewerPanel/AiReviewerPanel';
 import { ResultActionBar } from '../../components/result/ResultActionBar/ResultActionBar';
@@ -266,6 +267,9 @@ export default function ResultPage() {
   const [chatMessages, setChatMessages] = useState<ResultChatMessage[]>([
     { sender: 'SYSTEM', text: '매치가 종료되었습니다.', type: 'sys' },
   ]);
+  useServerDownChat((text) => {
+    setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text, type: 'sys' }]);
+  });
   const [chatInput, setChatInput] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
   const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
@@ -732,6 +736,7 @@ export default function ResultPage() {
         problems: problems.map((problem, index) => ({
           ...problem,
           userAnswer: answerCodes[index] || '(미입력)',
+          solution: formatCorrectAnswer(problem as BattleProblem, langKey) || '',
         })),
         codes: answerCodes.length > 0 ? answerCodes : mySubmissionCodes,
         code: answerCodes[0] || submission.code || mySubmissionCodes[0] || '',

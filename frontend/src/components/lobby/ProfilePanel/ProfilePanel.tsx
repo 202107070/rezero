@@ -7,6 +7,7 @@ interface ProfilePanelProps {
   displayName: string;
   titleData: TitleData;
   ratingScore?: number;
+  identityReady?: boolean;
   onOpenMyInfo: () => void;
 }
 
@@ -15,6 +16,7 @@ export function ProfilePanel({
   displayName,
   titleData,
   ratingScore,
+  identityReady = true,
   onOpenMyInfo,
 }: ProfilePanelProps) {
   const equipped = getEquippedTitle(titleData);
@@ -57,8 +59,10 @@ export function ProfilePanel({
       >
         ME
       </div>
-      <h3 style={{ color: '#eee', margin: '2px 0', fontSize: '17px' }}>{displayName || username}</h3>
-      {equipped && (
+      <h3 style={{ color: '#eee', margin: '2px 0', fontSize: '17px', visibility: identityReady ? 'visible' : 'hidden' }}>
+        {displayName || username}
+      </h3>
+      {identityReady && equipped && (
         <span className={`title-badge rarity-${equipped.rarity}`}>
           {equipped.icon} {equipped.name}
         </span>

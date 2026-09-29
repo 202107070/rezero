@@ -25,7 +25,7 @@ import {
   getActiveRoomId,
 } from '../services/roomSocket';
 import { setUserPresence, switchFriendOwner } from '../services/friendStore';
-import { AUTH_EXPIRED_EVENT } from '../services/apiClient';
+import { AUTH_EXPIRED_EVENT, SERVER_DOWN_EVENT } from '../services/apiClient';
 import { ConnectionLostModal } from '../components/lobby/ConnectionLostModal/ConnectionLostModal';
 import { quitApp } from '../utils/windowBridge';
 
@@ -64,6 +64,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
+  }, []);
+
+  useEffect(() => {
+    const onServerDown = () => {
+      window.setTimeout(() => {
+        void quitApp();
+      }, 1200);
+    };
+    window.addEventListener(SERVER_DOWN_EVENT, onServerDown);
+    return () => window.removeEventListener(SERVER_DOWN_EVENT, onServerDown);
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {

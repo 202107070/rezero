@@ -44,6 +44,23 @@ export class ApiError extends Error {
 }
 
 export const AUTH_EXPIRED_EVENT = 'rezero:auth-expired';
+export const SERVER_DOWN_EVENT = 'rezero:server-down';
+
+let serverDownNotified = false;
+
+export function isBackendDown(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 0 || error.status >= 502 || error.code === 'NETWORK_ERROR');
+}
+
+function notifyServerDown(): void {
+  if (serverDownNotified) return;
+  serverDownNotified = true;
+  try {
+    window.dispatchEvent(new CustomEvent(SERVER_DOWN_EVENT));
+  } catch {
+    // ignore
+  }
+}
 
 export function dispatchAuthExpired(reason = 'TOKEN_EXPIRED'): void {
   try {
@@ -84,7 +101,9 @@ export async function apiRequest<T>(
       headers,
     });
   } catch {
-    throw new ApiError(0, 'NETWORK_ERROR', '서버에 연결할 수 없습니다.');
+    const error = new ApiError(0, 'NETWORK_ERROR', '서버에 연결할 수 없습니다.');
+    notifyServerDown();
+    throw error;
   }
 
   let payload: unknown = null;
@@ -102,6 +121,9 @@ export async function apiRequest<T>(
     const code = body.error?.code || 'REQUEST_FAILED';
     if (response.status === 401 && (code === 'TOKEN_EXPIRED' || code === 'UNAUTHORIZED' || code === 'INVALID_TOKEN' || code === 'TOKEN_INVALID')) {
       dispatchAuthExpired(code);
+    }
+    if (response.status === 0 || response.status >= 502) {
+      notifyServerDown();
     }
     throw new ApiError(
       response.status,

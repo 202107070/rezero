@@ -31,7 +31,8 @@ import {
   setPendingJoinPassword,
 } from '../../services/roomService';
 import { getCurrentDisplayName, getCurrentUserName, refreshMeProfile } from '../../services/authService';
-import { ApiError, apiRequest } from '../../services/apiClient';
+import { ApiError, apiRequest, isBackendDown } from '../../services/apiClient';
+import { useServerDownChat } from '../../hooks/useServerDownChat';
 import {
   emitFriendRemove,
   emitFriendRequest,
@@ -263,6 +264,7 @@ export default function LobbyPage() {
   const [myInfoMode, setMyInfoMode] = useState<'self' | 'public'>('self');
   const [myInfoPublicUser, setMyInfoPublicUser] = useState<LobbyUser | null>(null);
   const [titleData, setTitleData] = useState<TitleData>(loadTitles);
+  const [profileReady, setProfileReady] = useState(false);
   const [users, setUsers] = useState<LobbyUser[]>(loadInitialUsers);
 
   const applyOnlineUsers = useCallback(
@@ -325,7 +327,6 @@ export default function LobbyPage() {
 
         const joinResult = await joinRoomSocket(LOBBY_ROOM_ID);
         if (cancelled) return;
-        void emitUpdateTitle(getEquippedTitleId()).catch(() => undefined);
         if (joinResult.onlineUsers?.length) {
           applyOnlineUsers(joinResult.onlineUsers);
         }
@@ -527,6 +528,12 @@ export default function LobbyPage() {
   const [joinError, setJoinError] = useState('');
   const [joiningRoom, setJoiningRoom] = useState(false);
 
+  useServerDownChat((text) => {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text, time: timeStr, mode: '[안내]' }]);
+  });
+
   useEffect(() => {
     try {
       const notice = sessionStorage.getItem('rezero_kick_notice');
@@ -549,6 +556,7 @@ export default function LobbyPage() {
       setRooms(nextRooms);
     } catch (error) {
       setRooms([]);
+      if (isBackendDown(error)) return;
       setChatMessages((prev) => {
         const now = new Date();
         const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -601,8 +609,12 @@ export default function LobbyPage() {
     setUserPresence(me, { status: 'lobby' });
     if (username && username !== me) setUserPresence(username, { status: 'lobby' });
     void emitUpdateLocation({ location: 'lobby' }).catch(() => undefined);
-    void refreshMeProfile().then(() => {
+    void refreshMeProfile().finally(() => {
+      const nextTitles = loadTitles();
+      setTitleData(nextTitles);
       setProfileRating(getRatingScore());
+      setProfileReady(true);
+      void emitUpdateTitle(nextTitles.equipped).catch(() => undefined);
       setUsers((prev) =>
         prev.map((user) =>
           user.userId === authUser.id || user.name === me
@@ -1031,6 +1043,7 @@ export default function LobbyPage() {
               username={authUser.username}
               displayName={authUser.displayName}
               titleData={titleData}
+              identityReady={profileReady}
               ratingScore={profileRating}
               onOpenMyInfo={() => {
                 setMyInfoMode('self');
@@ -1052,6 +1065,7 @@ export default function LobbyPage() {
               friendNames={friendNames}
               activeTab={activeTab}
               titleData={titleData}
+              identityReady={profileReady}
               onTabChange={setActiveTab}
               onUserMenuAction={handleUserMenuAction}
             />

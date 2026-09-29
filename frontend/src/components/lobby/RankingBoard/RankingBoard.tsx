@@ -26,6 +26,7 @@ interface RankingBoardProps {
   friendNames: string[];
   activeTab: string;
   titleData: TitleData;
+  identityReady?: boolean;
   onTabChange: (tab: string) => void;
   onUserMenuAction?: (action: UserListMenuAction, user: LobbyUser) => void;
 }
@@ -73,6 +74,7 @@ export function RankingBoard({
   friendNames,
   activeTab,
   titleData,
+  identityReady = true,
   onTabChange,
   onUserMenuAction,
 }: RankingBoardProps) {
@@ -185,14 +187,14 @@ export function RankingBoard({
                     onContextMenu={(event) => handleNicknameContextMenu(event, u)}
                   >
                     {isSelf ? (
-                      <>
+                      <span style={{ visibility: identityReady ? 'visible' : 'hidden' }}>
                         <strong style={{ color: 'var(--px-warning)' }}>{u.name}</strong>
-                        {myEquipped && (
+                        {identityReady && myEquipped && (
                           <span style={{ marginLeft: '6px', fontSize: '11px' }} className={`title-badge rarity-${myEquipped.rarity}`}>
                             {myEquipped.icon} {myEquipped.name}
                           </span>
                         )}
-                      </>
+                      </span>
                     ) : (
                       <>
                         {u.name}

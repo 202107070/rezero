@@ -46,9 +46,13 @@ export interface CodeHistoryEntry {
     title?: string;
     question?: string;
     explanation?: string;
+    type?: string;
     answer?: Record<string, string[]>;
+    options?: string[] | null;
+    correctIndex?: number | null;
     lang?: string;
     userAnswer?: string;
+    solution?: string;
   }>;
   codes: string[];
   code: string;

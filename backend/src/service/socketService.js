@@ -120,11 +120,31 @@ export async function markUserOffline(userId) {
   }
 }
 
+async function liveSocketUserIds() {
+  try {
+    const { getSocket } = await import("#config/socketConfig.js");
+    const io = getSocket();
+    if (!io) return null;
+    const ids = new Set();
+    for (const socket of io.of("/").sockets.values()) {
+      if (socket.user?.id) ids.add(String(socket.user.id));
+    }
+    return ids;
+  } catch {
+    return null;
+  }
+}
+
 export async function listOnlineUsers() {
   try {
     const ids = await redisClient.sMembers(ONLINE_SET_KEY);
+    const liveIds = await liveSocketUserIds();
     const users = [];
     for (let i = 0; i < ids.length; i++) {
+      if (liveIds && !liveIds.has(String(ids[i]))) {
+        await markUserOffline(ids[i]);
+        continue;
+      }
       const meta = await redisClient.hGetAll(ONLINE_META_PREFIX + ids[i]);
       if (meta && meta.userId) {
         users.push({

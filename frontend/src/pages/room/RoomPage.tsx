@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type MouseEvent, useState } from 'react';
+import { useServerDownChat } from '../../hooks/useServerDownChat';
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName } from '../../services/authService';
 import { fetchPublicProfiles, getRatingScore } from '../../services/userService';
 import { getTierByRating } from '../../utils/tierUtils';
@@ -100,6 +101,24 @@ import {
 } from '../../components/lobby/UserListContextMenu/UserListContextMenu';
 import './room.css';
 
+const recentRoomNotices = new Map<string, number>();
+const ackedRoomInvites = new Set<string>();
+
+function shouldShowRoomNotice(text: string): boolean {
+  const now = Date.now();
+  const prev = recentRoomNotices.get(text) || 0;
+  if (now - prev < 2500) return false;
+  recentRoomNotices.set(text, now);
+  return true;
+}
+
+function ackRoomInviteOnce(fromUserId: string, roomId: string) {
+  const key = `${fromUserId}:${roomId}:accept`;
+  if (ackedRoomInvites.has(key)) return;
+  ackedRoomInvites.add(key);
+  void emitRoomInviteResponse(fromUserId, true, roomId);
+}
+
 export default function RoomPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -148,6 +167,10 @@ export default function RoomPage() {
   const [showLobbyConfirm, setShowLobbyConfirm] = useState(false);
   const [kickedCount, setKickedCountState] = useState(() => getKickedCount(roomId));
   const [roomBusy, setRoomBusy] = useState(false);
+
+  useServerDownChat((text) => {
+    setMessages((prev) => [...prev, { type: 'sys', text: `>> ${text}` }]);
+  });
 
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
   const battleNavLockRef = useRef(false);
@@ -389,7 +412,7 @@ export default function RoomPage() {
             joinedThisAttempt = true;
             clearPendingJoinPassword();
             if (inviteMeta?.fromUserId) {
-              void emitRoomInviteResponse(inviteMeta.fromUserId, true, inviteMeta.roomId || String(numericRoomId));
+              ackRoomInviteOnce(inviteMeta.fromUserId, inviteMeta.roomId || String(numericRoomId));
             }
             clearPendingInviteToken();
           } catch (error) {
@@ -403,7 +426,7 @@ export default function RoomPage() {
             }
             clearPendingJoinPassword();
             if (inviteMeta?.fromUserId) {
-              void emitRoomInviteResponse(inviteMeta.fromUserId, true, inviteMeta.roomId || String(numericRoomId));
+              ackRoomInviteOnce(inviteMeta.fromUserId, inviteMeta.roomId || String(numericRoomId));
             }
             clearPendingInviteToken();
             room = await fetchRoom(numericRoomId);
@@ -411,7 +434,7 @@ export default function RoomPage() {
         } else {
           clearPendingJoinPassword();
           if (inviteMeta?.fromUserId) {
-            void emitRoomInviteResponse(inviteMeta.fromUserId, true, inviteMeta.roomId || String(numericRoomId));
+            ackRoomInviteOnce(inviteMeta.fromUserId, inviteMeta.roomId || String(numericRoomId));
           }
           clearPendingInviteToken();
         }
@@ -482,11 +505,10 @@ export default function RoomPage() {
                 }) => {
                   const name = payload?.user?.displayName || payload?.user?.username;
                   if (name) {
-                    setMessages((prev) => {
-                      const line = `>> [${name}] 님이 입장하셨습니다.`;
-                      if (prev.some((msg) => msg.type === 'sys' && msg.text === line)) return prev;
-                      return [...prev, { type: 'sys', text: line }];
-                    });
+                    const line = `>> [${name}] 님이 입장하셨습니다.`;
+                    if (shouldShowRoomNotice(line)) {
+                      setMessages((prev) => [...prev, { type: 'sys', text: line }]);
+                    }
                   }
                   void fetchRoom(numericRoomId)
                     .then((nextRoom) => {
@@ -506,10 +528,10 @@ export default function RoomPage() {
                   return;
                 }
                 const leftId = payload.userId ? String(payload.userId) : '';
-                setMessages((prev) => [
-                  ...prev,
-                  { type: 'sys', text: `>> 유저가 퇴장했습니다.` },
-                ]);
+                const leaveLine = '>> 유저가 퇴장했습니다.';
+                if (shouldShowRoomNotice(`${leaveLine}:${leftId || 'unknown'}`)) {
+                  setMessages((prev) => [...prev, { type: 'sys', text: leaveLine }]);
+                }
                 if (leftId) {
                   setPlayers((prev) =>
                     prev.map((player) => (player && String(player.userId) === leftId ? null : player)),
@@ -605,13 +627,11 @@ export default function RoomPage() {
                 (payload: RoomInviteResponsePayload) => {
                   if (!payload?.accepted) return;
                   const name = payload.fromUserName || '상대';
-                  setMessages((prev) => [
-                    ...prev,
-                    {
-                      type: 'sys',
-                      text: `>> ${name}님이 방 초대를 수락했습니다.`,
-                    },
-                  ]);
+                  const line = `>> ${name}님이 방 초대를 수락했습니다.`;
+                  const noticeKey = `${line}:${payload.fromUserId || ''}:${payload.roomId || ''}`;
+                  if (shouldShowRoomNotice(noticeKey)) {
+                    setMessages((prev) => [...prev, { type: 'sys', text: line }]);
+                  }
                 },
               ),
             );

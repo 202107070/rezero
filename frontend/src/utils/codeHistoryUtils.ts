@@ -1,17 +1,22 @@
 import type { CodeHistoryEntry } from '../types/lobby';
+import type { BattleProblem } from '../types/battle';
 import { persistUserCodeHistory, readUserCodeHistory } from '../services/userService';
 import { apiRequest } from '../services/apiClient';
 import { getCurrentUserId } from '../services/authService';
 import problems from '../data/problems.js';
 import { getLangKey } from './battle/codeUtils';
 import { getProblemAnswersForLang } from './problemTypeUtils';
+import { formatCorrectAnswer } from './resultAnswerUtils';
 
 type ProblemRecord = {
   id?: string;
+  type?: string;
   title?: string;
   question?: string;
   lang?: string;
   answer?: Record<string, string[]>;
+  options?: string[] | null;
+  correctIndex?: number | null;
 };
 
 export function normalizeCodeHistoryEntry(entry: unknown): CodeHistoryEntry | null {
@@ -184,25 +189,41 @@ export function isPreviouslySolvedProblem(
   return false;
 }
 
-export function getSolution(problem: CodeHistoryEntry['problems'][0] | null | undefined): string {
+export function getSolution(
+  problem: CodeHistoryEntry['problems'][0] | null | undefined,
+  langHint?: string,
+): string {
   if (!problem) return '// 정답이 준비되지 않았습니다.';
-  const lang = getLangKey(problem.lang || 'JAVA');
+  const stored = String(problem.solution || '').trim();
+  if (stored && stored !== String(problem.question || '').trim()) return stored;
 
-  const fromProblem = getProblemAnswersForLang(problem.answer, lang);
-  if (fromProblem.length > 0) return fromProblem.join('\n');
-
+  const lang = getLangKey(problem.lang || langHint || 'JAVA');
   const bank = problems as ProblemRecord[];
+  const question = String(problem.question || '').trim();
   const match =
     (problem.id ? bank.find((entry) => entry.id === problem.id) : undefined) ||
     bank.find(
       (entry) =>
-        entry.title === problem.title &&
-        String(entry.question || '').trim() === String(problem.question || '').trim(),
+        entry.title === problem.title && String(entry.question || '').trim() === question,
     ) ||
+    (question
+      ? bank.find((entry) => String(entry.question || '').trim() === question)
+      : undefined) ||
     bank.find((entry) => entry.title === problem.title);
 
-  const fromBank = getProblemAnswersForLang(match?.answer, lang);
-  if (fromBank.length > 0) return fromBank.join('\n');
+  const merged = {
+    ...(match || {}),
+    ...problem,
+    type: problem.type || match?.type,
+    options: problem.options?.length ? problem.options : match?.options,
+    correctIndex: problem.correctIndex ?? match?.correctIndex ?? null,
+    answer: problem.answer || match?.answer,
+    question: problem.question || match?.question,
+  };
+  const formatted = formatCorrectAnswer(merged as BattleProblem, lang).trim();
+  if (formatted) return formatted;
 
+  const blanks = getProblemAnswersForLang(merged.answer, lang);
+  if (blanks.length > 0) return blanks.join('\n');
   return '// 정답이 준비되지 않았습니다.';
 }
