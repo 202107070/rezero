@@ -37,7 +37,12 @@ export const ROOM_SOCKET_EVENTS = {
   TITLE_CHANGED: 'title_changed',
   UPDATE_LOCATION: 'update_location',
   USER_LOGOUT: 'user_logout',
+  USER_DELETED: 'user_deleted',
 } as const;
+
+export function createChatMessageId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export const LOBBY_ROOM_ID = 'lobby';
 
@@ -142,6 +147,7 @@ export interface RoomReadyStatePayload {
 
 export interface ChatMessagePayload {
   roomId?: string;
+  messageId?: string;
   sender?: { id?: string; displayName?: string; username?: string };
   message?: string;
   timestamp?: string;
@@ -329,6 +335,7 @@ export function sendRoomMessage(
     targetUserId?: string;
     targetUserName?: string;
     friendUserIds?: string[];
+    messageId?: string;
   },
 ): Promise<{ success: boolean; message?: string }> {
   const client = getRoomSocket();
@@ -338,6 +345,7 @@ export function sendRoomMessage(
       {
         roomId: String(roomId),
         message,
+        messageId: options?.messageId,
         mode: options?.mode || 'ALL',
         targetUserId: options?.targetUserId,
         targetUserName: options?.targetUserName,

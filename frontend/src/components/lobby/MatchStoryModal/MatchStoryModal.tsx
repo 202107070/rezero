@@ -2,6 +2,21 @@ import { useModalShake } from '../../../hooks/useModalShake';
 import type { CodeHistoryEntry } from '../../../types/lobby';
 import { getSolution } from '../../../utils/codeHistoryUtils';
 
+function readMyAnswer(
+  history: CodeHistoryEntry | null,
+  problem: CodeHistoryEntry['problems'][number] | null,
+  index: number,
+): string {
+  const question = String(problem?.question || '').trim();
+  const stored = String(problem?.userAnswer || '').trim();
+  if (stored) return stored;
+  const fromCodes = String(
+    history?.codes?.[index] || (index === 0 ? history?.code : '') || '',
+  ).trim();
+  if (fromCodes && fromCodes !== question) return fromCodes;
+  return '(미입력)';
+}
+
 interface MatchStoryModalProps {
   open: boolean;
   embedded?: boolean;
@@ -141,11 +156,7 @@ export function MatchStoryModal({
               <div className="match-story-grid">
                 <div className="match-answer-box">
                   <pre className="match-story-pre">
-                    {String(
-                      selectedHistory?.codes?.[selectedProblemIndex] ||
-                        (selectedProblemIndex === 0 ? selectedHistory?.code : '') ||
-                        '',
-                    ).trim() || '(미입력)'}
+                    {readMyAnswer(selectedHistory, selectedProblem, selectedProblemIndex)}
                   </pre>
                 </div>
                 <div className="match-answer-box">

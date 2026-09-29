@@ -10,6 +10,7 @@ import {
   listPublicProfiles,
   loginUser,
   saveMyMatchHistory,
+  updateEquippedTitle,
   signupUser,
   spinRoulette,
 } from "./service.js";
@@ -19,6 +20,7 @@ import {
   markUserOffline,
 } from "#service/socketService.js";
 import { getSocket } from "#config/socketConfig.js";
+import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { sendSuccess } from "#utils/responseHelper.js";
 import { AppError } from "#utils/appError.js";
 
@@ -121,14 +123,28 @@ export async function removeMatchHistory(req, res, next) {
   }
 }
 
+export async function postEquippedTitle(req, res, next) {
+  try {
+    const raw = req.body?.equippedTitleId;
+    const titleId = raw == null || raw === "" ? null : String(raw);
+    const result = await updateEquippedTitle(req.user.id, titleId);
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function removeMe(req, res, next) {
   try {
     const userId = req.user.id;
     await markUserOffline(userId);
-    await broadcastLobbyPresence(getSocket());
+    const io = getSocket();
+    await broadcastLobbyPresence(io);
+    if (io) {
+      io.emit(SOCKET_EVENTS.USER_DELETED, { userId: String(userId) });
+    }
     const result = await deleteAccount(userId);
     try {
-      const io = getSocket();
       if (io) {
         for (const [, socket] of io.of("/").sockets) {
           if (String(socket.user?.id) === String(userId)) {

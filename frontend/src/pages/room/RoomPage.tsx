@@ -65,6 +65,7 @@ import {
   onRoomEvent,
   ROOM_SOCKET_EVENTS,
   toggleReadySocket,
+  createChatMessageId,
   sendRoomMessage,
   setActiveRoomId,
   type LobbyPresencePayload,
@@ -85,6 +86,7 @@ import {
   isFriend,
   isFriendOnline,
   loadFriends,
+  pruneFriendsNotIn,
   rememberFriendRating,
   removeFriend,
   removeFriendByUserId,
@@ -245,8 +247,13 @@ export default function RoomPage() {
       .map((friend) => friend.userId)
       .filter((id): id is string => Boolean(id));
     if (ids.length === 0) return;
-    void fetchPublicProfiles(ids)
+    const requested = ids.slice(0, 40);
+    void fetchPublicProfiles(requested)
       .then((rows) => {
+        pruneFriendsNotIn(
+          requested,
+          rows.map((row) => String(row.userId)),
+        );
         const friends = loadFriends();
         for (const row of rows) {
           const friend = friends.find((entry) => String(entry.userId) === String(row.userId));
@@ -546,11 +553,18 @@ export default function RoomPage() {
                     : payload.mode === 'FRIEND'
                       ? '[친구]'
                       : '[전체]';
+                const messageId = String(payload.messageId || '');
                 setMessages((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last?.type === 'user' && last.name === name && last.text === text) return prev;
-                  return [...prev, { type: 'user', name, text, mode: modeLabel }];
+                  if (messageId && prev.some((item) => item.id === messageId)) return prev;
+                  return [...prev, { id: messageId || undefined, type: 'user', name, text, mode: modeLabel }];
                 });
+              }),
+            );
+
+            unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.USER_DELETED, (payload?: { userId?: string }) => {
+                if (!payload?.userId) return;
+                removeFriendByUserId(String(payload.userId));
               }),
             );
 
@@ -923,10 +937,12 @@ export default function RoomPage() {
       ]);
       return;
     }
+    const messageId = createChatMessageId();
     setChatMsg('');
-    setMessages((prev) => [...prev, { type: 'user', name: myName, text, mode: modeLabel }]);
+    setMessages((prev) => [...prev, { id: messageId, type: 'user', name: myName, text, mode: modeLabel }]);
     try {
       const result = await sendRoomMessage(numericRoomId, text, {
+        messageId,
         mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
         targetUserId: whisperUserId ? String(whisperUserId) : undefined,
         targetUserName: whisperTarget || undefined,
@@ -1060,6 +1076,7 @@ export default function RoomPage() {
       if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
         await leaveRoom(numericRoomId);
       }
+      setActiveRoomId(null);
       clearRoomSession(roomId);
       disconnectRoomSocket(true);
       navigate(ROUTES.LOBBY);

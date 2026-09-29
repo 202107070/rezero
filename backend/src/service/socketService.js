@@ -270,40 +270,41 @@ export const saveInfoService = {
   },
 };
 
-export async function saveAndFormatMessage(params) {
-  const roomId = params.roomId;
+export function formatChatMessage(params) {
   const sender = params.sender;
-  const message = params.message;
-  const mode = params.mode || "ALL";
-  const targetUserId = params.targetUserId || null;
-  const targetUserName = params.targetUserName || "";
-
-  const chatData = {
-    roomId: roomId,
+  return {
+    roomId: params.roomId,
+    messageId: params.messageId || "",
     sender: {
       id: sender.id,
       username: sender.username || "",
       displayName:
         sender.displayName || sender.username || String(sender.id || "UNKNOWN"),
     },
-    message: message,
-    mode,
-    targetUserId,
-    targetUserName,
+    message: params.message,
+    mode: params.mode || "ALL",
+    targetUserId: params.targetUserId || null,
+    targetUserName: params.targetUserName || "",
     timestamp: new Date().toISOString(),
   };
+}
 
-  // 전체 채팅만 방 히스토리에 저장 (친구/귓속말은 개인 전달)
-  if (mode === "ALL") {
-    try {
-      const key = "room:" + roomId + ":messages";
-      await redisClient.rPush(key, JSON.stringify(chatData));
-      await redisClient.lTrim(key, -50, -1);
-    } catch (error) {
-      console.error("[getRecentMessages] Redis Error: " + error.message);
-    }
-  }
+export function persistChatMessage(chatData) {
+  if (!chatData || chatData.mode !== "ALL") return;
+  const key = "room:" + chatData.roomId + ":messages";
+  void redisClient
+    .multi()
+    .rPush(key, JSON.stringify(chatData))
+    .lTrim(key, -50, -1)
+    .exec()
+    .catch(function (error) {
+      console.error("[persistChatMessage] Redis Error: " + error.message);
+    });
+}
 
+export async function saveAndFormatMessage(params) {
+  const chatData = formatChatMessage(params);
+  persistChatMessage(chatData);
   return chatData;
 }
 

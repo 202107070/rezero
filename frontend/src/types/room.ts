@@ -11,6 +11,7 @@ export interface RoomPlayer {
 }
 
 export interface RoomChatMessage {
+  id?: string;
   type: 'sys' | 'user';
   text: string;
   name?: string;

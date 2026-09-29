@@ -25,6 +25,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [alreadyOnlineOpen, setAlreadyOnlineOpen] = useState(false);
 
   const switchMode = (next: AuthMode) => {
     setMode(next);
@@ -96,6 +97,8 @@ export default function LoginPage() {
 
       if (result.ok) {
         navigate(ROUTES.LOBBY, { replace: true });
+      } else if (result.code === 'ALREADY_ONLINE') {
+        setAlreadyOnlineOpen(true);
       } else {
         setError(result.error);
       }
@@ -252,6 +255,16 @@ export default function LoginPage() {
           </form>
         </div>
       </div>
+      {alreadyOnlineOpen && (
+        <div className="login-modal-overlay">
+          <div className="login-modal" role="alertdialog" aria-modal="true">
+            <p>현재 접속중인 아이디입니다.</p>
+            <button type="button" className="pixel-btn pixel-btn-primary" onClick={() => setAlreadyOnlineOpen(false)}>
+              확인
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

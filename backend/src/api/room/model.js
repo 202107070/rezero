@@ -260,6 +260,23 @@ export async function updateParticipantCharacter(roomId, userId, character) {
   return Number(result.affectedRows) > 0;
 }
 
+export async function findActiveRoomIdsByUser(userId) {
+  const rows = await pool.query(
+    `SELECT DISTINCT room_id AS roomId
+     FROM room_participants
+     WHERE user_id = ?
+       AND left_at IS NULL`,
+    [userId],
+  );
+  return rows
+    .map(function (row) {
+      return Number(row.roomId);
+    })
+    .filter(function (roomId) {
+      return Number.isInteger(roomId) && roomId > 0;
+    });
+}
+
 export async function leaveRoomAndSelectRandomHost(roomId, userId) {
   const connection = await pool.getConnection();
 
@@ -285,7 +302,6 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
        WHERE room_id = ?
          AND user_id = ?
          AND left_at IS NULL
-       LIMIT 1
        FOR UPDATE`,
       [roomId, userId],
     );
@@ -295,7 +311,11 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
       return { success: false, reason: "ROOM_NOT_JOINED" };
     }
 
-    const participant = participantRows[0];
+    const wasHost = participantRows.some(function (row) {
+      const flag = row.isHost;
+      if (Buffer.isBuffer(flag)) return flag.length > 0 && flag[0] === 1;
+      return flag === true || flag === 1 || flag === "1";
+    });
 
     await connection.query(
       `UPDATE room_participants
@@ -303,14 +323,16 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
            is_host = FALSE,
            is_ready = FALSE,
            status = 'LEFT'
-       WHERE id = ?`,
-      [participant.id],
+       WHERE room_id = ?
+         AND user_id = ?
+         AND left_at IS NULL`,
+      [roomId, userId],
     );
 
     let newHostUserId = null;
     let roomClosed = false;
 
-    if (Boolean(participant.isHost)) {
+    if (wasHost) {
       const nextHostRows = await connection.query(
         `SELECT id, user_id AS userId
          FROM room_participants

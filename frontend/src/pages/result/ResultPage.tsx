@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AiReviewerPanel, type AiMessage } from '../../components/result/AiReviewerPanel/AiReviewerPanel';
 import { ResultActionBar } from '../../components/result/ResultActionBar/ResultActionBar';
-import { ResultChatPanel } from '../../components/result/ResultChatPanel/ResultChatPanel';
+import { ResultChatPanel, type ResultChatMessage } from '../../components/result/ResultChatPanel/ResultChatPanel';
 import { ResultPopup } from '../../components/result/ResultPopup/ResultPopup';
 import { ResultProblemModal } from '../../components/result/ResultProblemModal/ResultProblemModal';
 import { ResultRankingPanel } from '../../components/result/ResultRankingPanel/ResultRankingPanel';
@@ -35,6 +35,7 @@ import {
   joinRoomSocket,
   onRoomEvent,
   ROOM_SOCKET_EVENTS,
+  createChatMessageId,
   sendRoomMessage,
   setActiveRoomId,
   type ChatMessagePayload,
@@ -85,7 +86,7 @@ import type { BattleProblem } from '../../types/battle';
 import type { FinalRankingSnapshot } from '../../utils/battle/rankUtils';
 import { getLangKey } from '../../utils/battle/codeUtils';
 import { buildResultPlayers, type ResultPlayer } from '../../utils/resultUtils';
-import { formatCorrectAnswer, getResultPlayerAnswer } from '../../utils/resultAnswerUtils';
+import { formatCorrectAnswer, formatSubmittedAnswer, getResultPlayerAnswer } from '../../utils/resultAnswerUtils';
 import './result.css';
 
 interface BattleSubmission {
@@ -262,8 +263,8 @@ export default function ResultPage() {
 
   const [isAiOpen, setIsAiOpen] = useState(false);
 
-  const [chatMessages, setChatMessages] = useState([
-    { sender: 'SYSTEM', text: '매치가 종료되었습니다.', type: 'sys' as const },
+  const [chatMessages, setChatMessages] = useState<ResultChatMessage[]>([
+    { sender: 'SYSTEM', text: '매치가 종료되었습니다.', type: 'sys' },
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
@@ -341,10 +342,10 @@ export default function ResultPage() {
                 : payload.mode === 'FRIEND'
                   ? '[친구]'
                   : '[전체]';
+            const messageId = String(payload.messageId || '');
             setChatMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.sender === name && last.text === text) return prev;
-              return [...prev, { sender: name, text, type: 'user' as const, mode: modeLabel, time: timeStr }];
+              if (messageId && prev.some((item) => item.id === messageId)) return prev;
+              return [...prev, { id: messageId || undefined, sender: name, text, type: 'user' as const, mode: modeLabel, time: timeStr }];
             });
           }),
         );
@@ -713,14 +714,27 @@ export default function ResultPage() {
   useEffect(() => {
     try {
       if (!submission?.submittedAt) return;
+      const problems = Array.isArray(submission.problems) ? submission.problems : [];
+      const answerCodes = problems.map((problem, index) =>
+        formatSubmittedAnswer({
+          problem: problem as BattleProblem,
+          langKey,
+          blankAnswers: myBlankAnswers?.[index],
+          selectedOption: mySelectedOptions?.[index] ?? null,
+          assembledCode: mySubmissionCodes[index],
+        }),
+      );
       const entry = normalizeCodeHistoryEntry({
         historyId: submission.historyId || `${submission.roomId || roomId || 'solo'}::${submission.submittedAt}`,
         roomId: submission.roomId || roomId || '',
         submittedAt: submission.submittedAt,
         lang: submission.lang || 'JAVA',
-        problems: Array.isArray(submission.problems) ? submission.problems : [],
-        codes: mySubmissionCodes,
-        code: submission.code || mySubmissionCodes[0] || '',
+        problems: problems.map((problem, index) => ({
+          ...problem,
+          userAnswer: answerCodes[index] || '(미입력)',
+        })),
+        codes: answerCodes.length > 0 ? answerCodes : mySubmissionCodes,
+        code: answerCodes[0] || submission.code || mySubmissionCodes[0] || '',
         mode: submission.mode,
       });
       if (!entry) return;
@@ -728,7 +742,7 @@ export default function ResultPage() {
     } catch (e) {
       console.error('코드 히스토리 저장 실패:', e);
     }
-  }, [roomId, submission, mySubmissionCodes]);
+  }, [roomId, submission, mySubmissionCodes, myBlankAnswers, mySelectedOptions, langKey]);
 
   useEffect(() => {
     void emitUpdateLocation({
@@ -997,14 +1011,16 @@ export default function ResultPage() {
     const friendUserIds = getFriendUserIds(
       allPlayers.map((p) => ({ name: p.name, userId: p.id })),
     );
+    const messageId = createChatMessageId();
     setChatInput('');
     setChatMessages((prev) => [
       ...prev,
-      { sender: myUserName, text, type: 'user', mode: modeLabel, time: timeStr },
+      { id: messageId, sender: myUserName, text, type: 'user', mode: modeLabel, time: timeStr },
     ]);
     if (roomId) {
       try {
         const result = await sendRoomMessage(roomId, text, {
+          messageId,
           mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
           targetUserId: whisperUser?.id,
           targetUserName: whisperTarget || undefined,

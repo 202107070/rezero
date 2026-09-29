@@ -42,6 +42,7 @@ import {
   emitBattleItemUsed,
   joinRoomSocket,
   onRoomEvent,
+  createChatMessageId,
   sendRoomMessage,
   disconnectRoomSocket,
   ROOM_SOCKET_EVENTS,
@@ -1184,10 +1185,10 @@ export default function BattlePage() {
                 : payload.mode === 'FRIEND'
                   ? '[친구]'
                   : '[전체]';
+            const messageId = String(payload.messageId || '');
             setChatMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.sender === name && last.text === text) return prev;
-              return [...prev, { sender: name, text, time: timeStr, mode: modeLabel }];
+              if (messageId && prev.some((item) => item.id === messageId)) return prev;
+              return [...prev, { id: messageId || undefined, sender: name, text, time: timeStr, mode: modeLabel }];
             });
           }),
         );
@@ -1779,9 +1780,16 @@ export default function BattlePage() {
   const handleSendChat = () => {
     if (!chatMsg.trim()) return;
     const text = chatMsg.trim();
+    const messageId = createChatMessageId();
     setChatMsg('');
     if (isLiveMatch && roomId) {
-      void sendRoomMessage(roomId, text).then((result) => {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      setChatMessages((prev) => [
+        ...prev,
+        { id: messageId, sender: getCurrentUserName(), text, time: timeStr, mode: '[전체]' },
+      ]);
+      void sendRoomMessage(roomId, text, { messageId }).then((result) => {
         if (!result.success) {
           setChatMessages((prev) => [
             ...prev,

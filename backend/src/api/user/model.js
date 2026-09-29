@@ -369,6 +369,19 @@ export async function findUserMatchAnalytics(userId, limit = 40) {
   });
 }
 
+export async function saveEquippedTitle(userId, titleId) {
+  await pool.query(
+    `INSERT INTO user_titles (
+       user_id, owned_title_ids, equipped_title_id, stats_total_wins,
+       stats_consecutive_wins, stats_total_games, stats_perfect_game,
+       stats_avg_speed, stats_lang_wins
+     ) VALUES (?, '[]', ?, 0, 0, 0, 0, 0, '{}')
+     ON DUPLICATE KEY UPDATE
+       equipped_title_id = VALUES(equipped_title_id)`,
+    [userId, titleId],
+  );
+}
+
 export async function findUsersByIds(userIds) {
   const ids = Array.isArray(userIds)
     ? userIds.map(function (id) { return String(id || "").trim(); }).filter(Boolean)

@@ -143,6 +143,13 @@ export function applyUserProfile(profile: UserProfilePayload): void {
   saveTitles(profile.titleData || defaultTitleData());
 }
 
+export async function saveEquippedTitle(titleId: string | null): Promise<void> {
+  await apiRequest('/users/me/title', {
+    method: 'POST',
+    body: JSON.stringify({ equippedTitleId: titleId }),
+  });
+}
+
 export async function fetchPublicProfiles(userIds: string[]): Promise<Array<{ userId: string; ratingScore: number; displayName?: string }>> {
   const ids = [...new Set(userIds.map((id) => String(id || '').trim()).filter(Boolean))].slice(0, 40);
   if (ids.length === 0) return [];

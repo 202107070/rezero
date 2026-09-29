@@ -44,6 +44,7 @@ import {
   LOBBY_ROOM_ID,
   onRoomEvent,
   ROOM_SOCKET_EVENTS,
+  createChatMessageId,
   sendRoomMessage,
   setActiveRoomId,
   type ChatMessagePayload,
@@ -58,6 +59,7 @@ import {
   getFriendUserIds,
   isFriend,
   loadFriends,
+  pruneFriendsNotIn,
   rememberFriendRating,
   removeFriend,
   removeFriendByUserId,
@@ -66,6 +68,7 @@ import {
 import {
   fetchPublicProfiles,
   getEquippedTitleId,
+  saveEquippedTitle,
   getGold,
   getItemInventory,
   getRatingScore,
@@ -350,11 +353,18 @@ export default function LobbyPage() {
                 : payload.mode === 'FRIEND'
                   ? '[친구]'
                   : '[전체]';
+            const messageId = String(payload.messageId || '');
             setChatMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.sender === name && last.text === text) return prev;
-              return [...prev, { sender: name, text, time: timeStr, mode: modeLabel }];
+              if (messageId && prev.some((item) => item.id === messageId)) return prev;
+              return [...prev, { id: messageId || undefined, sender: name, text, time: timeStr, mode: modeLabel }];
             });
+          }),
+        );
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.USER_DELETED, (payload?: { userId?: string }) => {
+            if (!payload?.userId) return;
+            removeFriendByUserId(String(payload.userId));
+            setFriendNames(getFriendNames());
           }),
         );
         unsubs.push(
@@ -566,8 +576,13 @@ export default function LobbyPage() {
       .map((friend) => friend.userId)
       .filter((id): id is string => Boolean(id));
     if (ids.length === 0) return;
-    void fetchPublicProfiles(ids)
+    const requested = ids.slice(0, 40);
+    void fetchPublicProfiles(requested)
       .then((rows) => {
+        pruneFriendsNotIn(
+          requested,
+          rows.map((row) => String(row.userId)),
+        );
         const friends = loadFriends();
         for (const row of rows) {
           const friend = friends.find((entry) => String(entry.userId) === String(row.userId));
@@ -654,15 +669,17 @@ export default function LobbyPage() {
         : chatMode === 'ALL'
           ? '[전체]'
           : '[친구]';
+    const messageId = createChatMessageId();
     const senderName = authUser.displayName || authUser.username;
     const whisperUser = users.find((user) => user.name === whisperTarget);
     const friendUserIds = getFriendUserIds(
       users.map((user) => ({ name: user.name, userId: user.userId })),
     );
     setChatMsg('');
-    setChatMessages((prev) => [...prev, { sender: senderName, text, time: timeStr, mode: modeLabel }]);
+    setChatMessages((prev) => [...prev, { id: messageId, sender: senderName, text, time: timeStr, mode: modeLabel }]);
     try {
       const result = await sendRoomMessage(LOBBY_ROOM_ID, text, {
+        messageId,
         mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
         targetUserId: whisperUser?.userId,
         targetUserName: whisperTarget || undefined,
@@ -1063,6 +1080,7 @@ export default function LobbyPage() {
         onClose={() => setShowMyInfoModal(false)}
         onTitleDataChange={(next) => {
           setTitleData(next);
+          void saveEquippedTitle(next.equipped).catch(() => undefined);
           void emitUpdateTitle(next.equipped).catch(() => undefined);
           setUsers((prev) =>
             prev.map((user) =>

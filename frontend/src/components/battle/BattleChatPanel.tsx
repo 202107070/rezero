@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 export interface ChatMessage {
+  id?: string;
   sender: string;
   text: string;
   time: string;

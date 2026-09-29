@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 export interface ResultChatMessage {
+  id?: string;
   sender: string;
   text: string;
   type: 'sys' | 'user';

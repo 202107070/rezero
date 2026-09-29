@@ -256,9 +256,9 @@
 }
 
 .ai-analysis-countdown {
-  font-size: 28px;
+  font-size: 16px;
   color: var(--px-warning);
-  margin-bottom: 10px;
+  margin-bottom: 14px;
   text-shadow: 2px 2px 0 #000;
 }
 

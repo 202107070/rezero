@@ -73,7 +73,7 @@ export function isAuthenticated(): boolean {
 
 export type AuthResult =
   | { ok: true; user: AuthUser }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: string };
 
 function toAuthUser(user: AuthUserPayload): AuthUser {
   return {
@@ -85,7 +85,7 @@ function toAuthUser(user: AuthUserPayload): AuthUser {
 
 function toAuthError(error: unknown): AuthResult {
   if (error instanceof ApiError) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: error.message, code: error.code };
   }
   return { ok: false, error: '요청을 처리하지 못했습니다.' };
 }

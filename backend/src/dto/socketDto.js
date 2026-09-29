@@ -52,6 +52,7 @@ export function validateSendMessage(data) {
     targetUserId: data.targetUserId ? String(data.targetUserId) : null,
     targetUserName: data.targetUserName ? String(data.targetUserName) : "",
     friendUserIds,
+    messageId: data.messageId ? String(data.messageId).slice(0, 64) : "",
   };
 }
 

@@ -48,6 +48,7 @@ export interface CodeHistoryEntry {
     explanation?: string;
     answer?: Record<string, string[]>;
     lang?: string;
+    userAnswer?: string;
   }>;
   codes: string[];
   code: string;
@@ -55,6 +56,7 @@ export interface CodeHistoryEntry {
 }
 
 export interface ChatMessage {
+  id?: string;
   sender: string;
   text: string;
   time: string;

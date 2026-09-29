@@ -8,7 +8,8 @@ import {
   validateUseItem,
 } from "#dto/socketDto.js";
 import {
-  saveAndFormatMessage,
+  formatChatMessage,
+  persistChatMessage,
   saveReadyState,
   socketGameService,
   markUserOnline,
@@ -48,7 +49,20 @@ export function registerSocketHandlers(io, socket) {
       const roomId = validatedRoom.roomId;
 
       if (roomId === LOBBY_ROOM_ID) {
-        // 로비 입장 시 게임방 소켓 룸에서 나와야 로비 채팅이 양쪽에 보임
+        // 로비로 돌아오면 DB 참가도 정리한다. 소켓만 빠지면 로비 인원이 그대로 남는다.
+        try {
+          const { leaveRoom } = await import("../api/room/service.js");
+          const activeRooms = await roomModel.findActiveRoomIdsByUser(socket.user.id);
+          for (let i = 0; i < activeRooms.length; i++) {
+            try {
+              await leaveRoom(activeRooms[i], socket.user.id);
+            } catch {
+              // 이미 나간 방은 무시
+            }
+          }
+        } catch (leaveError) {
+          console.error("[lobby join leaveRoom] " + leaveError.message);
+        }
         for (const joined of socket.rooms) {
           if (joined !== socket.id && joined !== LOBBY_ROOM_ID && !String(joined).startsWith("user:")) {
             socket.leave(joined);
@@ -141,13 +155,14 @@ export function registerSocketHandlers(io, socket) {
     try {
       const validatedData = validateSendMessage(data);
 
-      const chatMessage = await saveAndFormatMessage({
+      const chatMessage = formatChatMessage({
         roomId: validatedData.roomId,
         sender: socket.user,
         message: validatedData.message,
         mode: validatedData.mode,
         targetUserId: validatedData.targetUserId,
         targetUserName: validatedData.targetUserName,
+        messageId: validatedData.messageId,
       });
 
       if (validatedData.mode === "WHISPER" && validatedData.targetUserId) {
@@ -171,6 +186,8 @@ export function registerSocketHandlers(io, socket) {
           chatMessage,
         );
       }
+
+      persistChatMessage(chatMessage);
 
       if (typeof callback === "function") {
         callback({ success: true });

@@ -122,6 +122,21 @@ export function removeFriendByUserId(userId: string) {
   writeFriends(readFriends().filter((f) => String(f.userId || '') !== id));
 }
 
+/** 조회한 아이디 중 서버에 없는 유저만 친구 목록에서 뺀다. */
+export function pruneFriendsNotIn(requestedIds: string[], existingUserIds: string[]) {
+  const requested = new Set(requestedIds.map((id) => String(id)));
+  const keep = new Set(existingUserIds.map((id) => String(id)));
+  const current = readFriends();
+  const next = current.filter((friend) => {
+    if (!friend.userId) return true;
+    const id = String(friend.userId);
+    if (!requested.has(id)) return true;
+    return keep.has(id);
+  });
+  if (next.length === current.length) return;
+  writeFriends(next);
+}
+
 export function findFriendUserId(name: string): string | null {
   const friend = readFriends().find((f) => f.name === name);
   return friend?.userId ? String(friend.userId) : null;

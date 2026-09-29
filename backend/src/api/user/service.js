@@ -1,6 +1,7 @@
 import * as userModel from "./model.js";
 import { toSignupUserResponse, toUserResponse } from "./dto/userResponseDto.js";
 import { ERROR_CODE } from "#constants/errorCode.js";
+import { getSocket } from "#config/socketConfig.js";
 import { AppError } from "#utils/appError.js";
 import {
   comparePassword,
@@ -97,6 +98,13 @@ export async function signupUser(input) {
   };
 }
 
+function isUserAlreadyConnected(userId) {
+  const io = getSocket();
+  if (!io) return false;
+  const room = io.sockets.adapter.rooms.get("user:" + String(userId));
+  return Boolean(room && room.size > 0);
+}
+
 export async function loginUser(input) {
   const findUserByUsername = getModelFunction("findUserByUsername");
   const user = await findUserByUsername(input.username);
@@ -112,6 +120,14 @@ export async function loginUser(input) {
       401,
       ERROR_CODE.INVALID_CREDENTIALS,
       "아이디 또는 비밀번호가 올바르지 않습니다.",
+    );
+  }
+
+  if (isUserAlreadyConnected(user.id)) {
+    throw new AppError(
+      409,
+      ERROR_CODE.ALREADY_ONLINE,
+      "현재 접속중인 아이디입니다.",
     );
   }
 
@@ -232,6 +248,24 @@ export async function listPublicProfiles(userIds) {
       ratingScore: Number(row.ratingScore) || 1000,
     };
   });
+}
+
+export async function updateEquippedTitle(userId, titleId) {
+  const findUserTitleData = getModelFunction("findUserTitleData");
+  const saveEquippedTitle = getModelFunction("saveEquippedTitle");
+  const normalized = titleId ? String(titleId).trim().slice(0, 64) : null;
+
+  if (normalized) {
+    const row = await findUserTitleData(userId);
+    const owned = parseJson(row?.ownedTitleIds, []);
+    const owns = Array.isArray(owned) && owned.map(String).includes(normalized);
+    if (!owns) {
+      throw new AppError(400, "TITLE_NOT_OWNED", "보유하지 않은 칭호입니다.");
+    }
+  }
+
+  await saveEquippedTitle(userId, normalized);
+  return { equippedTitleId: normalized };
 }
 
 export async function deleteAccount(userId) {

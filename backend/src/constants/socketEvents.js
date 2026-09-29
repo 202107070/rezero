@@ -40,4 +40,5 @@ export const SOCKET_EVENTS = {
   ROOM_INVITE_RESPONSE: "room_invite_response",
   UPDATE_LOCATION: "update_location",
   USER_LOGOUT: "user_logout",
+  USER_DELETED: "user_deleted",
 };

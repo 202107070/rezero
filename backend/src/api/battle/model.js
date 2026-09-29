@@ -359,6 +359,7 @@ export async function finalizeMatchResult(input) {
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
            owned_title_ids = VALUES(owned_title_ids),
+           equipped_title_id = VALUES(equipped_title_id),
            stats_total_wins = VALUES(stats_total_wins),
            stats_consecutive_wins = VALUES(stats_consecutive_wins),
            stats_total_games = VALUES(stats_total_games),
