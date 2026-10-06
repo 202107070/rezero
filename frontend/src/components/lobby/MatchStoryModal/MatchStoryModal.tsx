@@ -9,7 +9,7 @@ function readMyAnswer(
 ): string {
   const question = String(problem?.question || '').trim();
   const stored = String(problem?.userAnswer || '').trim();
-  if (stored) return stored;
+  if (stored && stored !== '(미입력)') return stored;
   const fromCodes = String(
     history?.codes?.[index] || (index === 0 ? history?.code : '') || '',
   ).trim();

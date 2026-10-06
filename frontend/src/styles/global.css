@@ -367,3 +367,32 @@ html.display-fullscreen #root .build-page.page-container {
 .text-center {
   text-align: center;
 }
+
+html.display-fullscreen .lobby-page .chat-messages,
+html.display-fullscreen .room-page-container .chat-messages,
+html.display-fullscreen .data-table,
+html.display-fullscreen .tab-btn,
+html.display-fullscreen .pixel-btn,
+html.display-fullscreen .player-nickname,
+html.display-fullscreen .player-score-info,
+html.display-fullscreen .code-card,
+html.display-fullscreen .fill-blank-code,
+html.display-fullscreen .my-info-stat-row,
+html.display-fullscreen .ai-analysis-body,
+html.display-fullscreen .rank-title {
+  font-size: 18px;
+}
+
+html.display-fullscreen .lobby-page .pixel-btn,
+html.display-fullscreen .room-page-container .pixel-btn,
+html.display-fullscreen .result-page .pixel-btn,
+html.display-fullscreen .battle-page .pixel-btn {
+  font-size: 16px;
+  padding: 8px 12px;
+}
+
+html.display-fullscreen .data-table th,
+html.display-fullscreen .data-table td {
+  font-size: 16px;
+  padding: 8px 6px;
+}

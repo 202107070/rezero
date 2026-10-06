@@ -75,7 +75,7 @@ import {
   type ScribbleStroke,
 } from '../../utils/battle/canvasEffects';
 import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
-import { assembleCode, DEFAULT_TEMPLATE, getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
+import { assembleCode, buildPreviewSource, DEFAULT_TEMPLATE, detectBuildLang, getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
 import { canUseItem, resolveProblemCapabilities } from '../../utils/problemCapabilities';
 import {
   areAllBotsSolvedOnPlayerProblem,
@@ -304,24 +304,24 @@ export default function BattlePage() {
     [currentProblem, currentIndex, langKey, blankAnswers, selectedOption],
   );
 
-  const showBuildPanel = currentCaps.showCodePanel && isCodeBlankBuildProblem(currentProblem);
+  const buildLangKey = detectBuildLang(currentProblem?.question || '', langKey);
+  const buildLangLabel = getLangLabel(buildLangKey);
+  const showBuildPanel = currentCaps.showCodePanel && isCodeBlankBuildProblem(currentProblem, buildLangKey);
   const buildsAllowed = BATTLE_BUILD_LIMIT + (buildBonusByProblem[currentIndex] || 0);
   const buildsUsed = buildsUsedByProblem[currentIndex] || 0;
   const currentBuildCode = buildCodeByProblem[currentIndex] ?? '';
   const currentBuildLogs = buildLogsByProblem[currentIndex] || [];
 
   useEffect(() => {
-    if (!showBuildPanel) return;
-    const assembled = assembleCode(currentProblem.question || '', blankAnswers[currentIndex] || []);
-    setBuildCodeByProblem((prev) => {
-      const current = prev[currentIndex];
-      if (current === undefined || current === assembledBuildCodeRef.current) {
-        assembledBuildCodeRef.current = assembled;
-        return { ...prev, [currentIndex]: assembled };
-      }
-      return prev;
-    });
-  }, [showBuildPanel, currentIndex, currentProblem.question, blankAnswers]);
+    if (!showBuildPanel || !currentProblem) return;
+    const assembled = buildPreviewSource(
+      currentProblem.question || '',
+      blankAnswers[currentIndex] || [],
+      buildLangKey,
+    );
+    assembledBuildCodeRef.current = assembled;
+    setBuildCodeByProblem((prev) => ({ ...prev, [currentIndex]: assembled }));
+  }, [showBuildPanel, currentIndex, currentProblem, blankAnswers, buildLangKey]);
 
   useEffect(() => {
     assembledBuildCodeRef.current = '';
@@ -355,7 +355,7 @@ export default function BattlePage() {
     };
 
     try {
-      await runBuildSimulation(code, langKey, appendLog, { cancelled: () => buildCancelledRef.current });
+      await runBuildSimulation(code, buildLangKey, appendLog, { cancelled: () => buildCancelledRef.current });
     } finally {
       if (!buildCancelledRef.current) setIsBuilding(false);
     }
@@ -366,7 +366,7 @@ export default function BattlePage() {
     buildsAllowed,
     currentIndex,
     buildCodeByProblem,
-    langKey,
+    buildLangKey,
   ]);
 
   const selectedDemoBot = battleBots[0] || null;
@@ -599,10 +599,15 @@ export default function BattlePage() {
   }
 
   useEffect(() => {
-    if (problems.length > 0) {
-      setBlankAnswers(Array(problems.length).fill(null).map(() => []));
-    }
-  }, [problems]);
+    if (problems.length === 0) return;
+    setBlankAnswers((prev) => {
+      if (prev.length === problems.length && prev.some((row) => (row || []).some((cell) => String(cell || '').trim()))) {
+        return prev;
+      }
+      if (prev.length === problems.length) return prev;
+      return Array.from({ length: problems.length }, (_, index) => prev[index] || []);
+    });
+  }, [problems.length]);
 
   useEffect(() => {
     if (problems.length === 0) return;
@@ -1580,7 +1585,7 @@ export default function BattlePage() {
       applyBlankBreak(correct);
       return;
     } else if (type === 'buildCharge') {
-      if (!currentCaps.canUseBuildBonus || !isCodeBlankBuildProblem(currentProblem)) return;
+      if (!currentCaps.canUseBuildBonus || !isCodeBlankBuildProblem(currentProblem, buildLangKey)) return;
       setBuildBonusByProblem((prev) => ({
         ...prev,
         [currentIndex]: (prev[currentIndex] || 0) + BATTLE_BUILD_ITEM_BONUS,
@@ -2039,8 +2044,9 @@ export default function BattlePage() {
                   {!demoSpectating && showBuildPanel && (
                   <BattleBuildPanel
                     code={currentBuildCode}
-                    lang={langKey}
-                    langLabel={langLabel}
+                    lang={buildLangKey}
+                    langLabel={buildLangLabel}
+                    readOnly
                     buildsUsed={buildsUsed}
                     buildsAllowed={buildsAllowed}
                     isBuilding={isBuilding}

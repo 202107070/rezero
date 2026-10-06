@@ -240,22 +240,43 @@ export async function listMatchCodeHistory(userId) {
 }
 
 export async function findMatchCodeHistoryById(userId, historyId) {
-  const rows = await pool.query(
-    `SELECT
-       history_id AS historyId,
-       user_id AS userId,
-       room_id AS roomId,
-       submitted_at AS submittedAt,
-       lang,
-       mode,
-       code,
-       codes,
-       problems
-     FROM match_code_history
-     WHERE user_id = ? AND history_id = ?
-     LIMIT 1`,
-    [userId, historyId],
-  );
+  let rows;
+  try {
+    rows = await pool.query(
+      `SELECT
+         history_id AS historyId,
+         user_id AS userId,
+         room_id AS roomId,
+         submitted_at AS submittedAt,
+         lang,
+         mode,
+         code,
+         codes,
+         problems,
+         ai_analysis AS aiAnalysis
+       FROM match_code_history
+       WHERE user_id = ? AND history_id = ?
+       LIMIT 1`,
+      [userId, historyId],
+    );
+  } catch (error) {
+    rows = await pool.query(
+      `SELECT
+         history_id AS historyId,
+         user_id AS userId,
+         room_id AS roomId,
+         submitted_at AS submittedAt,
+         lang,
+         mode,
+         code,
+         codes,
+         problems
+       FROM match_code_history
+       WHERE user_id = ? AND history_id = ?
+       LIMIT 1`,
+      [userId, historyId],
+    );
+  }
   if (!rows.length) return null;
   const row = rows[0];
   return {
@@ -271,7 +292,40 @@ export async function findMatchCodeHistoryById(userId, historyId) {
     code: row.code || "",
     codes: parseJsonColumn(row.codes, []),
     problems: parseJsonColumn(row.problems, []),
+    aiAnalysis: row.aiAnalysis ? String(row.aiAnalysis) : "",
   };
+}
+
+let aiColumnReady = false;
+
+export async function ensureMatchAiAnalysisColumn() {
+  if (aiColumnReady) return;
+  try {
+    await pool.query(
+      "ALTER TABLE match_code_history ADD COLUMN IF NOT EXISTS ai_analysis MEDIUMTEXT NULL",
+    );
+  } catch (error) {
+    const message = String(error && error.message ? error.message : error);
+    if (!/duplicate|exists/i.test(message)) {
+      console.error("[match ai column] " + message);
+      return;
+    }
+  }
+  aiColumnReady = true;
+}
+
+export async function saveMatchAiAnalysis(userId, historyId, analysis) {
+  try {
+    await ensureMatchAiAnalysisColumn();
+    await pool.query(
+      `UPDATE match_code_history
+       SET ai_analysis = ?
+       WHERE user_id = ? AND history_id = ?`,
+      [analysis, userId, historyId],
+    );
+  } catch (error) {
+    console.error("[match ai save] " + (error && error.message ? error.message : error));
+  }
 }
 
 export async function upsertMatchCodeHistory(entry) {

@@ -42,6 +42,24 @@ export function registerSocketHandlers(io, socket) {
   void markUserOnline(socket.user).then(function () {
     return broadcastLobbyPresence(io);
   });
+  void (async function () {
+    try {
+      const { listPendingFriendRequests } = await import("../api/user/friendModel.js");
+      const pending = await listPendingFriendRequests(socket.user.id);
+      for (let i = 0; i < pending.length; i++) {
+        const row = pending[i];
+        socket.emit(SOCKET_EVENTS.FRIEND_REQUEST, {
+          fromUserId: String(row.fromUserId),
+          fromUserName: row.fromUserName || row.fromUsername || "UNKNOWN",
+          fromUsername: row.fromUsername || "",
+          toUserId: String(socket.user.id),
+          createdAt: Date.now(),
+        });
+      }
+    } catch (error) {
+      console.error("[friend pending] " + error.message);
+    }
+  })();
 
   socket.on(SOCKET_EVENTS.JOIN_ROOM, async function (data, callback) {
     try {
@@ -132,8 +150,10 @@ export function registerSocketHandlers(io, socket) {
         });
       }
 
-      socket.to(roomId).emit(SOCKET_EVENTS.USER_JOINED, {
+      const joinedAt = Date.now();
+      io.to(roomId).emit(SOCKET_EVENTS.USER_JOINED, {
         message: userLabel(socket.user) + " 님이 입장하셨습니다.",
+        joinedAt: joinedAt,
         user: {
           id: socket.user.id,
           username: socket.user.username,
@@ -527,10 +547,18 @@ export function registerSocketHandlers(io, socket) {
 
   socket.on(SOCKET_EVENTS.FRIEND_REQUEST, async function (data, callback) {
     try {
+      const { createFriendRequest, userExists } = await import("../api/user/friendModel.js");
       const toUserId = data?.toUserId ? String(data.toUserId) : "";
       if (!toUserId) throw new Error("친구 요청 대상이 없습니다.");
       if (toUserId === String(socket.user.id)) {
         throw new Error("자기 자신에게 친구 요청을 보낼 수 없습니다.");
+      }
+      if (!(await userExists(toUserId))) {
+        throw new Error("상대 유저를 찾을 수 없습니다.");
+      }
+      const saved = await createFriendRequest(String(socket.user.id), toUserId);
+      if (saved.alreadyFriends) {
+        throw new Error("이미 친구입니다.");
       }
       const payload = {
         fromUserId: String(socket.user.id),
@@ -540,9 +568,13 @@ export function registerSocketHandlers(io, socket) {
         toUserName: data?.toUserName || "",
         createdAt: Date.now(),
       };
-      io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REQUEST, payload);
+      const room = io.sockets.adapter.rooms.get("user:" + toUserId);
+      const delivered = Boolean(room && room.size > 0);
+      if (delivered) {
+        io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REQUEST, payload);
+      }
       if (typeof callback === "function") {
-        callback({ success: true });
+        callback({ success: true, delivered: delivered });
       }
     } catch (error) {
       if (typeof callback === "function") {
@@ -551,15 +583,22 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
-  socket.on(SOCKET_EVENTS.FRIEND_REQUEST_RESULT, function (data, callback) {
+  socket.on(SOCKET_EVENTS.FRIEND_REQUEST_RESULT, async function (data, callback) {
     try {
+      const { acceptFriendRequest, declineFriendRequest } = await import("../api/user/friendModel.js");
       const toUserId = data?.toUserId ? String(data.toUserId) : "";
       if (!toUserId) throw new Error("응답 대상이 없습니다.");
+      const accepted = Boolean(data?.accepted);
+      if (accepted) {
+        await acceptFriendRequest(toUserId, String(socket.user.id));
+      } else {
+        await declineFriendRequest(toUserId, String(socket.user.id));
+      }
       const payload = {
         fromUserId: String(socket.user.id),
         fromUserName: userLabel(socket.user),
         toUserId,
-        accepted: Boolean(data?.accepted),
+        accepted: accepted,
       };
       io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REQUEST_RESULT, payload);
       if (typeof callback === "function") {
@@ -572,10 +611,12 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
-  socket.on(SOCKET_EVENTS.FRIEND_REMOVE, function (data, callback) {
+  socket.on(SOCKET_EVENTS.FRIEND_REMOVE, async function (data, callback) {
     try {
+      const { removeFriendship } = await import("../api/user/friendModel.js");
       const toUserId = data?.toUserId ? String(data.toUserId) : "";
       if (!toUserId) throw new Error("삭제 대상이 없습니다.");
+      await removeFriendship(String(socket.user.id), toUserId);
       const payload = {
         fromUserId: String(socket.user.id),
         fromUserName: userLabel(socket.user),

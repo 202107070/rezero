@@ -20,6 +20,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 interface BuildCodeEditorProps {
   code: string;
   lang: string;
+  readOnly?: boolean;
   onChange: (code: string) => void;
 }
 
@@ -111,12 +112,13 @@ function getLanguageExtension(lang: string): Extension {
   }
 }
 
-export function BuildCodeEditor({ code, lang, onChange }: BuildCodeEditorProps) {
+export function BuildCodeEditor({ code, lang, readOnly = false, onChange }: BuildCodeEditorProps) {
   const extensions = useMemo(
     () => [
       history(),
       indentUnit.of(TAB_SPACES),
       EditorState.tabSize.of(4),
+      EditorState.readOnly.of(readOnly),
       oneDark,
       pixelEditorTheme,
       lineNumbers(),
@@ -124,7 +126,7 @@ export function BuildCodeEditor({ code, lang, onChange }: BuildCodeEditorProps) 
       keymap.of(buildKeymap),
       getLanguageExtension(lang),
     ],
-    [lang],
+    [lang, readOnly],
   );
 
   return (

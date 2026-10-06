@@ -203,6 +203,14 @@ export default function ResultPage() {
     allPlayers.find((p) => p.id === `player-${myUserId}`) ||
     allPlayers.find((p) => p.name === myUserName);
   const myScore = myPlayer?.ingameScore || 0;
+
+  useEffect(() => {
+    if (!myPlayer) return;
+    const applied = Math.max(0, (Number(myPlayer.ratingScore) || 0) + (Number(myPlayer.delta) || 0));
+    setRatingScore(applied);
+    setLiveRatingScore(applied);
+    setLiveRatingTier(getTierByRating(applied));
+  }, [myPlayer]);
   const isLiveMatch = Boolean(matchId);
   const storedSubmit = (getBattleSettings().matchSubmitResult || {}) as {
     earnedGold?: number;
@@ -733,11 +741,22 @@ export default function ResultPage() {
         roomId: submission.roomId || roomId || '',
         submittedAt: submission.submittedAt,
         lang: submission.lang || 'JAVA',
-        problems: problems.map((problem, index) => ({
-          ...problem,
-          userAnswer: answerCodes[index] || '(미입력)',
-          solution: formatCorrectAnswer(problem as BattleProblem, langKey) || '',
-        })),
+        problems: problems.map((problem, index) => {
+          const formatted = answerCodes[index] || '';
+          const question = String((problem as BattleProblem).question || '').trim();
+          const raw = String(mySubmissionCodes[index] || '').trim();
+          const userAnswer =
+            formatted && formatted !== '(미입력)'
+              ? formatted
+              : raw && raw !== question
+                ? raw
+                : formatted || '(미입력)';
+          return {
+            ...problem,
+            userAnswer,
+            solution: formatCorrectAnswer(problem as BattleProblem, langKey) || '',
+          };
+        }),
         codes: answerCodes.length > 0 ? answerCodes : mySubmissionCodes,
         code: answerCodes[0] || submission.code || mySubmissionCodes[0] || '',
         mode: submission.mode,

@@ -1,5 +1,4 @@
-import jwt from "jsonwebtoken";
-import { authConfig } from "#config/authConfig.js";
+import { verifyAccessToken } from "#utils/cryptoUtils.js";
 
 export function socketAuthMiddleware(socket, next) {
   let token;
@@ -23,7 +22,7 @@ export function socketAuthMiddleware(socket, next) {
       actualToken = token;
     }
 
-    const decoded = jwt.verify(actualToken, authConfig.jwtSecret);
+    const decoded = verifyAccessToken(actualToken);
     const userId = decoded.sub || decoded.id;
 
     if (!userId) {
@@ -38,8 +37,9 @@ export function socketAuthMiddleware(socket, next) {
 
     next();
   } catch (error) {
-    return next(
-      new Error("소켓 인증 실패: 유효하지 않거나 만료된 토큰입니다."),
-    );
+    if (error && error.name === "TokenExpiredError") {
+      return next(new Error("소켓 인증 실패: TOKEN_EXPIRED"));
+    }
+    return next(new Error("소켓 인증 실패: TOKEN_INVALID"));
   }
 }

@@ -2,6 +2,7 @@ import express from "express";
 
 import {
   getMe,
+  getMyFriends,
   getMatchHistory,
   getOnlineUsers,
   getPublicProfiles,
@@ -21,6 +22,7 @@ const router = express.Router();
 router.post("/auth/signup", signup);
 router.post("/auth/login", login);
 router.get("/users/me", authenticate, getMe);
+router.get("/users/me/friends", authenticate, getMyFriends);
 router.delete("/users/me", authenticate, removeMe);
 router.post("/users/me/title", authenticate, postEquippedTitle);
 router.get("/users/online", authenticate, getOnlineUsers);

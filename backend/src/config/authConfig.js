@@ -14,7 +14,7 @@ function getJwtSecret() {
 
 export const authConfig = {
   jwtSecret: getJwtSecret(),
-  jwtExpiresIn: "1h",
-  tokenRedisTTL: 3600,
+  jwtExpiresIn: "12h",
+  tokenRedisTTL: 12 * 3600,
   saltRounds: 10,
 };

@@ -349,6 +349,8 @@ export async function analyzeMatchHistory(userId, historyId) {
     throw new AppError(404, ERROR_CODE.USER_NOT_FOUND, "사용자를 찾을 수 없습니다.");
   }
 
+  const { ensureMatchAiAnalysisColumn, saveMatchAiAnalysis } = await import("./model.js");
+  await ensureMatchAiAnalysisColumn();
   const entry = await findMatchCodeHistoryById(userId, historyId);
   if (!entry) {
     throw new AppError(404, "MATCH_HISTORY_NOT_FOUND", "해당 방의 매치 기록을 찾을 수 없습니다.");
@@ -357,6 +359,29 @@ export async function analyzeMatchHistory(userId, historyId) {
   const profile = await getUserProfile(user);
   const matches = await findUserMatchAnalytics(userId, 40);
   const career = buildAnalyticsSummary(profile, matches);
+  const chartSummary = {
+    roomId: entry.roomId,
+    lang: entry.lang,
+    problemCount: Array.isArray(entry.problems) ? entry.problems.length : 0,
+    winrate: career.winrate,
+    solveRate: career.solveRate,
+    ratingScore: career.ratingScore,
+    avgSolveTimeSec: career.avgSolveTimeSec,
+    totalWins: career.totalWins,
+    losses: career.losses,
+  };
+  if (entry.aiAnalysis) {
+    return {
+      userId,
+      displayName: career.displayName || user.displayName || user.username || userId,
+      historyId: entry.historyId,
+      roomId: entry.roomId,
+      lang: entry.lang,
+      source: "saved",
+      summary: chartSummary,
+      analysis: entry.aiAnalysis,
+    };
+  }
   const problems = Array.isArray(entry.problems) ? entry.problems : [];
   const codes = Array.isArray(entry.codes) ? entry.codes : [];
   const summary = {
@@ -395,6 +420,8 @@ export async function analyzeMatchHistory(userId, historyId) {
     if (!aiText) {
       throw new Error("Cursor AI 응답이 비어 있습니다.");
     }
+    chartSummary.problemCount = summary.problemCount;
+    await saveMatchAiAnalysis(userId, entry.historyId, aiText);
     return {
       userId,
       displayName: summary.displayName,
@@ -402,15 +429,17 @@ export async function analyzeMatchHistory(userId, historyId) {
       roomId: entry.roomId,
       lang: entry.lang,
       source: "cursor",
-      summary: {
-        roomId: entry.roomId,
-        lang: entry.lang,
-        problemCount: summary.problemCount,
-      },
+      summary: chartSummary,
       analysis: aiText,
     };
   } catch (error) {
     console.error("[analyzeMatchHistory] Cursor AI error:", error.message);
+    const fallbackText = polishAnalysisText(
+      "사용자 분석을 잠시 불러오지 못해, 이 판의 제출과 전적으로 간단히 정리했습니다.\n\n" +
+        buildMatchAnalysisText(entry, career),
+    );
+    chartSummary.problemCount = summary.problemCount;
+    await saveMatchAiAnalysis(userId, entry.historyId, fallbackText);
     return {
       userId,
       displayName: summary.displayName,
@@ -418,15 +447,8 @@ export async function analyzeMatchHistory(userId, historyId) {
       roomId: entry.roomId,
       lang: entry.lang,
       source: "local-fallback",
-      summary: {
-        roomId: entry.roomId,
-        lang: entry.lang,
-        problemCount: summary.problemCount,
-      },
-      analysis: polishAnalysisText(
-        "사용자 분석을 잠시 불러오지 못해, 이 판의 제출과 전적으로 간단히 정리했습니다.\n\n" +
-          buildMatchAnalysisText(entry, career),
-      ),
+      summary: chartSummary,
+      analysis: fallbackText,
     };
   }
 }

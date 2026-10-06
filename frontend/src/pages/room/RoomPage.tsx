@@ -86,8 +86,8 @@ import {
   getFriendUserIds,
   isFriend,
   isFriendOnline,
+  claimFriendNotice,
   loadFriends,
-  pruneFriendsNotIn,
   rememberFriendRating,
   removeFriend,
   removeFriendByUserId,
@@ -176,6 +176,8 @@ export default function RoomPage() {
   const battleNavLockRef = useRef(false);
   const onlineUsersRef = useRef<LobbyPresencePayload['users']>([]);
   const leavingToGameRef = useRef(false);
+  const knownParticipantIdsRef = useRef<Set<string>>(new Set());
+  const roomRosterReadyRef = useRef(false);
   const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
   const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
@@ -247,6 +249,18 @@ export default function RoomPage() {
         name: player.name && player.name !== 'UNKNOWN' ? player.name : player.name || 'UNKNOWN',
       };
     });
+    const nextIds = new Set<string>();
+    const arrivals: Array<{ name: string }> = [];
+    for (const player of mapped) {
+      if (!player?.userId) continue;
+      const id = String(player.userId);
+      nextIds.add(id);
+      if (!options?.resetChat && roomRosterReadyRef.current && !knownParticipantIdsRef.current.has(id)) {
+        arrivals.push({ name: player.name });
+      }
+    }
+    knownParticipantIdsRef.current = nextIds;
+    if (options?.resetChat) roomRosterReadyRef.current = true;
     setPlayers(mapped);
     if (myParticipant) {
       // rematch → WAITING: backend clears is_ready; trust participant payload
@@ -262,6 +276,14 @@ export default function RoomPage() {
     });
     if (options?.resetChat) {
       setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapped));
+    } else if (arrivals.length > 0) {
+      setMessages((prev) => [
+        ...prev,
+        ...arrivals.map((player) => ({
+          type: 'sys' as const,
+          text: `>> [${player.name}] 님이 입장하셨습니다.`,
+        })),
+      ]);
     }
   }, [parsedMaxPlayers, urlTimeRaw]);
 
@@ -273,10 +295,6 @@ export default function RoomPage() {
     const requested = ids.slice(0, 40);
     void fetchPublicProfiles(requested)
       .then((rows) => {
-        pruneFriendsNotIn(
-          requested,
-          rows.map((row) => String(row.userId)),
-        );
         const friends = loadFriends();
         for (const row of rows) {
           const friend = friends.find((entry) => String(entry.userId) === String(row.userId));
@@ -503,13 +521,7 @@ export default function RoomPage() {
                 (payload?: {
                   user?: { id?: string; displayName?: string; username?: string };
                 }) => {
-                  const name = payload?.user?.displayName || payload?.user?.username;
-                  if (name) {
-                    const line = `>> [${name}] 님이 입장하셨습니다.`;
-                    if (shouldShowRoomNotice(line)) {
-                      setMessages((prev) => [...prev, { type: 'sys', text: line }]);
-                    }
-                  }
+                  if (!payload?.user) return;
                   void fetchRoom(numericRoomId)
                     .then((nextRoom) => {
                       if (!cancelled) applyRoom(nextRoom, { resetChat: false });
@@ -610,6 +622,7 @@ export default function RoomPage() {
                 (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
                   if (!payload?.accepted || !payload.fromUserName) return;
                   addFriend(payload.fromUserName, payload.fromUserId);
+                  if (!claimFriendNotice(`accept:${payload.fromUserId || payload.fromUserName}`)) return;
                   setMessages((prev) => [
                     ...prev,
                     {
@@ -760,6 +773,17 @@ export default function RoomPage() {
       // Room→Battle 이동 시 소켓 유지 (로비 퇴장 시에만 force disconnect)
     };
   }, [applyRoom, navigate, numericRoomId, roomId, roomMode, gameMode, parsedMaxPlayers]);
+
+  useEffect(() => {
+    if (!Number.isInteger(numericRoomId) || numericRoomId <= 0) return;
+    const timer = window.setInterval(() => {
+      if (!roomRosterReadyRef.current) return;
+      void fetchRoom(numericRoomId)
+        .then((nextRoom) => applyRoom(nextRoom, { resetChat: false }))
+        .catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [applyRoom, numericRoomId]);
 
   const handleSelectCharacter = (characterId: string) => {
     setMyCharacter(characterId);

@@ -12,6 +12,7 @@ interface BattleBuildPanelProps {
   logs: BuildLogLine[];
   collapsed: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   onCodeChange: (code: string) => void;
   onBuild: () => void;
   onToggleCollapse: () => void;
@@ -34,6 +35,7 @@ export default function BattleBuildPanel({
   logs,
   collapsed,
   disabled,
+  readOnly = false,
   onCodeChange,
   onBuild,
   onToggleCollapse,
@@ -79,7 +81,7 @@ export default function BattleBuildPanel({
       {!collapsed && (
         <div className="battle-build-body">
           <div className="battle-build-editor">
-            <BuildCodeEditor code={code} lang={lang} onChange={onCodeChange} />
+            <BuildCodeEditor code={code} lang={lang} readOnly={readOnly} onChange={onCodeChange} />
           </div>
           <div className="battle-build-console">
             <div className="terminal-header">

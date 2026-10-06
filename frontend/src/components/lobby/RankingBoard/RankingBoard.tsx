@@ -85,6 +85,7 @@ export function RankingBoard({
   const sortedUsers = sortUsersForTab(users, activeTab, friendNames);
   const myEquipped = getEquippedTitle(titleData);
 
+  const [showTierChart, setShowTierChart] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     open: boolean;
     x: number;
@@ -132,6 +133,11 @@ export function RankingBoard({
         }}
       >
         👥 유저 목록
+      </div>
+      <div className="tier-chart-launch">
+        <button type="button" className="tab-btn" onClick={() => setShowTierChart(true)}>
+          티어표
+        </button>
       </div>
       <div className="d-flex gap-2 mb-1">
         <button
@@ -265,6 +271,35 @@ export function RankingBoard({
           onSelect={handleMenuSelect}
           onClose={closeContextMenu}
         />
+      )}
+      {showTierChart && (
+        <div className="modal-overlay" style={{ zIndex: 4200 }} onClick={() => setShowTierChart(false)}>
+          <div className="modal-content tier-chart-modal" onClick={(event) => event.stopPropagation()}>
+            <h3 className="text-center pixel-text-primary">티어표</h3>
+            <div className="tier-chart-row">
+              {[
+                { name: '브론즈', icon: '🥉', range: '0 ~ 999' },
+                { name: '실버', icon: '🥈', range: '1000 ~ 1299' },
+                { name: '골드', icon: '🥇', range: '1300 ~ 1599' },
+                { name: '플래티넘', icon: '💠', range: '1600 ~ 1899' },
+                { name: '다이아', icon: '💎', range: '1900 ~ 2199' },
+                { name: '마스터', icon: '👑', range: '2200+' },
+              ].map((tier) => (
+                <div key={tier.name} className="tier-chart-item">
+                  <div className="tier-chart-icon">{tier.icon}</div>
+                  <div className="tier-chart-name">{tier.name}</div>
+                  <div className="tier-chart-bar" />
+                  <div className="tier-chart-range">{tier.range}</div>
+                </div>
+              ))}
+            </div>
+            <div className="text-center" style={{ marginTop: '14px' }}>
+              <button type="button" className="pixel-btn pixel-btn-secondary" onClick={() => setShowTierChart(false)}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

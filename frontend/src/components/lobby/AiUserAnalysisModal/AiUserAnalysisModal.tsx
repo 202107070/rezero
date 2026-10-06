@@ -33,6 +33,65 @@ interface AiAnalysisResponse {
   };
 }
 
+function clampPercent(value: number | undefined): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n));
+}
+
+function RadarChart({
+  axes,
+}: {
+  axes: Array<{ label: string; value: number }>;
+}) {
+  const size = 220;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = 78;
+  const points = axes.map((axis, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / axes.length;
+    const scale = clampPercent(axis.value) / 100;
+    return {
+      label: axis.label,
+      x: cx + Math.cos(angle) * radius * scale,
+      y: cy + Math.sin(angle) * radius * scale,
+      lx: cx + Math.cos(angle) * (radius + 28),
+      ly: cy + Math.sin(angle) * (radius + 28),
+      gx: cx + Math.cos(angle) * radius,
+      gy: cy + Math.sin(angle) * radius,
+    };
+  });
+  const polygon = points.map((point) => `${point.x},${point.y}`).join(' ');
+  const grid = [0.35, 0.65, 1];
+  return (
+    <svg className="ai-radar" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="분석 그래프">
+      {grid.map((scale) => (
+        <polygon
+          key={scale}
+          fill="none"
+          stroke="#3d4a44"
+          strokeWidth="1"
+          points={axes
+            .map((_, index) => {
+              const angle = -Math.PI / 2 + (Math.PI * 2 * index) / axes.length;
+              return `${cx + Math.cos(angle) * radius * scale},${cy + Math.sin(angle) * radius * scale}`;
+            })
+            .join(' ')}
+        />
+      ))}
+      {points.map((point) => (
+        <line key={point.label} x1={cx} y1={cy} x2={point.gx} y2={point.gy} stroke="#3d4a44" />
+      ))}
+      <polygon points={polygon} fill="rgba(46, 204, 113, 0.35)" stroke="#2ecc71" strokeWidth="2" />
+      {points.map((point) => (
+        <text key={`${point.label}-label`} x={point.lx} y={point.ly} textAnchor="middle" className="ai-radar-label">
+          {point.label}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
 export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose }: AiUserAnalysisModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [loading, setLoading] = useState(false);
@@ -97,6 +156,30 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
 
         {!loading && !error && result && (
           <>
+            {summary && (
+              <RadarChart
+                axes={[
+                  { label: '승률', value: clampPercent(summary.winrate) },
+                  { label: '해결', value: clampPercent(summary.solveRate) },
+                  {
+                    label: '레이팅',
+                    value: clampPercent(((summary.ratingScore || 0) / 2200) * 100),
+                  },
+                  {
+                    label: '속도',
+                    value: clampPercent(100 - Math.min(90, (summary.avgSolveTimeSec || 0) / 2)),
+                  },
+                  {
+                    label: '경험',
+                    value: clampPercent(((summary.totalWins || 0) + (summary.losses || 0)) * 4),
+                  },
+                  {
+                    label: '문제',
+                    value: clampPercent((summary.problemCount || summary.recentMatchCount || 0) * 12),
+                  },
+                ]}
+              />
+            )}
             {summary && !historyId && (
               <div className="ai-analysis-stats">
                 <div>레이팅 {summary.ratingScore ?? '-'} · 승률 {summary.winrate ?? 0}%</div>
@@ -118,11 +201,13 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
             )}
             <div className="ai-analysis-body">{result.analysis || '분석 결과가 없습니다.'}</div>
             <div className="ai-analysis-source">
-              {result.source === 'cursor'
-                ? 'Cursor AI 분석'
-                : result.source === 'local-fallback'
-                  ? '규칙 기반(임시)'
-                  : '규칙 기반 분석'}
+              {result.source === 'saved'
+                ? '저장된 분석'
+                : result.source === 'cursor'
+                  ? 'Cursor AI 분석'
+                  : result.source === 'local-fallback'
+                    ? '규칙 기반(임시)'
+                    : '규칙 기반 분석'}
             </div>
           </>
         )}

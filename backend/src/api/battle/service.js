@@ -335,7 +335,10 @@ function toRankingPlayer(participant, submission, match) {
     name: participant.displayName || participant.username || participant.userId,
     avatar: resolveAvatarIcon(participant.avatar),
     ingameScore: numberOrZero(submitted.ingameScore),
-    ratingScore: numberOrZero(participant.ratingScore) || 1000,
+    ratingScore:
+      numberOrZero(submitted.ratingScoreBefore) ||
+      numberOrZero(participant.ratingScore) ||
+      1000,
     totalSolveTime: numberOrZero(submitted.totalSolveTime),
     completionTime,
     solvedProblems,

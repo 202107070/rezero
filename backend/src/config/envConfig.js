@@ -36,10 +36,11 @@ function getJwtSecret() {
 }
 
 function getJwtExpiresIn() {
-  if (process.env.JWT_EXPIRES_IN) {
-    return process.env.JWT_EXPIRES_IN;
-  }
-  return "12h";
+  const raw = process.env.JWT_EXPIRES_IN ? String(process.env.JWT_EXPIRES_IN).trim() : "12h";
+  const hourMatch = raw.match(/^(\d+)\s*h$/i);
+  if (hourMatch && Number(hourMatch[1]) < 12) return "12h";
+  if (raw === "60m" || raw === "3600" || raw === "3600s") return "12h";
+  return raw || "12h";
 }
 
 function getCursorApiKey() {

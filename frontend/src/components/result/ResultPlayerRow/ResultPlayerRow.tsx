@@ -1,6 +1,14 @@
 import type { MouseEvent } from 'react';
 import type { ResultPlayer } from '../../../utils/resultUtils';
 
+function formatSolveDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  const total = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const remain = total % 60;
+  return `${minutes}분 ${remain}초`;
+}
+
 interface ResultPlayerRowProps {
   player: ResultPlayer;
   showRank?: boolean;
@@ -37,14 +45,14 @@ export function ResultPlayerRow({
   const canSelectDots = reviewSelectMode && isReviewSelectable;
   const canOpenDetail = !!onOpenProblemDetail && !canSelectDots;
 
+  const ratingBase = Math.max(0, Number(player.ratingScore) || 0);
   const ratingDeltaLabel =
-    player.delta > 0 ? ` +${player.delta}` : player.delta < 0 ? ` ${player.delta}` : '';
-  const ratingAfter = Math.max(0, (Number(player.ratingScore) || 0) + (Number(player.delta) || 0));
+    player.delta > 0 ? ` + ${player.delta}` : player.delta < 0 ? ` ${player.delta}` : '';
   const completion =
     Number.isFinite(player.completionTime) && player.completionTime > 0
       ? player.completionTime
       : player.totalSolveTime;
-  const solveTimeLabel = completion > 0 && Number.isFinite(completion) ? `${completion.toFixed(1)}s` : '—';
+  const solveTimeLabel = formatSolveDuration(completion);
 
   const rowContent = (
     <>
@@ -114,7 +122,7 @@ export function ResultPlayerRow({
         <span className="player-solve-time">총 풀이 시간: {solveTimeLabel}</span>
         <span className="score-val">배틀 인게임 점수: {player.ingameScore.toLocaleString()}</span>
         <span className="player-rating-info">
-          레이팅: {ratingAfter}
+          레이팅: {ratingBase}
           {ratingDeltaLabel}
         </span>
       </div>

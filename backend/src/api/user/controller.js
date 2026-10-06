@@ -21,6 +21,7 @@ import {
 } from "#service/socketService.js";
 import { getSocket } from "#config/socketConfig.js";
 import { SOCKET_EVENTS } from "#constants/socketEvents.js";
+import { listFriendsForUser } from "./friendModel.js";
 import { sendSuccess } from "#utils/responseHelper.js";
 import { AppError } from "#utils/appError.js";
 
@@ -156,6 +157,23 @@ export async function removeMe(req, res, next) {
       // ignore
     }
     return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getMyFriends(req, res, next) {
+  try {
+    const rows = await listFriendsForUser(req.user.id);
+    return sendSuccess(res, {
+      friends: rows.map(function (row) {
+        return {
+          userId: String(row.userId),
+          displayName: row.displayName || row.username || String(row.userId),
+          username: row.username || "",
+        };
+      }),
+    });
   } catch (error) {
     return next(error);
   }

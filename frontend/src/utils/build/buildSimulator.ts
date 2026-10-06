@@ -13,6 +13,38 @@ const LANG_LABEL: Record<string, string> = {
   CSS: 'CSS',
 };
 
+function unwrapLiteral(raw: string): string {
+  const text = String(raw || '').replace(/<<|endl/g, ' ').trim();
+  if (!text) return '';
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    return text.slice(1, -1);
+  }
+  return text;
+}
+
+function extractProgramOutput(code: string, lang: string): string[] {
+  const lines: string[] = [];
+  if (lang === 'JAVA') {
+    for (const match of code.matchAll(/System\.out\.println\s*\(([^)]*)\)/g)) {
+      const value = unwrapLiteral(match[1]);
+      if (value) lines.push(value);
+    }
+  } else if (lang === 'PYTHON') {
+    for (const match of code.matchAll(/print\s*\(([^)]*)\)/g)) {
+      const value = unwrapLiteral(match[1]);
+      if (value) lines.push(value);
+    }
+  } else if (lang === 'CPP') {
+    const parts = code.split(/cout\s*<</).slice(1);
+    for (const part of parts) {
+      const chunk = part.split(';')[0] || '';
+      const value = unwrapLiteral(chunk);
+      if (value) lines.push(value);
+    }
+  }
+  return lines;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -95,16 +127,13 @@ export async function runBuildSimulation(
   await emit({ level: 'info', text: '[build] 구문 검사 통과' });
   await emit({ level: 'stdout', text: '--- program output (preview) ---' }, 30);
 
-  if (lang === 'JAVA' && /System\.out\.println/.test(code)) {
-    const match = code.match(/System\.out\.println\(([^)]+)\)/);
-    if (match) await emit({ level: 'stdout', text: match[1].replace(/"/g, '') }, 40);
-  } else if (lang === 'PYTHON' && /print\(/.test(code)) {
-    const match = code.match(/print\(([^)]+)\)/);
-    if (match) await emit({ level: 'stdout', text: match[1].replace(/['"]/g, '') }, 40);
-  } else if (lang === 'CPP' && /cout\s*<</.test(code)) {
-    await emit({ level: 'stdout', text: '(cout 출력 미리보기)' }, 40);
+  const outputs = extractProgramOutput(code, lang);
+  if (outputs.length === 0) {
+    await emit({ level: 'stdout', text: '(실행 출력 없음)' }, 40);
   } else {
-    await emit({ level: 'stdout', text: '(실행 출력 없음 — 추후 서버 빌드 연동 예정)' }, 40);
+    for (const line of outputs) {
+      await emit({ level: 'stdout', text: line }, 40);
+    }
   }
 
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(2);

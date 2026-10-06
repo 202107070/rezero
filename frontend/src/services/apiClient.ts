@@ -52,7 +52,7 @@ export function isBackendDown(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 0 || error.status >= 502 || error.code === 'NETWORK_ERROR');
 }
 
-function notifyServerDown(): void {
+export function notifyServerDown(): void {
   if (serverDownNotified) return;
   serverDownNotified = true;
   try {

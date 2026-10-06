@@ -14,20 +14,38 @@ export function isBlankBasedType(type: string | undefined): boolean {
 }
 
 const CODE_BUILD_BODY_PATTERN =
-  /[;{}()[\]]|(?:\b(?:int|void|class|def|for|while|if|else|return|import|public|private|static|function|console|System|String|boolean|using|namespace|#include)\b)|(?:<\/?[a-z][\w-]*)/i;
+  /(?:\b(?:int|void|class|def|for|while|if|else|return|import|public|private|static|function|console|System|String|boolean|using|namespace|#include|cout|print)\b)/i;
 
-/** 빌드 시스템 대상 — 실제 코드 블록을 완성하는 문제만 (문장형 단답 빈칸 제외) */
-export function isCodeBlankBuildProblem(problem: {
-  type?: string;
-  question?: string;
-}): boolean {
-  if (!isBlankBasedType(problem.type)) return false;
+function looksLikeMarkupOrStyle(question: string): boolean {
+  if (/<\/?[a-z][^>]*>/i.test(question) && !/print\s*\(|cout\s*<<|System\.out|console\.log/.test(question)) {
+    return true;
+  }
+  if (
+    /[{;][^}]*:\s*[^;]+;/.test(question) &&
+    /\b(color|font|margin|padding|display|background|width|height)\b/i.test(question) &&
+    !/print\s*\(|cout\s*<<|System\.out/.test(question)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** 빌드 시스템 대상 — 실행 결과를 알 수 있는 코드 빈칸만. CSS/HTML 은 제외 */
+export function isCodeBlankBuildProblem(
+  problem?: {
+    type?: string;
+    question?: string;
+  } | null,
+  langKey?: string,
+): boolean {
+  if (!problem || !isBlankBasedType(problem.type)) return false;
+
+  const lang = String(langKey || '').toUpperCase();
+  if (lang === 'CSS' || lang === 'HTML') return false;
 
   const question = problem.question || '';
   if (!/_____/.test(question)) return false;
-
-  const rawType = String(problem.type || '').trim().toLowerCase().replace(/-/g, '_');
-  if (rawType === 'visual_fill_blank') return true;
+  if (looksLikeMarkupOrStyle(question)) return false;
 
   return CODE_BUILD_BODY_PATTERN.test(question);
 }

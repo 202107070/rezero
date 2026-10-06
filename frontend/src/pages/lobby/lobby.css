@@ -53,7 +53,7 @@
 
 .lobby-main-bottom {
   flex: 0.9;
-  min-height: 0;
+  min-height: 180px;
   display: flex;
   flex-direction: column;
 }
@@ -236,9 +236,75 @@
 }
 
 .ai-analysis-modal {
-  width: min(520px, 92vw);
-  max-height: min(78vh, 640px);
+  width: min(720px, 94vw);
+  max-height: min(86vh, 760px);
   overflow-y: auto;
+}
+
+.ai-radar {
+  display: block;
+  width: min(280px, 100%);
+  margin: 0 auto 12px;
+}
+
+.ai-radar-label {
+  fill: #d7ddd8;
+  font-size: 11px;
+}
+
+.tier-chart-launch {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.tier-chart-modal {
+  width: min(920px, 96vw);
+}
+
+.tier-chart-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.tier-chart-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tier-chart-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.tier-chart-name {
+  color: #eee;
+  font-size: 13px;
+}
+
+.tier-chart-bar {
+  width: 100%;
+  height: 12px;
+  border: 2px solid #222;
+  background: #8d6a43;
+}
+
+.tier-chart-item:nth-child(2) .tier-chart-bar { background: #c0c0c0; }
+.tier-chart-item:nth-child(3) .tier-chart-bar { background: #d4af37; }
+.tier-chart-item:nth-child(4) .tier-chart-bar { background: #7fd1c7; }
+.tier-chart-item:nth-child(5) .tier-chart-bar { background: #7eb6ff; }
+.tier-chart-item:nth-child(6) .tier-chart-bar { background: #e6d37a; }
+
+.tier-chart-range {
+  color: #bbb;
+  font-size: 12px;
+  text-align: center;
 }
 
 .ai-analysis-subtitle {
@@ -657,6 +723,7 @@
 }
 
 .lobby-page .chat-messages {
+  min-height: 96px;
   flex: 1 1 0;
   background: #1a1e21;
   border: 4px solid var(--px-border);
@@ -668,7 +735,6 @@
   color: #ccc;
   font-size: 16px;
   padding: 4px;
-  min-height: 0;
   line-height: 1.4;
 }
 
@@ -824,8 +890,13 @@
 }
 
 .my-info-modal {
-  max-width: min(920px, 96vw);
-  width: 100%;
+  width: min(1100px, 100%);
+  max-width: 100%;
+  height: min(680px, 90vh);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .my-info-stats-panel {
@@ -833,6 +904,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .my-info-stat-row {
@@ -841,8 +915,9 @@
   align-items: center;
   color: #ddd;
   font-size: 15px;
-  border-bottom: 2px solid #222;
-  padding-bottom: 6px;
+  border: 3px solid var(--px-border);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 10px 12px;
 }
 
 .my-info-public-header {

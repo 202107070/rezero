@@ -30,7 +30,7 @@ import {
   setPendingInviteMeta,
   setPendingJoinPassword,
 } from '../../services/roomService';
-import { getCurrentDisplayName, getCurrentUserName, refreshMeProfile } from '../../services/authService';
+import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName, refreshMeProfile } from '../../services/authService';
 import { ApiError, apiRequest, isBackendDown } from '../../services/apiClient';
 import { useServerDownChat } from '../../hooks/useServerDownChat';
 import {
@@ -59,8 +59,9 @@ import {
   getFriendNames,
   getFriendUserIds,
   isFriend,
+  claimFriendNotice,
   loadFriends,
-  pruneFriendsNotIn,
+  mergeServerFriends,
   rememberFriendRating,
   removeFriend,
   removeFriendByUserId,
@@ -217,10 +218,34 @@ function syncFriendPresenceFromOnline(
   }
 }
 
+const LOBBY_ROSTER_KEY = 'rezero_lobby_roster';
+const LOBBY_CHAT_KEY = 'rezero_lobby_chat';
+
 function loadInitialUsers(): LobbyUser[] {
   const me = getCurrentDisplayName() || getCurrentUserName();
-  if (!me) return [];
-  return [{ name: me, rank: getTierByRating(getRatingScore()), title: getEquippedTitleId() }];
+  const meId = getCurrentUserId();
+  let cached: LobbyUser[] = [];
+  try {
+    const raw = sessionStorage.getItem(LOBBY_ROSTER_KEY);
+    const parsed = raw ? (JSON.parse(raw) as LobbyUser[]) : [];
+    if (Array.isArray(parsed)) cached = parsed.filter((user) => user && user.name);
+  } catch {
+    cached = [];
+  }
+  if (me && !cached.some((user) => user.name === me || (meId && user.userId === meId))) {
+    cached.unshift({ name: me, rank: getTierByRating(getRatingScore()), title: getEquippedTitleId(), userId: meId });
+  }
+  return cached;
+}
+
+function loadLobbyChat(): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(LOBBY_CHAT_KEY);
+    const parsed = raw ? (JSON.parse(raw) as ChatMessage[]) : [];
+    return Array.isArray(parsed) ? parsed.slice(-40) : [];
+  } catch {
+    return [];
+  }
 }
 
 export default function LobbyPage() {
@@ -243,7 +268,7 @@ export default function LobbyPage() {
   const [modalShake, setModalShake] = useState(false);
   const [createMissingFields, setCreateMissingFields] = useState<RoomCreateFieldKey[]>([]);
   const [createValidationMessage, setCreateValidationMessage] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(loadLobbyChat);
   const [chatMsg, setChatMsg] = useState('');
   const [chatMode, setChatMode] = useState('ALL');
   const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
@@ -303,6 +328,11 @@ export default function LobbyPage() {
         });
       }
       setUsers(mapped);
+      try {
+        sessionStorage.setItem(LOBBY_ROSTER_KEY, JSON.stringify(mapped));
+      } catch {
+        // ignore
+      }
       syncFriendPresenceFromOnline(online);
     },
     [authUser.displayName, authUser.username, authUser.id],
@@ -407,15 +437,18 @@ export default function LobbyPage() {
                   addFriend(payload.fromUserName, payload.fromUserId);
                 }
                 setFriendNames(getFriendNames());
-                setChatMessages((prev) => [
-                  ...prev,
-                  {
-                    sender: 'SYSTEM',
-                    text: `${payload.fromUserName || '상대'}님이 친구 요청을 수락했습니다.`,
-                    time: timeStr,
-                    mode: '[안내]',
-                  },
-                ]);
+                const noticeKey = `accept:${payload.fromUserId || payload.fromUserName || 'unknown'}`;
+                if (claimFriendNotice(noticeKey)) {
+                  setChatMessages((prev) => [
+                    ...prev,
+                    {
+                      sender: 'SYSTEM',
+                      text: `${payload.fromUserName || '상대'}님이 친구 요청을 수락했습니다.`,
+                      time: timeStr,
+                      mode: '[안내]',
+                    },
+                  ]);
+                }
               } else {
                 setChatMessages((prev) => [
                   ...prev,
@@ -580,6 +613,30 @@ export default function LobbyPage() {
   }, [audioSettings.lobbyMusic]);
 
   useEffect(() => {
+    try {
+      sessionStorage.setItem(LOBBY_CHAT_KEY, JSON.stringify(chatMessages.slice(-40)));
+    } catch {
+      // ignore
+    }
+  }, [chatMessages]);
+
+  useEffect(() => {
+    void apiRequest<{ friends?: Array<{ userId?: string; displayName?: string; username?: string }> }>(
+      '/users/me/friends',
+    )
+      .then((data) => {
+        mergeServerFriends(
+          (data.friends || [])
+            .filter((friend) => friend.userId)
+            .map((friend) => ({
+              userId: String(friend.userId),
+              name: friend.displayName || friend.username || String(friend.userId),
+            })),
+        );
+        setFriendNames(getFriendNames());
+      })
+      .catch(() => undefined);
+
     const ids = loadFriends()
       .map((friend) => friend.userId)
       .filter((id): id is string => Boolean(id));
@@ -587,10 +644,6 @@ export default function LobbyPage() {
     const requested = ids.slice(0, 40);
     void fetchPublicProfiles(requested)
       .then((rows) => {
-        pruneFriendsNotIn(
-          requested,
-          rows.map((row) => String(row.userId)),
-        );
         const friends = loadFriends();
         for (const row of rows) {
           const friend = friends.find((entry) => String(entry.userId) === String(row.userId));
@@ -601,7 +654,7 @@ export default function LobbyPage() {
         setFriendNames(getFriendNames());
       })
       .catch(() => undefined);
-  }, []);
+  }, [authUser.id]);
 
   useEffect(() => {
     const me = getCurrentDisplayName() || getCurrentUserName();
@@ -667,7 +720,11 @@ export default function LobbyPage() {
   const appendSystemChat = (text: string) => {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text, time: timeStr, mode: '[안내]' }]);
+    setChatMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.sender === 'SYSTEM' && last.text === text) return prev;
+      return [...prev, { sender: 'SYSTEM', text, time: timeStr, mode: '[안내]' }];
+    });
   };
 
   const handleSendChat = async () => {
@@ -748,12 +805,21 @@ export default function LobbyPage() {
           }
           appendSystemChat(`${user.name} 님을 친구 목록에서 삭제했습니다.`);
         } else {
-          appendSystemChat(`${user.name} 님에게 친구 요청을 보냈습니다.`);
-          if (user.userId) {
-            void emitFriendRequest(user.userId, user.name).catch(() => undefined);
-          } else {
+          if (!user.userId) {
             appendSystemChat('상대 유저 ID를 찾을 수 없어 요청 알림은 전송되지 않았습니다.');
+            break;
           }
+          void emitFriendRequest(user.userId, user.name)
+            .then((result) => {
+              if (!result.success) {
+                appendSystemChat(result.message || '친구 요청을 보내지 못했습니다.');
+                return;
+              }
+              appendSystemChat(`${user.name} 님에게 친구 요청을 보냈습니다.`);
+            })
+            .catch(() => {
+              appendSystemChat('친구 요청을 보내지 못했습니다.');
+            });
         }
         break;
       }
@@ -1316,7 +1382,9 @@ export default function LobbyPage() {
                   setFriendNames(getFriendNames());
                   void emitFriendRequestResult(pendingFriendRequest.fromUserId, true);
                   setPendingFriendRequest(null);
-                  appendSystemChat(`${pendingFriendRequest.fromUserName} 님과 친구가 되었습니다.`);
+                  if (claimFriendNotice(`local-accept:${pendingFriendRequest.fromUserId}`)) {
+                    appendSystemChat(`${pendingFriendRequest.fromUserName} 님과 친구가 되었습니다.`);
+                  }
                 }}
               >
                 수락

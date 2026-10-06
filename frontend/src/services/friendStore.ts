@@ -83,16 +83,41 @@ export function addFriend(name: string, userId?: string): boolean {
   const trimmed = name.trim();
   if (!trimmed) return false;
   const friends = readFriends();
+  if (userId) {
+    const byId = friends.find((f) => f.userId && String(f.userId) === String(userId));
+    if (byId) {
+      byId.name = trimmed;
+      writeFriends(friends);
+      return false;
+    }
+  }
   const existing = friends.find((f) => f.name === trimmed);
   if (existing) {
-    if (userId && !existing.userId) {
-      existing.userId = userId;
-      writeFriends(friends);
-    }
+    if (userId) existing.userId = String(userId);
+    writeFriends(friends);
     return false;
   }
   friends.push({ name: trimmed, userId: userId || undefined, addedAt: Date.now() });
   writeFriends(friends);
+  return true;
+}
+
+/** 서버에 저장된 친구를 로컬 목록에 합친다. 서버에 없는 기존 항목은 지우지 않는다. */
+export function mergeServerFriends(entries: Array<{ name: string; userId: string }>) {
+  for (const entry of entries) {
+    if (!entry.userId || !entry.name) continue;
+    addFriend(entry.name, entry.userId);
+  }
+}
+
+const recentFriendNotices = new Map<string, number>();
+
+/** 같은 친구 알림이 짧은 시간에 두 번 붙지 않게 한다. */
+export function claimFriendNotice(key: string, windowMs = 4000): boolean {
+  const now = Date.now();
+  const prev = recentFriendNotices.get(key) || 0;
+  if (now - prev < windowMs) return false;
+  recentFriendNotices.set(key, now);
   return true;
 }
 

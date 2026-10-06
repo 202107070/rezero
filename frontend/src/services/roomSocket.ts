@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import { getAccessToken, dispatchAuthExpired } from './apiClient';
+import { getAccessToken, dispatchAuthExpired, notifyServerDown } from './apiClient';
 
 export const ROOM_SOCKET_EVENTS = {
   JOIN_ROOM: 'join_room',
@@ -209,6 +209,23 @@ type AnyHandler = (...args: never[]) => void;
 let socket: Socket | null = null;
 let intentionalDisconnect = false;
 let activeRoomId: string | null = null;
+let serverDownTimer = 0;
+
+function scheduleServerDownCheck() {
+  if (intentionalDisconnect || serverDownTimer) return;
+  serverDownTimer = window.setTimeout(() => {
+    serverDownTimer = 0;
+    if (intentionalDisconnect) return;
+    if (!socket || socket.connected) return;
+    notifyServerDown();
+  }, 4000);
+}
+
+function clearServerDownCheck() {
+  if (!serverDownTimer) return;
+  window.clearTimeout(serverDownTimer);
+  serverDownTimer = 0;
+}
 
 const ACTIVE_ROOM_KEY = 'rezero_active_room_id';
 
@@ -257,19 +274,27 @@ export function getRoomSocket(): Socket {
     autoConnect: true,
   });
 
+  socket.on('connect', () => {
+    clearServerDownCheck();
+  });
+
+  socket.on('disconnect', (reason: string) => {
+    if (intentionalDisconnect || reason === 'io client disconnect') return;
+    scheduleServerDownCheck();
+  });
+
   socket.on('connect_error', (error: Error) => {
     const message = String(error?.message || '');
     const upper = message.toUpperCase();
-    const isAuthFail =
-      upper.includes('TOKEN_EXPIRED') ||
-      upper.includes('TOKEN_INVALID') ||
-      upper.includes('UNAUTHORIZED') ||
-      upper.includes('INVALID_TOKEN') ||
-      message.includes('만료된 토큰') ||
-      message.includes('유효하지 않');
-    if (isAuthFail) {
-      dispatchAuthExpired('SOCKET_AUTH_ERROR');
+    const isExpired = upper.includes('TOKEN_EXPIRED') || message.includes('만료된 토큰');
+    if (isExpired) {
+      dispatchAuthExpired('TOKEN_EXPIRED');
+      return;
     }
+    if (upper.includes('TOKEN_INVALID') || upper.includes('TOKEN_REQUIRED') || message.includes('토큰')) {
+      return;
+    }
+    scheduleServerDownCheck();
   });
 
   return socket;
