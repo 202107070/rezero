@@ -44,7 +44,7 @@ function RadarChart({
 }: {
   axes: Array<{ label: string; value: number }>;
 }) {
-  const size = 220;
+  const size = 280;
   const cx = size / 2;
   const cy = size / 2;
   const radius = 78;
@@ -55,8 +55,8 @@ function RadarChart({
       label: axis.label,
       x: cx + Math.cos(angle) * radius * scale,
       y: cy + Math.sin(angle) * radius * scale,
-      lx: cx + Math.cos(angle) * (radius + 28),
-      ly: cy + Math.sin(angle) * (radius + 28),
+      lx: cx + Math.cos(angle) * (radius + 36),
+      ly: cy + Math.sin(angle) * (radius + 36),
       gx: cx + Math.cos(angle) * radius,
       gy: cy + Math.sin(angle) * radius,
     };
@@ -129,7 +129,7 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
   const summary = result?.summary;
 
   return (
-    <div className="modal-overlay" onClick={triggerShake} style={{ zIndex: 4500 }}>
+    <div className="modal-overlay" onClick={triggerShake} style={{ zIndex: 6000 }}>
       <div
         className={`modal-content ai-analysis-modal${shaking ? ' modal-shake-error' : ''}`}
         onClick={(e) => e.stopPropagation()}

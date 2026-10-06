@@ -37,6 +37,9 @@ export interface BattleProblem {
   input?: string;
   output?: string;
   visual?: ProblemVisual | null;
+  userAnswer?: string;
+  userBlanks?: string[];
+  selectedOption?: number | null;
   /** 특수 문제만 아이템 허용 정책 덮어쓰기 */
   capabilityOverrides?: Partial<Record<keyof ItemInventory, boolean>>;
 }

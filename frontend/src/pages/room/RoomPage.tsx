@@ -653,6 +653,8 @@ export default function RoomPage() {
               onRoomEvent(
                 ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
                 (payload?: { fromUserId?: string; fromUserName?: string }) => {
+                  if (String(payload?.fromUserId || '') === String(getCurrentUserId())) return;
+                  if (!claimFriendNotice(`friend-remove:${payload?.fromUserId || payload?.fromUserName}`)) return;
                   if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
                   if (payload?.fromUserName) removeFriend(payload.fromUserName);
                   setMessages((prev) => [
@@ -897,10 +899,13 @@ export default function RoomPage() {
       case 'add-friend':
         if (isFriend(userName)) {
           const target = players.find((player) => player?.name === userName);
-          const friendId = target?.userId || findFriendUserId(userName);
+          const friendId = String(target?.userId || findFriendUserId(userName) || '').replace(/^player-/, '');
           removeFriend(userName);
+          if (friendId) removeFriendByUserId(friendId);
           if (friendId) {
-            void emitFriendRemove(String(friendId)).catch(() => undefined);
+            void emitFriendRemove(friendId).catch(() => undefined);
+          } else {
+            appendSystemMessage('상대 유저 ID를 찾지 못해 상대 화면에는 삭제가 전달되지 않았습니다.');
           }
           appendSystemMessage(`${userName} 님을 친구 목록에서 삭제했습니다.`);
         } else {

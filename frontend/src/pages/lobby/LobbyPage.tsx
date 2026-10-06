@@ -467,6 +467,8 @@ export default function LobbyPage() {
           onRoomEvent(
             ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
             (payload?: { fromUserId?: string; fromUserName?: string }) => {
+              if (String(payload?.fromUserId || '') === String(authUser?.id || '')) return;
+              if (!claimFriendNotice(`friend-remove:${payload?.fromUserId || payload?.fromUserName}`)) return;
               if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
               if (payload?.fromUserName) removeFriend(payload.fromUserName);
               setFriendNames(getFriendNames());
@@ -1184,7 +1186,6 @@ export default function LobbyPage() {
         onSelectAll={handleSelectAllHistory}
         onDeleteSelected={handleDeleteSelectedHistory}
         onAnalyzeEntry={(entry) => {
-          setShowMyInfoModal(false);
           setAiTarget({
             userId: '',
             historyId: entry.historyId,
@@ -1194,7 +1195,6 @@ export default function LobbyPage() {
         onAiAnalyze={(userId, userName) => {
           const targetId = userId === '__self__' ? authUser.id : userId;
           if (!targetId) return;
-          setShowMyInfoModal(false);
           setAiTarget({ userId: targetId, userName });
         }}
       />

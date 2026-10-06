@@ -188,7 +188,11 @@ export function persistBattleSubmission(params: {
     historyId: `${params.roomId || 'solo'}::${Date.now()}`,
     roomId: params.roomId,
     matchId: params.matchId || '',
-    problems: params.problems,
+    problems: params.problems.map((problem, index) => ({
+      ...problem,
+      userBlanks: params.blankAnswers?.[index] || problem.userBlanks || [],
+      selectedOption: params.selectedOptions?.[index] ?? problem.selectedOption ?? null,
+    })),
     answers: params.answers,
     lang: params.langKey,
     submittedAt: new Date().toISOString(),

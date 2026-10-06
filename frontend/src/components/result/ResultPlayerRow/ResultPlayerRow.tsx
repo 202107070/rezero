@@ -48,11 +48,11 @@ export function ResultPlayerRow({
   const ratingBase = Math.max(0, Number(player.ratingScore) || 0);
   const ratingDeltaLabel =
     player.delta > 0 ? ` + ${player.delta}` : player.delta < 0 ? ` ${player.delta}` : '';
-  const completion =
-    Number.isFinite(player.completionTime) && player.completionTime > 0
-      ? player.completionTime
-      : player.totalSolveTime;
-  const solveTimeLabel = formatSolveDuration(completion);
+  const solveSeconds =
+    Number.isFinite(player.totalSolveTime) && player.totalSolveTime > 0
+      ? player.totalSolveTime
+      : 0;
+  const solveTimeLabel = formatSolveDuration(solveSeconds);
 
   const rowContent = (
     <>

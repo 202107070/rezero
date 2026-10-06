@@ -2,6 +2,11 @@ import { useModalShake } from '../../../hooks/useModalShake';
 import type { CodeHistoryEntry } from '../../../types/lobby';
 import { getSolution } from '../../../utils/codeHistoryUtils';
 
+function isPlaceholderAnswer(value: string): boolean {
+  const text = value.trim();
+  return !text || text === '(미입력)' || text === '미입력';
+}
+
 function readMyAnswer(
   history: CodeHistoryEntry | null,
   problem: CodeHistoryEntry['problems'][number] | null,
@@ -9,11 +14,26 @@ function readMyAnswer(
 ): string {
   const question = String(problem?.question || '').trim();
   const stored = String(problem?.userAnswer || '').trim();
-  if (stored && stored !== '(미입력)') return stored;
+  if (!isPlaceholderAnswer(stored) && stored !== question) return stored;
+
+  const blanks = Array.isArray(problem?.userBlanks) ? [...problem.userBlanks] : [];
+  if (blanks.some((blank) => String(blank || '').trim())) {
+    let cursor = 0;
+    const filled = question
+      ? question.replace(/_____/g, () => String(blanks[cursor++] ?? ''))
+      : blanks.join(', ');
+    if (!isPlaceholderAnswer(filled) && filled !== question) return filled;
+  }
+
+  if (problem?.selectedOption != null && problem.selectedOption >= 0 && problem.options?.[problem.selectedOption]) {
+    const option = problem.options[problem.selectedOption];
+    return `${String.fromCharCode(65 + problem.selectedOption)}. ${option}`;
+  }
+
   const fromCodes = String(
     history?.codes?.[index] || (index === 0 ? history?.code : '') || '',
   ).trim();
-  if (fromCodes && fromCodes !== question) return fromCodes;
+  if (!isPlaceholderAnswer(fromCodes) && fromCodes !== question) return fromCodes;
   return '(미입력)';
 }
 
@@ -31,6 +51,7 @@ interface MatchStoryModalProps {
   onSelectAll: () => void;
   onDeleteSelected: () => void;
   onAnalyzeEntry?: (entry: CodeHistoryEntry) => void;
+  readOnly?: boolean;
 }
 
 export function MatchStoryModal({
@@ -47,6 +68,7 @@ export function MatchStoryModal({
   onSelectAll,
   onDeleteSelected,
   onAnalyzeEntry,
+  readOnly = false,
 }: MatchStoryModalProps) {
   const { shaking, triggerShake } = useModalShake();
   if (!open) return null;
@@ -89,6 +111,7 @@ export function MatchStoryModal({
                         게임 #{idx + 1}
                         {entry.roomId ? ` · ${entry.roomId}번 방` : ''}
                       </div>
+                      {!readOnly && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -107,19 +130,22 @@ export function MatchStoryModal({
                       >
                         {selectedIds.includes(entry.historyId) ? '☑' : '☐'}
                       </button>
+                      )}
                     </div>
                     <div style={{ fontSize: '12px', marginTop: '4px' }}>{new Date(entry.submittedAt).toLocaleString()}</div>
                     <div style={{ fontSize: '12px', marginTop: '2px', color: 'var(--px-warning)' }}>
                       {(entry.problems?.length || entry.codes?.length || 1)}문제
                     </div>
                   </button>
-                  <button
-                    type="button"
-                    className="pixel-btn pixel-btn-primary match-story-ai-btn"
-                    onClick={() => onAnalyzeEntry?.(entry)}
-                  >
-                    AI 분석
-                  </button>
+                  {!readOnly && onAnalyzeEntry && (
+                    <button
+                      type="button"
+                      className="pixel-btn pixel-btn-primary match-story-ai-btn"
+                      onClick={() => onAnalyzeEntry(entry)}
+                    >
+                      AI 분석
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -150,7 +176,7 @@ export function MatchStoryModal({
                 )}
               </div>
               <div className="match-story-answer-head">
-                <span>내 답</span>
+                <span>{readOnly ? '답안' : '내 답'}</span>
                 <span>정답</span>
               </div>
               <div className="match-story-grid">
@@ -166,6 +192,7 @@ export function MatchStoryModal({
             </div>
           </div>
         )}
+        {!readOnly && (
         <div className="d-flex justify-content-between align-items-center gap-2">
           <div style={{ color: '#999', fontSize: '14px' }}>선택됨: {selectedIds.length}개</div>
           <div className="d-flex gap-2 justify-content-end">
@@ -186,6 +213,7 @@ export function MatchStoryModal({
             </button>
           </div>
         </div>
+        )}
     </>
   );
 

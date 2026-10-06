@@ -7,6 +7,7 @@ import {
   deleteMyMatchHistory,
   getCurrentUser,
   listMyMatchHistory,
+  getPublicCard,
   listPublicProfiles,
   loginUser,
   saveMyMatchHistory,
@@ -64,6 +65,19 @@ export async function getPublicProfiles(req, res, next) {
       .slice(0, 40);
     const users = await listPublicProfiles(ids);
     return sendSuccess(res, { users });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getPublicUserCard(req, res, next) {
+  try {
+    const userId = String(req.params.userId || "").trim();
+    if (!userId || userId === "me") {
+      throw new AppError(400, "INVALID_USER", "조회할 유저가 없습니다.");
+    }
+    const card = await getPublicCard(userId);
+    return sendSuccess(res, card);
   } catch (error) {
     return next(error);
   }

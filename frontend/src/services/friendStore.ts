@@ -5,6 +5,22 @@ const LEGACY_PRESENCE_KEY = 'rezero_presence';
 const OWNER_KEY = 'rezero_friends_owner';
 
 let activeOwnerId: string | null = null;
+const removedFriendIds = new Set<string>();
+
+export const FRIENDS_CHANGED_EVENT = 'rezero:friends-changed';
+
+function notifyFriendsChanged() {
+  window.dispatchEvent(new Event(FRIENDS_CHANGED_EVENT));
+}
+
+function normalizeFriendId(userId?: string | null) {
+  return String(userId || '').replace(/^player-/, '');
+}
+
+function tombstoneFriend(userId?: string | null) {
+  const id = normalizeFriendId(userId);
+  if (id) removedFriendIds.add(id);
+}
 
 function friendsKey(ownerId: string | null) {
   return ownerId ? `rezero_friends_${ownerId}` : LEGACY_FRIENDS_KEY;
@@ -82,6 +98,8 @@ export function loadFriends(): FriendEntry[] {
 export function addFriend(name: string, userId?: string): boolean {
   const trimmed = name.trim();
   if (!trimmed) return false;
+  const normalizedId = normalizeFriendId(userId);
+  if (normalizedId) removedFriendIds.delete(normalizedId);
   const friends = readFriends();
   if (userId) {
     const byId = friends.find((f) => f.userId && String(f.userId) === String(userId));
@@ -102,12 +120,38 @@ export function addFriend(name: string, userId?: string): boolean {
   return true;
 }
 
-/** 서버에 저장된 친구를 로컬 목록에 합친다. 서버에 없는 기존 항목은 지우지 않는다. */
+/** 서버에 저장된 친구를 로컬 목록에 합친다. 이번 세션에서 삭제한 아이디는 다시 넣지 않는다. */
 export function mergeServerFriends(entries: Array<{ name: string; userId: string }>) {
   for (const entry of entries) {
-    if (!entry.userId || !entry.name) continue;
-    addFriend(entry.name, entry.userId);
+    const id = normalizeFriendId(entry.userId);
+    if (!id || !entry.name || removedFriendIds.has(id)) continue;
+    addFriend(entry.name, id);
   }
+}
+
+/** 서버 친구 목록으로 아이디가 있는 항목을 맞춘다. 아이디 없는 로컬 항목은 유지한다. */
+export function replaceFriendsFromServer(entries: Array<{ name: string; userId: string }>) {
+  const current = readFriends();
+  const localOnly = current.filter((friend) => !normalizeFriendId(friend.userId));
+  const next = [
+    ...entries
+      .filter((entry) => {
+        const id = normalizeFriendId(entry.userId);
+        return Boolean(id && entry.name && !removedFriendIds.has(id));
+      })
+      .map((entry) => {
+        const id = normalizeFriendId(entry.userId);
+        const prev = current.find((friend) => normalizeFriendId(friend.userId) === id);
+        return {
+          name: entry.name,
+          userId: id,
+          addedAt: prev?.addedAt || Date.now(),
+        };
+      }),
+    ...localOnly,
+  ];
+  writeFriends(next);
+  notifyFriendsChanged();
 }
 
 const recentFriendNotices = new Map<string, number>();
@@ -138,13 +182,20 @@ export function getFriendUserIds(onlineUsers?: Array<{ name?: string; userId?: s
 }
 
 export function removeFriend(name: string) {
-  writeFriends(readFriends().filter((f) => f.name !== name));
+  const current = readFriends();
+  for (const friend of current) {
+    if (friend.name === name) tombstoneFriend(friend.userId);
+  }
+  writeFriends(current.filter((f) => f.name !== name));
+  notifyFriendsChanged();
 }
 
 export function removeFriendByUserId(userId: string) {
-  const id = String(userId || '');
+  const id = normalizeFriendId(userId);
   if (!id) return;
-  writeFriends(readFriends().filter((f) => String(f.userId || '') !== id));
+  tombstoneFriend(id);
+  writeFriends(readFriends().filter((f) => normalizeFriendId(f.userId) !== id));
+  notifyFriendsChanged();
 }
 
 /** 조회한 아이디 중 서버에 없는 유저만 친구 목록에서 뺀다. */

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getEquippedTitle, TITLE_DEFS, type TitleData } from '../../../constants/titleTypes';
+import { getEquippedTitle, type TitleData } from '../../../constants/titleTypes';
 import { useModalShake } from '../../../hooks/useModalShake';
-import { getUserPresence } from '../../../services/friendStore';
+import { apiRequest } from '../../../services/apiClient';
 import { getRatingScore, getTitles } from '../../../services/userService';
 import type { CodeHistoryEntry } from '../../../types/lobby';
+import { normalizeCodeHistoryEntry } from '../../../utils/codeHistoryUtils';
 import { getTierByRating, getTierIconByTier } from '../../../utils/tierUtils';
 import { MatchStoryModal } from '../MatchStoryModal/MatchStoryModal';
 import { TitleModal } from '../TitleModal/TitleModal';
@@ -37,28 +38,6 @@ interface MyInfoModalProps {
   onAiAnalyze?: (userId: string, userName: string) => void;
 }
 
-function presenceText(userName: string) {
-  const presence = getUserPresence(userName);
-  if (!presence || presence.status === 'offline') return '오프라인';
-  if (presence.status === 'practice') return '연습 모드';
-  if (presence.status === 'build') return '빌드 시스템';
-  if (presence.status === 'battle') {
-    return presence.roomId ? `${presence.roomId}번 방 · 게임 중` : '게임 중';
-  }
-  if (presence.status === 'result') {
-    return presence.roomId ? `${presence.roomId}번 방 · 결과` : '결과창';
-  }
-  if (presence.status === 'room') {
-    if (presence.roomId) {
-      return presence.roomTitle
-        ? `${presence.roomId}번 방 · ${presence.roomTitle}`
-        : `${presence.roomId}번 방`;
-    }
-    return '대기방';
-  }
-  return '온라인 (로비)';
-}
-
 export function MyInfoModal({
   open,
   mode = 'self',
@@ -76,34 +55,72 @@ export function MyInfoModal({
   onSelectAll,
   onDeleteSelected,
   onAnalyzeEntry,
-  onAiAnalyze,
 }: MyInfoModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [tab, setTab] = useState<MyInfoTab>('stats');
+  const [publicCard, setPublicCard] = useState<{
+    ratingScore: number;
+    totalWins: number;
+    totalGames: number;
+    entries: CodeHistoryEntry[];
+  } | null>(null);
+  const [publicStoryIndex, setPublicStoryIndex] = useState(0);
+  const [publicProblemIndex, setPublicProblemIndex] = useState(0);
   const isSelf = mode === 'self';
 
   useEffect(() => {
     if (open) setTab('stats');
   }, [open, mode, publicUser?.name]);
 
+  useEffect(() => {
+    if (!open || isSelf || !publicUser?.userId) {
+      setPublicCard(null);
+      return;
+    }
+    let cancelled = false;
+    void apiRequest<{
+      ratingScore?: number;
+      totalWins?: number;
+      totalGames?: number;
+      entries?: unknown[];
+    }>(`/users/${encodeURIComponent(publicUser.userId)}/public-card`)
+      .then((data) => {
+        if (cancelled) return;
+        const entries = (data.entries || [])
+          .map(normalizeCodeHistoryEntry)
+          .filter((entry): entry is CodeHistoryEntry => Boolean(entry));
+        setPublicCard({
+          ratingScore: Number(data.ratingScore) || 1000,
+          totalWins: Number(data.totalWins) || 0,
+          totalGames: Number(data.totalGames) || 0,
+          entries,
+        });
+        setPublicStoryIndex(0);
+        setPublicProblemIndex(0);
+      })
+      .catch(() => {
+        if (!cancelled) setPublicCard(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isSelf, publicUser?.userId]);
+
   if (!open) return null;
 
-  const stats = (isSelf ? getTitles() : titleData).stats;
-  const wins = Number(stats.totalWins) || 0;
-  const games = Number(stats.totalGames) || 0;
+  const stats = getTitles().stats;
+  const wins = isSelf ? Number(stats.totalWins) || 0 : publicCard?.totalWins || 0;
+  const games = isSelf ? Number(stats.totalGames) || 0 : publicCard?.totalGames || 0;
   const losses = Math.max(0, games - wins);
   const winrate = games > 0 ? Math.round((wins / games) * 1000) / 10 : 0;
-  const rating = isSelf ? getRatingScore() : 1000;
+  const rating = isSelf ? getRatingScore() : publicCard?.ratingScore || 1000;
   const tier = isSelf
     ? getTierByRating(rating)
     : publicUser?.rank && publicUser.rank !== '-'
       ? publicUser.rank
       : getTierByRating(rating);
   const displayName = isSelf ? '' : publicUser?.name || 'UNKNOWN';
-  const publicTitle = publicUser?.title
-    ? TITLE_DEFS.find((t) => t.id === publicUser.title) || null
-    : null;
-  const equipped = isSelf ? getEquippedTitle(titleData) : publicTitle;
+  const equipped = isSelf ? getEquippedTitle(titleData) : null;
 
   return (
     <div className="modal-overlay" onClick={triggerShake}>
@@ -122,13 +139,7 @@ export function MyInfoModal({
               <span>
                 {getTierIconByTier(tier)} {tier}
               </span>
-              <span className="my-info-presence-badge">{presenceText(displayName)}</span>
             </div>
-            {equipped && (
-              <span className={`title-badge rarity-${equipped.rarity}`}>
-                {equipped.icon} {equipped.name}
-              </span>
-            )}
           </div>
         )}
 
@@ -228,36 +239,78 @@ export function MyInfoModal({
         )}
 
         {!isSelf && (
-          <div className="pixel-card my-info-stats-panel" style={{ marginTop: '8px' }}>
-            <div className="my-info-stat-row">
-              <span>상태</span>
-              <strong>{presenceText(displayName)}</strong>
+          <>
+            <div className="d-flex gap-2 mb-2" style={{ justifyContent: 'center' }}>
+              <button
+                type="button"
+                className={`tab-btn ${tab === 'stats' ? 'active' : ''}`}
+                onClick={() => setTab('stats')}
+              >
+                전적
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${tab === 'story' ? 'active' : ''}`}
+                onClick={() => setTab('story')}
+              >
+                매치 스토리
+              </button>
             </div>
-            <div className="my-info-stat-row">
-              <span>티어</span>
-              <strong>
-                {getTierIconByTier(tier)} {tier}
-              </strong>
-            </div>
-            <div style={{ color: '#888', fontSize: '13px', marginTop: '8px', textAlign: 'center' }}>
-              상대 전적·매치 스토리는 공개되지 않습니다.
-            </div>
-          </div>
+
+            {tab === 'stats' && (
+              <div className="pixel-card my-info-stats-panel">
+                <div className="my-info-stat-row">
+                  <span>승</span>
+                  <strong>{wins}</strong>
+                </div>
+                <div className="my-info-stat-row">
+                  <span>패</span>
+                  <strong>{losses}</strong>
+                </div>
+                <div className="my-info-stat-row">
+                  <span>승률</span>
+                  <strong>{winrate}%</strong>
+                </div>
+                <div className="my-info-stat-row">
+                  <span>레이팅</span>
+                  <strong>{rating}</strong>
+                </div>
+                <div className="my-info-stat-row">
+                  <span>티어</span>
+                  <strong>
+                    {getTierIconByTier(tier)} {tier}
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            {tab === 'story' && (
+              <div className="my-info-embed">
+                <MatchStoryModal
+                  open
+                  embedded
+                  readOnly
+                  codeHistory={publicCard?.entries || []}
+                  selectedIndex={publicStoryIndex}
+                  selectedProblemIndex={publicProblemIndex}
+                  selectedIds={[]}
+                  onClose={onClose}
+                  onSelectEntry={(index) => {
+                    setPublicStoryIndex(index);
+                    setPublicProblemIndex(0);
+                  }}
+                  onSelectProblem={setPublicProblemIndex}
+                  onToggleSelection={() => undefined}
+                  onSelectAll={() => undefined}
+                  onDeleteSelected={() => undefined}
+                />
+              </div>
+            )}
+          </>
         )}
 
         {(tab === 'stats' || !isSelf) && (
           <div className="d-flex justify-content-end mt-3" style={{ gap: '8px', flexWrap: 'wrap' }}>
-            {onAiAnalyze && !isSelf && publicUser?.userId && (
-              <button
-                type="button"
-                className="pixel-btn pixel-btn-primary"
-                onClick={() => {
-                  onAiAnalyze(String(publicUser.userId), displayName);
-                }}
-              >
-                AI 분석
-              </button>
-            )}
             <button type="button" className="pixel-btn pixel-btn-secondary" onClick={onClose}>
               닫기
             </button>

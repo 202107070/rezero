@@ -6,6 +6,7 @@ import {
   getMatchHistory,
   getOnlineUsers,
   getPublicProfiles,
+  getPublicUserCard,
   login,
   postMatchHistory,
   postEquippedTitle,
@@ -27,6 +28,7 @@ router.delete("/users/me", authenticate, removeMe);
 router.post("/users/me/title", authenticate, postEquippedTitle);
 router.get("/users/online", authenticate, getOnlineUsers);
 router.get("/users/public-profiles", authenticate, getPublicProfiles);
+router.get("/users/:userId/public-card", authenticate, getPublicUserCard);
 router.post("/users/me/roulette", authenticate, postRoulette);
 router.get("/users/me/match-history", authenticate, getMatchHistory);
 router.post("/users/me/match-history", authenticate, postMatchHistory);

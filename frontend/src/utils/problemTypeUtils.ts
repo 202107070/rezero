@@ -47,7 +47,8 @@ export function isCodeBlankBuildProblem(
   if (!/_____/.test(question)) return false;
   if (looksLikeMarkupOrStyle(question)) return false;
 
-  return CODE_BUILD_BODY_PATTERN.test(question);
+  if (CODE_BUILD_BODY_PATTERN.test(question)) return true;
+  return /[{}();=]|<<|::/.test(question);
 }
 
 export function getProblemTypeLabel(type: string): string {
@@ -90,5 +91,8 @@ export function getProblemAnswersForLang(
 }
 
 export function problemSupportsLang(answer: Record<string, string[]> | undefined, langKey: string): boolean {
-  return getProblemAnswersForLang(answer, langKey).length > 0;
+  if (!answer) return false;
+  const key = String(langKey || '').toUpperCase();
+  const vals = answer[key];
+  return Array.isArray(vals) && vals.length > 0;
 }

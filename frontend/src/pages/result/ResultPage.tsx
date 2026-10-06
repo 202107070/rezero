@@ -207,7 +207,6 @@ export default function ResultPage() {
   useEffect(() => {
     if (!myPlayer) return;
     const applied = Math.max(0, (Number(myPlayer.ratingScore) || 0) + (Number(myPlayer.delta) || 0));
-    setRatingScore(applied);
     setLiveRatingScore(applied);
     setLiveRatingTier(getTierByRating(applied));
   }, [myPlayer]);
@@ -318,6 +317,10 @@ export default function ResultPage() {
   const [, setFriendNames] = useState<string[]>(() => getFriendNames());
   const [liveRatingScore, setLiveRatingScore] = useState(() => getRatingScore());
   const [liveRatingTier, setLiveRatingTier] = useState(() => getTierByRating(getRatingScore()));
+  const matchRewardsAppliedRef = useRef<{ matchId: string; applied: boolean }>({
+    matchId: '',
+    applied: false,
+  });
 
   const reviewSelectMode = reviewPhase === 'selecting';
   const [reviewPulse, setReviewPulse] = useState(0);
@@ -480,7 +483,10 @@ export default function ResultPage() {
   useEffect(() => {
     if (!matchId) return;
     let cancelled = false;
-    const rewardsAppliedRef = { current: false };
+    const rewardMatchId = String(matchId);
+    if (matchRewardsAppliedRef.current.matchId !== rewardMatchId) {
+      matchRewardsAppliedRef.current = { matchId: rewardMatchId, applied: false };
+    }
 
     let timer = 0;
     const loadRanking = async () => {
@@ -533,7 +539,7 @@ export default function ResultPage() {
         setOpponentAnswers(packs);
         setApiRankingReady(true);
 
-        if (!rewardsAppliedRef.current) {
+        if (!matchRewardsAppliedRef.current.applied) {
           const mine =
             (ranking.rewards || []).find(
               (reward) => String(reward.userId || reward.id) === String(myUserId),
@@ -566,15 +572,12 @@ export default function ResultPage() {
                 ? Math.max(0, ratingBefore + ratingDelta)
                 : getRatingScore();
             setRatingScore(resolvedAfter);
-            setLiveRatingScore(resolvedAfter);
-            setLiveRatingTier(getTierByRating(resolvedAfter));
             if (typeof earned === 'number') setApiRewardGold(earned);
             setTotalGold(getGold());
-            rewardsAppliedRef.current = true;
+            matchRewardsAppliedRef.current.applied = true;
 
             void refreshMeProfile().then(() => {
               const serverScore = getRatingScore();
-              // 서버가 아직 반영 전이면 로컬 계산값 유지
               const finalScore =
                 typeof ratingDelta === 'number' &&
                 ((ratingDelta < 0 && serverScore > resolvedAfter) ||
@@ -582,8 +585,6 @@ export default function ResultPage() {
                   ? resolvedAfter
                   : serverScore || resolvedAfter;
               setRatingScore(finalScore);
-              setLiveRatingScore(finalScore);
-              setLiveRatingTier(getTierByRating(finalScore));
               void emitUpdateLocation({
                 location: 'result',
                 roomId: String(roomId || ''),
@@ -745,19 +746,28 @@ export default function ResultPage() {
           const formatted = answerCodes[index] || '';
           const question = String((problem as BattleProblem).question || '').trim();
           const raw = String(mySubmissionCodes[index] || '').trim();
+          const blanks = myBlankAnswers?.[index] || (problem as BattleProblem).userBlanks || [];
+          const selected = mySelectedOptions?.[index] ?? (problem as BattleProblem).selectedOption ?? null;
+          const usableRaw = raw && raw !== '(미입력)' && raw !== question ? raw : '';
           const userAnswer =
             formatted && formatted !== '(미입력)'
               ? formatted
-              : raw && raw !== question
-                ? raw
-                : formatted || '(미입력)';
+              : usableRaw || (formatted && formatted !== '(미입력)' ? formatted : '') || usableRaw;
           return {
             ...problem,
-            userAnswer,
+            userAnswer: userAnswer || (blanks.some((blank) => String(blank || '').trim()) ? '' : '(미입력)'),
+            userBlanks: blanks,
+            selectedOption: selected,
             solution: formatCorrectAnswer(problem as BattleProblem, langKey) || '',
           };
         }),
-        codes: answerCodes.length > 0 ? answerCodes : mySubmissionCodes,
+        codes: mySubmissionCodes.map((code, index) => {
+          const raw = String(code || '').trim();
+          const question = String((problems[index] as BattleProblem | undefined)?.question || '').trim();
+          if (raw && raw !== '(미입력)' && raw !== question) return raw;
+          const formatted = String(answerCodes[index] || '').trim();
+          return formatted && formatted !== '(미입력)' ? formatted : raw;
+        }),
         code: answerCodes[0] || submission.code || mySubmissionCodes[0] || '',
         mode: submission.mode,
       });

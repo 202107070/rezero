@@ -328,7 +328,7 @@ function toRankingPlayer(participant, submission, match) {
   const solvedProblems = solvedProblemsOf(submitted);
   const problemResults = parseJson(submitted.problemResults, []);
   const completionTime =
-    numberOrZero(submitted.completionTime) || Number(match.roundSeconds);
+    numberOrZero(submitted.completionTime) || numberOrZero(submitted.totalSolveTime);
 
   return {
     id: participant.userId,

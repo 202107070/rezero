@@ -250,6 +250,26 @@ export async function listPublicProfiles(userIds) {
   });
 }
 
+export async function getPublicCard(userId) {
+  const findUserById = getModelFunction("findUserById");
+  const findUserTitleData = getModelFunction("findUserTitleData");
+  const listMatchCodeHistory = getModelFunction("listMatchCodeHistory");
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new AppError(404, ERROR_CODE.USER_NOT_FOUND, "사용자를 찾을 수 없습니다.");
+  }
+  const titles = await findUserTitleData(userId);
+  const entries = await listMatchCodeHistory(userId);
+  return {
+    userId: String(user.id),
+    displayName: user.displayName || user.username || String(user.id),
+    ratingScore: Number(user.ratingScore) || 1000,
+    totalWins: Number(titles?.totalWins) || 0,
+    totalGames: Number(titles?.totalGames) || 0,
+    entries: Array.isArray(entries) ? entries : [],
+  };
+}
+
 export async function updateEquippedTitle(userId, titleId) {
   const findUserTitleData = getModelFunction("findUserTitleData");
   const saveEquippedTitle = getModelFunction("saveEquippedTitle");

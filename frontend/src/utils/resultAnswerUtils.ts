@@ -78,16 +78,20 @@ export function formatSubmittedAnswer(params: {
   const normalized = normalizeBattleProblem(params.problem as BattleProblem);
   const emptyLabel = '(미입력)';
 
+  const assembled = String(params.assembledCode || '').trim();
+  const question = String(normalized.question || '').trim();
+  const assembledFallback = assembled && assembled !== question && assembled !== emptyLabel ? assembled : '';
+
   if (normalized.type === 'multiple_choice') {
     const idx = params.selectedOption;
-    if (idx == null || idx < 0) return emptyLabel;
+    if (idx == null || idx < 0) return assembledFallback || emptyLabel;
     const opt = normalized.options?.[idx];
     return opt ? `${String.fromCharCode(65 + idx)}. ${opt}` : String(idx);
   }
 
   if (normalized.type === 'short_answer') {
     const ans = String(params.blankAnswers?.[0] || '').trim();
-    return ans || emptyLabel;
+    return ans || assembledFallback || emptyLabel;
   }
 
   const blanks = params.blankAnswers || [];

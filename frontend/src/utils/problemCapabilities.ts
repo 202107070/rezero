@@ -25,8 +25,12 @@ export function resolveProblemStyleFromProblem(
   problem: Pick<{ type?: string; question?: string }, 'type' | 'question'>,
 ): ProblemStyle {
   const style = resolveProblemStyle(problem.type);
-  if (style === 'short_answer' && /_____/.test(problem.question || '')) {
+  const hasBlank = /_____/.test(problem.question || '');
+  if (style === 'short_answer' && hasBlank) {
     return 'code';
+  }
+  if (style === 'code' && !hasBlank) {
+    return 'short_answer';
   }
   return style;
 }

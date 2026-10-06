@@ -132,14 +132,54 @@ export async function fetchMatchHistory(): Promise<CodeHistoryEntry[]> {
   }
 }
 
+function isRealHistoryAnswer(value: unknown): boolean {
+  const text = String(value || '').trim();
+  return Boolean(text) && text !== '(미입력)' && text !== '미입력';
+}
+
+function keepBetterHistory(prev: CodeHistoryEntry, next: CodeHistoryEntry): CodeHistoryEntry {
+  const problems = (next.problems || []).map((problem, index) => {
+    const old = prev.problems?.[index];
+    if (!old) return problem;
+    const oldBlanks = Array.isArray(old.userBlanks) ? old.userBlanks : [];
+    const nextBlanks = Array.isArray(problem.userBlanks) ? problem.userBlanks : [];
+    return {
+      ...problem,
+      userAnswer: isRealHistoryAnswer(problem.userAnswer)
+        ? problem.userAnswer
+        : isRealHistoryAnswer(old.userAnswer)
+          ? old.userAnswer
+          : problem.userAnswer,
+      userBlanks: nextBlanks.some((blank) => String(blank || '').trim()) ? nextBlanks : oldBlanks,
+      selectedOption:
+        problem.selectedOption != null && problem.selectedOption >= 0
+          ? problem.selectedOption
+          : old.selectedOption,
+    };
+  });
+  const codes = (next.codes || []).map((code, index) => {
+    if (isRealHistoryAnswer(code)) return code;
+    const old = prev.codes?.[index];
+    return isRealHistoryAnswer(old) ? old : code;
+  });
+  return {
+    ...next,
+    problems,
+    codes,
+    code: (isRealHistoryAnswer(next.code) ? next.code : prev.code) || codes[0] || '',
+  };
+}
+
 export async function saveMatchHistoryEntry(entry: CodeHistoryEntry): Promise<void> {
-  const history = readCodeHistory().filter((item) => item.historyId !== entry.historyId);
-  persistCodeHistory([entry, ...history].slice(0, 100));
+  const previous = readCodeHistory().find((item) => item.historyId === entry.historyId);
+  const saved = previous ? keepBetterHistory(previous, entry) : entry;
+  const history = readCodeHistory().filter((item) => item.historyId !== saved.historyId);
+  persistCodeHistory([saved, ...history].slice(0, 100));
   try {
-    const historyId = await postMatchHistoryEntry(entry);
-    if (historyId !== entry.historyId) {
+    const historyId = await postMatchHistoryEntry(saved);
+    if (historyId !== saved.historyId) {
       const next = readCodeHistory().map((item) =>
-        item.historyId === entry.historyId ? { ...item, historyId } : item,
+        item.historyId === saved.historyId ? { ...item, historyId } : item,
       );
       persistCodeHistory(next);
     }

@@ -612,24 +612,31 @@ export function registerSocketHandlers(io, socket) {
   });
 
   socket.on(SOCKET_EVENTS.FRIEND_REMOVE, async function (data, callback) {
+    const toUserId = data?.toUserId ? String(data.toUserId).replace(/^player-/, "") : "";
+    if (!toUserId) {
+      if (typeof callback === "function") {
+        callback({ success: false, message: "삭제 대상이 없습니다." });
+      }
+      return;
+    }
     try {
       const { removeFriendship } = await import("../api/user/friendModel.js");
-      const toUserId = data?.toUserId ? String(data.toUserId) : "";
-      if (!toUserId) throw new Error("삭제 대상이 없습니다.");
       await removeFriendship(String(socket.user.id), toUserId);
-      const payload = {
-        fromUserId: String(socket.user.id),
-        fromUserName: userLabel(socket.user),
-        toUserId,
-      };
-      io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
-      if (typeof callback === "function") {
-        callback({ success: true });
-      }
     } catch (error) {
-      if (typeof callback === "function") {
-        callback({ success: false, message: error.message });
-      }
+      console.error("친구 삭제 DB 반영 실패:", error);
+    }
+    const payload = {
+      fromUserId: String(socket.user.id),
+      fromUserName: userLabel(socket.user),
+      toUserId,
+    };
+    io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
+    for (const room of socket.rooms) {
+      if (room === socket.id || String(room).startsWith("user:")) continue;
+      socket.to(room).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
+    }
+    if (typeof callback === "function") {
+      callback({ success: true });
     }
   });
 

@@ -53,7 +53,7 @@ import {
   type GameStateUpdatePayload,
   type UserReconnectedPayload,
 } from '../../services/roomSocket';
-import { leaveRoom, getRoomErrorMessage } from '../../services/roomService';
+import { fetchRoom, leaveRoom, getRoomErrorMessage } from '../../services/roomService';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import { emitUpdateLocation } from '../../services/roomSocket';
 import { collectSolvedProblemKeys, isPreviouslySolvedProblem } from '../../utils/codeHistoryUtils';
@@ -185,6 +185,7 @@ export default function BattlePage() {
   const [battleFinished, setBattleFinished] = useState(false);
   const [battleBots, setBattleBots] = useState<DemoBot[]>([]);
   const battleBotsRef = useRef<DemoBot[]>([]);
+  const departedUserIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     battleBotsRef.current = battleBots;
   }, [battleBots]);
@@ -618,6 +619,10 @@ export default function BattlePage() {
   useEffect(() => {
     if (problems.length === 0) return;
     const myId = getCurrentUserId();
+    const isDepartedBot = (botId: string) => {
+      const raw = String(botId || '').replace(/^player-/, '');
+      return departedUserIdsRef.current.has(raw) || departedUserIdsRef.current.has(String(botId));
+    };
     const roster = createDemoBattleRoster({
       sessionId,
       roomMode,
@@ -627,12 +632,13 @@ export default function BattlePage() {
       roundSeconds: totalBattleSeconds,
       roomRoster: roomRoster as Array<{ id: number; name: string; character: string; isHost: boolean; userId?: string }>,
       myUserId: myId || undefined,
-    });
+    }).filter((bot) => !isDepartedBot(bot.id));
     if (isLiveMatch) {
       setBattleBots((prev) => {
+        const alive = prev.filter((bot) => !isDepartedBot(bot.id));
         // 이미 구성된 상대 목록이 있으면 진행률을 유지한 채 이름/캐릭터만 갱신
-        if (prev.length > 0) {
-          return prev.map((bot) => {
+        if (alive.length > 0) {
+          return alive.map((bot) => {
             const next = roster.find((item) => item.id === bot.id);
             if (!next) return bot;
             return {
@@ -1028,8 +1034,22 @@ export default function BattlePage() {
           onRoomEvent(
             ROOM_SOCKET_EVENTS.USER_LEFT,
             (payload?: { userId?: string; roomClosed?: boolean; remainingPlayers?: number }) => {
-              const leftId = String(payload?.userId || '');
+              const leftId = String(payload?.userId || '').replace(/^player-/, '');
               if (!leftId) return;
+              const alreadyDeparted = departedUserIdsRef.current.has(leftId);
+              departedUserIdsRef.current.add(leftId);
+              const roster = Array.isArray(battleMeta.roomRoster)
+                ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
+                : [];
+              const leftName =
+                roster.find((player) => String(player.userId || '').replace(/^player-/, '') === leftId)?.name ||
+                '상대';
+              if (!alreadyDeparted) {
+                setChatMessages((messages) => [
+                  ...messages,
+                  { sender: 'SYSTEM', text: `${leftName} 님이 게임에서 나갔습니다.`, time: '' },
+                ]);
+              }
               setBattleBots((prev) =>
                 prev.filter((bot) => {
                   const botUid = String(bot.id).replace(/^player-/, '');
@@ -1217,6 +1237,49 @@ export default function BattlePage() {
       });
     };
   }, [isLiveMatch, roomId, battleMeta.roomRoster, matchId, navigate, problems.length]);
+
+  useEffect(() => {
+    if (!isLiveMatch || !roomId) return;
+    const myId = String(getCurrentUserId() || '');
+    const timer = window.setInterval(() => {
+      void fetchRoom(roomId)
+        .then((room) => {
+          const active = new Set(
+            (room.participants || []).map((participant) =>
+              String(participant.userId || '').replace(/^player-/, ''),
+            ),
+          );
+          if (active.size === 0) return;
+          const roster = Array.isArray(battleMeta.roomRoster)
+            ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
+            : [];
+          const newlyLeft: string[] = [];
+          for (const player of roster) {
+            const id = String(player.userId || '').replace(/^player-/, '');
+            if (!id || id === myId || active.has(id) || departedUserIdsRef.current.has(id)) continue;
+            departedUserIdsRef.current.add(id);
+            newlyLeft.push(player.name || '상대');
+          }
+          if (newlyLeft.length === 0) return;
+          setChatMessages((messages) => [
+            ...messages,
+            ...newlyLeft.map((name) => ({
+              sender: 'SYSTEM',
+              text: `${name} 님이 게임에서 나갔습니다.`,
+              time: '',
+            })),
+          ]);
+          setBattleBots((prev) =>
+            prev.filter((bot) => {
+              const raw = String(bot.id).replace(/^player-/, '');
+              return !departedUserIdsRef.current.has(raw);
+            }),
+          );
+        })
+        .catch(() => undefined);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [isLiveMatch, roomId, battleMeta.roomRoster]);
 
   // 라이브: 마지막 문제까지 제출(관전)하면 결과 제출만 하고, 상대 대기 (바로 결과창 X)
   useEffect(() => {
@@ -1476,9 +1539,11 @@ export default function BattlePage() {
       }
 
       setProblemResults((prev) => ({ ...prev, [currentIndex]: isCorrect }));
+      setSolveTimes((prev) =>
+        prev[currentIndex] != null ? prev : { ...prev, [currentIndex]: elapsed },
+      );
 
       if (isCorrect) {
-        setSolveTimes((prev) => ({ ...prev, [currentIndex]: elapsed }));
         setLocalSolvedProblems((prev) => {
           const next = Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b);
           markProblemSubmitted(sessionId, next);

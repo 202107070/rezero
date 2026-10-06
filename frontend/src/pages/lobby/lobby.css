@@ -249,7 +249,7 @@
 
 .ai-radar-label {
   fill: #d7ddd8;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .tier-chart-launch {
@@ -903,7 +903,7 @@
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -914,10 +914,12 @@
   justify-content: space-between;
   align-items: center;
   color: #ddd;
-  font-size: 15px;
+  font-size: 22px;
+  line-height: 1.2;
   border: 3px solid var(--px-border);
   background: rgba(0, 0, 0, 0.28);
-  padding: 10px 12px;
+  padding: 8px 16px;
+  flex: 1;
 }
 
 .my-info-public-header {

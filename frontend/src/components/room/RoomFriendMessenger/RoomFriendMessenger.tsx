@@ -1,5 +1,12 @@
 import { useEffect, type MouseEvent, useState } from 'react';
-import { canSummonFriend, getFriendPresences, isFriendOnline } from '../../../services/friendStore';
+import { apiRequest } from '../../../services/apiClient';
+import {
+  canSummonFriend,
+  FRIENDS_CHANGED_EVENT,
+  getFriendPresences,
+  isFriendOnline,
+  replaceFriendsFromServer,
+} from '../../../services/friendStore';
 import type { FriendPresence } from '../../../types/friend';
 import { getTierByRating, getTierIconByTier } from '../../../utils/tierUtils';
 
@@ -44,9 +51,30 @@ export function RoomFriendMessenger({
   };
 
   useEffect(() => {
-    refreshFriends();
-    const timer = window.setInterval(refreshFriends, 2000);
-    return () => window.clearInterval(timer);
+    const pull = () => {
+      void apiRequest<{ friends?: Array<{ userId?: string; displayName?: string; username?: string }> }>(
+        '/users/me/friends',
+      )
+        .then((data) => {
+          replaceFriendsFromServer(
+            (data.friends || [])
+              .filter((friend) => friend.userId)
+              .map((friend) => ({
+                userId: String(friend.userId),
+                name: friend.displayName || friend.username || String(friend.userId),
+              })),
+          );
+          refreshFriends();
+        })
+        .catch(() => refreshFriends());
+    };
+    pull();
+    const timer = window.setInterval(pull, 4000);
+    window.addEventListener(FRIENDS_CHANGED_EVENT, refreshFriends);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener(FRIENDS_CHANGED_EVENT, refreshFriends);
+    };
   }, []);
 
   return (

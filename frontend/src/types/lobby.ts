@@ -52,6 +52,8 @@ export interface CodeHistoryEntry {
     correctIndex?: number | null;
     lang?: string;
     userAnswer?: string;
+    userBlanks?: string[];
+    selectedOption?: number | null;
     solution?: string;
   }>;
   codes: string[];
