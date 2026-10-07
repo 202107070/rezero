@@ -90,9 +90,9 @@ export function MatchStoryModal({
           </div>
         ) : (
           <div className="match-story-layout">
-            <div className="pixel-card match-story-list">
+            <div className="match-story-list">
               {codeHistory.map((entry, idx) => (
-                <div key={`${entry.historyId}-${idx}`} className="match-story-entry">
+                <div key={`${entry.historyId}-${idx}`} className="pixel-card match-story-entry">
                   <button
                     type="button"
                     className="profile-btn match-story-entry-main text-start"

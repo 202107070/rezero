@@ -218,8 +218,12 @@ export function findFriendUserId(name: string): string | null {
   return friend?.userId ? String(friend.userId) : null;
 }
 
-export function isFriend(name: string): boolean {
-  return readFriends().some((f) => f.name === name);
+export function isFriend(name: string, userId?: string): boolean {
+  const id = normalizeFriendId(userId);
+  return readFriends().some((friend) => {
+    if (id && normalizeFriendId(friend.userId) === id) return true;
+    return Boolean(name) && friend.name === name;
+  });
 }
 
 export function getFriendNames(): string[] {

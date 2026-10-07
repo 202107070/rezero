@@ -13,11 +13,11 @@ export function isBlankBasedType(type: string | undefined): boolean {
   return resolveProblemStyle(type) === 'code';
 }
 
-const CODE_BUILD_BODY_PATTERN =
-  /(?:\b(?:int|void|class|def|for|while|if|else|return|import|public|private|static|function|console|System|String|boolean|using|namespace|#include|cout|print)\b)/i;
-
 function looksLikeMarkupOrStyle(question: string): boolean {
-  if (/<\/?[a-z][^>]*>/i.test(question) && !/print\s*\(|cout\s*<<|System\.out|console\.log/.test(question)) {
+  const htmlTag =
+    /<\/[a-z][^>]*>/i.test(question) ||
+    /<(div|span|p|h[1-6]|ul|ol|li|a|img|table|head|body|html|br|input|title|button)\b/i.test(question);
+  if (htmlTag && !/print\s*\(|cout\s*<<|System\.out|console\.log|#include\b/.test(question)) {
     return true;
   }
   if (
@@ -46,9 +46,7 @@ export function isCodeBlankBuildProblem(
   const question = problem.question || '';
   if (!/_____/.test(question)) return false;
   if (looksLikeMarkupOrStyle(question)) return false;
-
-  if (CODE_BUILD_BODY_PATTERN.test(question)) return true;
-  return /[{}();=]|<<|::/.test(question);
+  return true;
 }
 
 export function getProblemTypeLabel(type: string): string {

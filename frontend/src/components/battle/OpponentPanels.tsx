@@ -255,7 +255,7 @@ export default function OpponentPanels({
               isItemMode={isItemMode}
               langKey={langKey}
               compact
-              showAnswers={false}
+              showAnswers={demoSpectating}
             />
           </div>
         </div>
@@ -330,7 +330,7 @@ export default function OpponentPanels({
               viewProblemIndex={viewProblemIndex}
               isItemMode={isItemMode}
               langKey={langKey}
-              showAnswers={false}
+              showAnswers={demoSpectating}
             />
           </div>
         </div>

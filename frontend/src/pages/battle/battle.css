@@ -376,8 +376,8 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .battle-feedback-text { font-size: 21px; padding: 6px 0; }
 .fill-blank-actions { display: flex; gap: 8px; padding: 8px; border-top: 3px solid var(--px-border); }
 
-.battle-build-panel { flex: 0 0 auto; display: flex; flex-direction: column; border-top: 4px solid var(--px-border); background: #1a1e21; min-height: 0; max-height: 42%; }
-.battle-build-panel.is-collapsed { max-height: none; }
+.battle-build-panel { flex: 0 0 auto; display: flex; flex-direction: column; border-top: 4px solid var(--px-border); background: #1a1e21; min-height: 168px; max-height: 42%; }
+.battle-build-panel.is-collapsed { min-height: 0; max-height: none; }
 .battle-build-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; background: #222; border-bottom: 2px dashed #444; flex-shrink: 0; }
 .battle-build-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .battle-build-kicker { color: var(--px-success); font-size: 18px; letter-spacing: 1px; }

@@ -70,6 +70,7 @@ import {
   getFriendUserIds,
   getUserPresence,
   isFriend,
+  claimFriendNotice,
   removeFriend,
   removeFriendByUserId,
 } from '../../services/friendStore';
@@ -415,6 +416,8 @@ export default function ResultPage() {
           onRoomEvent(
             ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
             (payload?: { fromUserId?: string; fromUserName?: string }) => {
+              if (String(payload?.fromUserId || '') === String(myUserId)) return;
+              if (!claimFriendNotice(`friend-remove:${payload?.fromUserId || payload?.fromUserName}`)) return;
               if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
               if (payload?.fromUserName) removeFriend(payload.fromUserName);
               setChatMessages((prev) => [

@@ -36,6 +36,7 @@ interface MyInfoModalProps {
   onDeleteSelected: () => void;
   onAnalyzeEntry?: (entry: CodeHistoryEntry) => void;
   onAiAnalyze?: (userId: string, userName: string) => void;
+  onHostKick?: () => void;
 }
 
 export function MyInfoModal({
@@ -55,6 +56,7 @@ export function MyInfoModal({
   onSelectAll,
   onDeleteSelected,
   onAnalyzeEntry,
+  onHostKick,
 }: MyInfoModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [tab, setTab] = useState<MyInfoTab>('stats');
@@ -311,6 +313,11 @@ export function MyInfoModal({
 
         {(tab === 'stats' || !isSelf) && (
           <div className="d-flex justify-content-end mt-3" style={{ gap: '8px', flexWrap: 'wrap' }}>
+            {!isSelf && onHostKick && (
+              <button type="button" className="pixel-btn pixel-btn-danger" onClick={onHostKick}>
+                강퇴
+              </button>
+            )}
             <button type="button" className="pixel-btn pixel-btn-secondary" onClick={onClose}>
               닫기
             </button>

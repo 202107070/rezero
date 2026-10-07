@@ -13,7 +13,11 @@ import { PlayerGrid } from '../../components/room/PlayerGrid/PlayerGrid';
 import { RoomActionBar } from '../../components/room/RoomActionBar/RoomActionBar';
 import { RoomChatPanel } from '../../components/room/RoomChatPanel/RoomChatPanel';
 import { RoomHeader } from '../../components/room/RoomHeader/RoomHeader';
-import { RoomProfileModal } from '../../components/room/RoomProfileModal/RoomProfileModal';
+import { MyInfoModal } from '../../components/lobby/MyInfoModal/MyInfoModal';
+import { RoomInviteModal } from '../../components/lobby/RoomInviteModal/RoomInviteModal';
+import { loadTitles, type TitleData } from '../../constants/titleTypes';
+import { readCodeHistory } from '../../utils/codeHistoryUtils';
+import type { CodeHistoryEntry } from '../../types/lobby';
 import { StartGameOverlay } from '../../components/room/StartGameOverlay/StartGameOverlay';
 import {
   buildInitialMessages,
@@ -45,6 +49,7 @@ import {
   peekPendingInviteMeta,
   peekPendingInviteToken,
   peekPendingJoinPassword,
+  setPendingInviteMeta,
   startRoom as startRoomApi,
 } from '../../services/roomService';
 import { getMatchErrorMessage, parseRoomTimeToSeconds, startMatch, type MatchStartResponse } from '../../services/matchService';
@@ -73,6 +78,7 @@ import {
   type RoomReadyStatePayload,
   type ChatMessagePayload,
   type GameStartedPayload,
+  type RoomInvitePayload,
   type RoomInviteResponsePayload,
   type UserLeftPayload,
 } from '../../services/roomSocket';
@@ -159,7 +165,6 @@ export default function RoomPage() {
   const [selectedProblem] = useState('');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profilePlayer, setProfilePlayer] = useState<RoomPlayer | null>(null);
-  const [profilePlayerIndex, setProfilePlayerIndex] = useState<number | null>(null);
   const [showKickModal, setShowKickModal] = useState(false);
   const [kickTarget, setKickTarget] = useState<{ index: number; name: string } | null>(null);
   const [alertMessage, setAlertMessage] = useState('');
@@ -180,6 +185,7 @@ export default function RoomPage() {
   const roomRosterReadyRef = useRef(false);
   const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
+  const roomMetaRef = useRef({ roomId: '', roomTitle: '', roomQuery: '' });
   const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
   const myLanguageRef = useRef(myLanguage);
   const selectedItemsRef = useRef(selectedItems);
@@ -205,6 +211,26 @@ export default function RoomPage() {
     fromUserId: string;
     fromUserName: string;
   } | null>(null);
+  const [pendingRoomInvite, setPendingRoomInvite] = useState<{
+    fromUserId: string;
+    fromUserName: string;
+    roomId: string;
+    roomTitle: string;
+    roomQuery: string;
+    inviteToken?: string;
+  } | null>(null);
+  const [infoMode, setInfoMode] = useState<'self' | 'public'>('public');
+  const [infoPublicUser, setInfoPublicUser] = useState<{
+    name: string;
+    userId?: string;
+    rank?: string;
+    title?: string | null;
+  } | null>(null);
+  const [infoKickIndex, setInfoKickIndex] = useState<number | null>(null);
+  const [infoTitleData, setInfoTitleData] = useState<TitleData>(() => loadTitles());
+  const [infoHistory, setInfoHistory] = useState<CodeHistoryEntry[]>(() => readCodeHistory());
+  const [infoHistoryIndex, setInfoHistoryIndex] = useState(0);
+  const [infoProblemIndex, setInfoProblemIndex] = useState(0);
 
   const roomTitle = roomDetail?.title || fallbackTitle;
   const isPrivate = roomDetail?.isPrivate ?? (fallbackPwd.length > 0 && fallbackPwd !== 'protected');
@@ -212,6 +238,11 @@ export default function RoomPage() {
   const gameMode = (roomDetail?.gameMode || fallbackGameMode) as GameMode;
   const isItemMode = gameMode === 'item';
   const roomQuery = searchParams.toString() || `id=${roomId}`;
+  roomMetaRef.current = {
+    roomId: String(roomId),
+    roomTitle,
+    roomQuery,
+  };
   settingsRef.current = {
     diff: settings.diff,
     count: settings.count,
@@ -342,6 +373,25 @@ export default function RoomPage() {
         const roomTitleValue = remote.roomTitle ? String(remote.roomTitle) : undefined;
         const remoteRating = Number(remote.ratingScore);
         const ratingPatch = Number.isFinite(remoteRating) ? { ratingScore: remoteRating } : {};
+        const here = playersRef.current.some((player) => {
+          if (!player) return false;
+          const pid = String(player.userId || '').replace(/^player-/, '');
+          return (
+            player.name === name ||
+            Boolean(friendId && pid && pid === String(friendId).replace(/^player-/, ''))
+          );
+        });
+        if (here) {
+          const meta = roomMetaRef.current;
+          setUserPresence(name, {
+            status: 'room',
+            roomId: meta.roomId,
+            roomTitle: meta.roomTitle,
+            roomQuery: meta.roomQuery,
+            ...ratingPatch,
+          });
+          continue;
+        }
         if (
           location === 'practice' ||
           location === 'build' ||
@@ -603,6 +653,22 @@ export default function RoomPage() {
             );
 
             unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_INVITE, (payload: RoomInvitePayload) => {
+                if (!payload?.fromUserId || !payload.roomId) return;
+                if (String(payload.fromUserId) === String(getCurrentUserId())) return;
+                if (String(payload.roomId) === String(roomId)) return;
+                setPendingRoomInvite({
+                  fromUserId: String(payload.fromUserId),
+                  fromUserName: payload.fromUserName || 'UNKNOWN',
+                  roomId: String(payload.roomId),
+                  roomTitle: payload.roomTitle || '대기실',
+                  roomQuery: payload.roomQuery || `id=${payload.roomId}`,
+                  inviteToken: payload.inviteToken,
+                });
+              }),
+            );
+
+            unsubs.push(
               onRoomEvent(
                 ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
                 (payload?: { fromUserId?: string; fromUserName?: string }) => {
@@ -622,6 +688,21 @@ export default function RoomPage() {
                 (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
                   if (!payload?.accepted || !payload.fromUserName) return;
                   addFriend(payload.fromUserName, payload.fromUserId);
+                  const joinedId = String(payload.fromUserId || '').replace(/^player-/, '');
+                  const inThisRoom = playersRef.current.some((player) => {
+                    if (!player) return false;
+                    const pid = String(player.userId || '').replace(/^player-/, '');
+                    return player.name === payload.fromUserName || (joinedId && pid === joinedId);
+                  });
+                  if (inThisRoom) {
+                    const meta = roomMetaRef.current;
+                    setUserPresence(payload.fromUserName, {
+                      status: 'room',
+                      roomId: meta.roomId,
+                      roomTitle: meta.roomTitle,
+                      roomQuery: meta.roomQuery,
+                    });
+                  }
                   if (!claimFriendNotice(`accept:${payload.fromUserId || payload.fromUserName}`)) return;
                   setMessages((prev) => [
                     ...prev,
@@ -824,8 +905,14 @@ export default function RoomPage() {
 
   const inviteUserToRoom = async (userName: string) => {
     const target = players.find((player) => player?.name === userName);
-    const friendId = target?.userId || findFriendUserId(userName);
-    if (!isFriend(userName)) {
+    const online = onlineUsersRef.current.find(
+      (user) => user.displayName === userName || user.username === userName,
+    );
+    const friendId = String(target?.userId || findFriendUserId(userName) || online?.userId || '').replace(
+      /^player-/,
+      '',
+    );
+    if (!isFriend(userName, friendId)) {
       appendSystemMessage('친구만 초대할 수 있습니다.');
       return;
     }
@@ -891,13 +978,15 @@ export default function RoomPage() {
   const handleUserMenuAction = (action: UserListMenuAction, userName: string) => {
     switch (action) {
       case 'my-info':
-        appendSystemMessage('내 정보는 로비에서 확인할 수 있습니다.');
+      case 'match-story': {
+        const target = players.find((player) => player?.name === userName);
+        const index = players.findIndex((player) => player?.name === userName);
+        if (target) openProfile(target, index);
+        else appendSystemMessage('프로필을 열 수 없습니다.');
         break;
-      case 'match-story':
-        appendSystemMessage('프로필 보기는 로비에서만 열 수 있습니다.');
-        break;
+      }
       case 'add-friend':
-        if (isFriend(userName)) {
+        if (isFriend(userName, players.find((player) => player?.name === userName)?.userId)) {
           const target = players.find((player) => player?.name === userName);
           const friendId = String(target?.userId || findFriendUserId(userName) || '').replace(/^player-/, '');
           removeFriend(userName);
@@ -912,7 +1001,14 @@ export default function RoomPage() {
           appendSystemMessage(`${userName} 님에게 친구 요청을 보냈습니다.`);
           const target = players.find((player) => player?.name === userName);
           if (target?.userId) {
-            void emitFriendRequest(String(target.userId), userName).catch(() => undefined);
+            const meta = roomMetaRef.current;
+            setUserPresence(userName, {
+              status: 'room',
+              roomId: meta.roomId,
+              roomTitle: meta.roomTitle,
+              roomQuery: meta.roomQuery,
+            });
+            void emitFriendRequest(String(target.userId).replace(/^player-/, ''), userName).catch(() => undefined);
           } else {
             appendSystemMessage('상대 유저 ID를 찾을 수 없어 요청 알림은 전송되지 않았습니다.');
           }
@@ -1168,11 +1264,36 @@ export default function RoomPage() {
     setKickTarget(null);
   };
 
-  const openProfile = (player: RoomPlayer, index: number) => {
+  function openProfile(player: RoomPlayer, index: number) {
+    const myId = String(getCurrentUserId());
+    const mine =
+      (player.userId && String(player.userId) === myId) ||
+      player.name === getCurrentDisplayName() ||
+      player.name === getCurrentUserName();
+    const me = players.find(
+      (entry) => entry && (entry.userId ? String(entry.userId) === myId : entry.name === getCurrentDisplayName()),
+    );
+    if (mine) {
+      setInfoMode('self');
+      setInfoPublicUser(null);
+      setInfoKickIndex(null);
+      setInfoTitleData(loadTitles());
+      setInfoHistory(readCodeHistory());
+      setInfoHistoryIndex(0);
+      setInfoProblemIndex(0);
+    } else {
+      setInfoMode('public');
+      setInfoPublicUser({
+        name: player.name,
+        userId: player.userId ? String(player.userId).replace(/^player-/, '') : undefined,
+        rank: player.rank,
+        title: null,
+      });
+      setInfoKickIndex(me?.isHost ? index : null);
+    }
     setProfilePlayer(player);
-    setProfilePlayerIndex(index);
     setShowProfileModal(true);
-  };
+  }
 
   const handleToggleItem = (key: ItemKey) => {
     if (itemInventory[key] <= 0) return;
@@ -1289,16 +1410,68 @@ export default function RoomPage() {
         }}
       />
 
-      <RoomProfileModal
+      <MyInfoModal
         open={showProfileModal}
-        player={profilePlayer}
-        playerIndex={profilePlayerIndex}
-        myCharacter={myCharacter}
-        isHost={isMeHost}
+        mode={infoMode}
+        publicUser={infoPublicUser}
+        titleData={infoTitleData}
+        codeHistory={infoHistory}
+        selectedIndex={infoHistoryIndex}
+        selectedProblemIndex={infoProblemIndex}
+        selectedIds={[]}
         onClose={() => setShowProfileModal(false)}
-        onKick={(index, name) => {
-          setKickTarget({ index, name });
-          setShowKickModal(true);
+        onTitleDataChange={setInfoTitleData}
+        onSelectEntry={(index) => {
+          setInfoHistoryIndex(index);
+          setInfoProblemIndex(0);
+        }}
+        onSelectProblem={setInfoProblemIndex}
+        onToggleSelection={() => undefined}
+        onSelectAll={() => undefined}
+        onDeleteSelected={() => undefined}
+        onHostKick={
+          infoMode === 'public' && infoKickIndex != null
+            ? () => {
+                setKickTarget({ index: infoKickIndex, name: infoPublicUser?.name || profilePlayer?.name || '' });
+                setShowKickModal(true);
+                setShowProfileModal(false);
+              }
+            : undefined
+        }
+      />
+
+      <RoomInviteModal
+        show={Boolean(pendingRoomInvite)}
+        fromUserName={pendingRoomInvite?.fromUserName || ''}
+        roomTitle={pendingRoomInvite?.roomTitle || ''}
+        onAccept={() => {
+          if (!pendingRoomInvite) return;
+          const invite = pendingRoomInvite;
+          setPendingRoomInvite(null);
+          if (invite.inviteToken) {
+            setPendingInviteMeta({
+              token: invite.inviteToken,
+              fromUserId: invite.fromUserId,
+              roomId: String(invite.roomId || ''),
+            });
+          }
+          void (async () => {
+            const currentId = Number(roomId);
+            if (Number.isInteger(currentId) && currentId > 0) {
+              try {
+                await leaveRoom(currentId);
+              } catch {
+                // 이미 나간 방이면 초대 방으로만 이동한다.
+              }
+            }
+            const query = invite.roomQuery.replace(/^\?/, '');
+            navigate(`${ROUTES.ROOM}?${query}`);
+          })();
+        }}
+        onDecline={() => {
+          if (!pendingRoomInvite) return;
+          void emitRoomInviteResponse(pendingRoomInvite.fromUserId, false, pendingRoomInvite.roomId);
+          setPendingRoomInvite(null);
         }}
       />
 
@@ -1310,7 +1483,14 @@ export default function RoomPage() {
           userName={contextMenu.userName}
           actionLabels={{
             'match-story': '프로필 보기',
-            'add-friend': isFriend(contextMenu.userName) ? '친구삭제' : '친구추가',
+            'add-friend': isFriend(
+              contextMenu.userName,
+              players.find((player) => player?.name === contextMenu.userName)?.userId ||
+                findFriendUserId(contextMenu.userName) ||
+                undefined,
+            )
+              ? '친구삭제'
+              : '친구추가',
             follow: '초대하기',
           }}
           hiddenActions={
@@ -1322,7 +1502,12 @@ export default function RoomPage() {
             if (isSelfName(contextMenu.userName)) return [];
             const disabled: UserListMenuAction[] = [];
             if (
-              !isFriend(contextMenu.userName) ||
+              !isFriend(
+                contextMenu.userName,
+                players.find((player) => player?.name === contextMenu.userName)?.userId ||
+                  findFriendUserId(contextMenu.userName) ||
+                  undefined,
+              ) ||
               isUserAlreadyInRoom(contextMenu.userName) ||
               !canSummonFriend(contextMenu.userName)
             ) {
@@ -1364,6 +1549,21 @@ export default function RoomPage() {
                 className="pixel-btn pixel-btn-primary review-modal-btn"
                 onClick={() => {
                   addFriend(pendingFriendRequest.fromUserName, pendingFriendRequest.fromUserId);
+                  const acceptedId = String(pendingFriendRequest.fromUserId || '').replace(/^player-/, '');
+                  const acceptedHere = playersRef.current.some((player) => {
+                    if (!player) return false;
+                    const pid = String(player.userId || '').replace(/^player-/, '');
+                    return player.name === pendingFriendRequest.fromUserName || (acceptedId && pid === acceptedId);
+                  });
+                  if (acceptedHere) {
+                    const meta = roomMetaRef.current;
+                    setUserPresence(pendingFriendRequest.fromUserName, {
+                      status: 'room',
+                      roomId: meta.roomId,
+                      roomTitle: meta.roomTitle,
+                      roomQuery: meta.roomQuery,
+                    });
+                  }
                   void emitFriendRequestResult(pendingFriendRequest.fromUserId, true);
                   setPendingFriendRequest(null);
                   appendSystemMessage(`${pendingFriendRequest.fromUserName} 님과 친구가 되었습니다.`);

@@ -236,20 +236,50 @@
 }
 
 .ai-analysis-modal {
-  width: min(720px, 94vw);
-  max-height: min(86vh, 760px);
-  overflow-y: auto;
+  width: min(860px, 94vw);
+  max-height: none;
+  overflow: hidden;
+}
+
+.ai-radar-wrap {
+  position: relative;
+  width: min(560px, 100%);
+  margin: 0 auto;
 }
 
 .ai-radar {
   display: block;
-  width: min(280px, 100%);
-  margin: 0 auto 12px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .ai-radar-label {
   fill: #d7ddd8;
-  font-size: 13px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.ai-radar-tip {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translate(-50%, 8px);
+  min-width: 180px;
+  max-width: 280px;
+  padding: 8px 12px;
+  background: #1c2420;
+  border: 3px solid var(--px-primary);
+  color: #e8f0ea;
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.ai-radar-tip.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .tier-chart-launch {
@@ -988,8 +1018,9 @@
 .match-story-entry {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 8px;
+  padding: 8px;
 }
 
 .match-story-entry-main {

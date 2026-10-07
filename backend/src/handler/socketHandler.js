@@ -630,10 +630,14 @@ export function registerSocketHandlers(io, socket) {
       fromUserName: userLabel(socket.user),
       toUserId,
     };
-    io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
-    for (const room of socket.rooms) {
-      if (room === socket.id || String(room).startsWith("user:")) continue;
-      socket.to(room).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
+    const personalRoom = io.sockets.adapter.rooms.get("user:" + toUserId);
+    if (personalRoom && personalRoom.size > 0) {
+      io.to("user:" + toUserId).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
+    } else {
+      for (const room of socket.rooms) {
+        if (room === socket.id || String(room).startsWith("user:")) continue;
+        socket.to(room).emit(SOCKET_EVENTS.FRIEND_REMOVE, payload);
+      }
     }
     if (typeof callback === "function") {
       callback({ success: true });
@@ -642,10 +646,14 @@ export function registerSocketHandlers(io, socket) {
 
   socket.on(SOCKET_EVENTS.ROOM_INVITE, async function (data, callback) {
     try {
-      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      const toUserId = data?.toUserId ? String(data.toUserId).replace(/^player-/, "") : "";
       const roomId = data?.roomId != null ? String(data.roomId) : "";
       if (!toUserId) throw new Error("초대 대상이 없습니다.");
       if (!roomId) throw new Error("방 정보가 없습니다.");
+      const targetRoom = io.sockets.adapter.rooms.get("user:" + toUserId);
+      if (!targetRoom || targetRoom.size === 0) {
+        throw new Error("상대가 현재 접속 중이 아닙니다.");
+      }
       const inviteToken = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       await redisClient.set(
         `room:invite:${inviteToken}`,

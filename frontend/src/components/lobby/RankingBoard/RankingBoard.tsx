@@ -50,13 +50,16 @@ function sortUsersForTab(users: LobbyUser[], activeTab: string, friendNames: str
 
   if (activeTab === '친구') {
     return friendNames.map((name) => {
-      const found = users.find((user) => user.name === name);
+      const friendId = findFriendUserId(name);
+      const found = users.find(
+        (user) => user.name === name || (friendId && String(user.userId) === String(friendId)),
+      );
       const presence = getUserPresence(name);
       const storedTier =
         presence?.ratingScore != null ? getTierByRating(presence.ratingScore) : '';
       const rank = storedTier || (found?.rank && found.rank !== '-' ? found.rank : '브론즈');
       if (found) return { ...found, rank };
-      return { name, rank, title: null, userId: findFriendUserId(name) || undefined };
+      return { name, rank, title: null, userId: friendId || undefined };
     });
   }
 
@@ -244,7 +247,7 @@ export function RankingBoard({
           userName={contextMenu.user.name}
           actionLabels={{
             'match-story': '프로필 보기',
-            'add-friend': isFriend(contextMenu.user.name) ? '친구삭제' : '친구추가',
+            'add-friend': isFriend(contextMenu.user.name, contextMenu.user.userId) ? '친구삭제' : '친구추가',
           }}
           hiddenActions={
             isSelfUser(contextMenu.user)

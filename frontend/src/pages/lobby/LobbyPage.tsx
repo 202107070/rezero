@@ -26,6 +26,7 @@ import {
   createRoom,
   fetchRooms,
   getRoomErrorMessage,
+  joinRoom,
   leaveRoom,
   setPendingInviteMeta,
   setPendingJoinPassword,
@@ -62,6 +63,7 @@ import {
   claimFriendNotice,
   loadFriends,
   mergeServerFriends,
+  replaceFriendsFromServer,
   rememberFriendRating,
   removeFriend,
   removeFriendByUserId,
@@ -562,6 +564,7 @@ export default function LobbyPage() {
   const [joinPwd, setJoinPwd] = useState('');
   const [joinError, setJoinError] = useState('');
   const [joiningRoom, setJoiningRoom] = useState(false);
+  const [passwordDenied, setPasswordDenied] = useState(false);
 
   useServerDownChat((text) => {
     const now = new Date();
@@ -622,22 +625,26 @@ export default function LobbyPage() {
     }
   }, [chatMessages]);
 
-  useEffect(() => {
+  const pullServerFriends = useCallback(() => {
     void apiRequest<{ friends?: Array<{ userId?: string; displayName?: string; username?: string }> }>(
       '/users/me/friends',
     )
       .then((data) => {
-        mergeServerFriends(
-          (data.friends || [])
-            .filter((friend) => friend.userId)
-            .map((friend) => ({
-              userId: String(friend.userId),
-              name: friend.displayName || friend.username || String(friend.userId),
-            })),
-        );
+        const entries = (data.friends || [])
+          .filter((friend) => friend.userId)
+          .map((friend) => ({
+            userId: String(friend.userId),
+            name: friend.displayName || friend.username || String(friend.userId),
+          }));
+        replaceFriendsFromServer(entries);
+        mergeServerFriends(entries);
         setFriendNames(getFriendNames());
       })
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    pullServerFriends();
 
     const ids = loadFriends()
       .map((friend) => friend.userId)
@@ -798,22 +805,38 @@ export default function LobbyPage() {
         break;
       }
       case 'add-friend': {
-        if (isFriend(user.name)) {
-          const friendId = user.userId || findFriendUserId(user.name);
+        const friendId = String(user.userId || findFriendUserId(user.name) || '').replace(/^player-/, '');
+        if (isFriend(user.name, friendId)) {
           removeFriend(user.name);
+          if (friendId) removeFriendByUserId(friendId);
           setFriendNames(getFriendNames());
-          if (friendId) {
-            void emitFriendRemove(String(friendId)).catch(() => undefined);
+          if (!friendId) {
+            appendSystemChat('상대 유저 ID를 찾지 못해 서버에는 삭제가 전달되지 않았습니다.');
+          } else {
+            void emitFriendRemove(friendId)
+              .then((result) => {
+                if (!result.success) {
+                  appendSystemChat(result.message || '친구 삭제를 서버에 반영하지 못했습니다.');
+                }
+              })
+              .catch(() => {
+                appendSystemChat('친구 삭제를 서버에 반영하지 못했습니다.');
+              });
           }
           appendSystemChat(`${user.name} 님을 친구 목록에서 삭제했습니다.`);
         } else {
-          if (!user.userId) {
+          if (!friendId) {
             appendSystemChat('상대 유저 ID를 찾을 수 없어 요청 알림은 전송되지 않았습니다.');
             break;
           }
-          void emitFriendRequest(user.userId, user.name)
+          void emitFriendRequest(friendId, user.name)
             .then((result) => {
               if (!result.success) {
+                if (String(result.message || '').includes('이미 친구')) {
+                  void pullServerFriends();
+                  appendSystemChat(`${user.name} 님은 이미 친구입니다. 목록을 다시 맞췄습니다.`);
+                  return;
+                }
                 appendSystemChat(result.message || '친구 요청을 보내지 못했습니다.');
                 return;
               }
@@ -942,12 +965,28 @@ export default function LobbyPage() {
       setJoinError('비밀번호를 입력해 주세요.');
       return;
     }
+    const target = joinTarget;
+    const password = joinPwd.trim();
     setJoiningRoom(true);
     setJoinError('');
-    enterRoom(joinTarget, joinPwd);
-    setJoinTarget(null);
-    setJoinPwd('');
-    setJoiningRoom(false);
+    void joinRoom(target.id, { password })
+      .then(() => {
+        enterRoom(target, password);
+        setJoinTarget(null);
+        setJoinPwd('');
+      })
+      .catch((error) => {
+        if (error instanceof ApiError && error.code === 'ROOM_PASSWORD_INVALID') {
+          setJoinTarget(null);
+          setJoinPwd('');
+          setPasswordDenied(true);
+          return;
+        }
+        setJoinError(getRoomErrorMessage(error));
+      })
+      .finally(() => {
+        setJoiningRoom(false);
+      });
   };
 
   const spinRoulette = async () => {
@@ -1338,6 +1377,24 @@ export default function LobbyPage() {
         onCancel={() => setShowExitModal(false)}
       />
 
+      {passwordDenied && (
+        <div className="review-modal-overlay" style={{ zIndex: 4200 }}>
+          <div className="review-modal-panel ranking-panel" style={{ width: 'min(420px, 92vw)', height: 'auto', minHeight: 160 }}>
+            <div className="rank-title">NOTICE</div>
+            <div className="review-incoming-msg">비밀번호가 잘못되었습니다.</div>
+            <div className="review-modal-actions review-modal-actions-end">
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-primary review-modal-btn"
+                onClick={() => setPasswordDenied(false)}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {kickNotice && (
         <div className="review-modal-overlay" style={{ zIndex: 4100 }}>
           <div className="review-modal-panel ranking-panel" style={{ width: 'min(420px, 92vw)', height: 'auto', minHeight: 160 }}>
@@ -1380,7 +1437,9 @@ export default function LobbyPage() {
                 onClick={() => {
                   addFriend(pendingFriendRequest.fromUserName, pendingFriendRequest.fromUserId);
                   setFriendNames(getFriendNames());
-                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, true);
+                  void emitFriendRequestResult(pendingFriendRequest.fromUserId, true).then((result) => {
+                    if (result.success) pullServerFriends();
+                  });
                   setPendingFriendRequest(null);
                   if (claimFriendNotice(`local-accept:${pendingFriendRequest.fromUserId}`)) {
                     appendSystemChat(`${pendingFriendRequest.fromUserName} 님과 친구가 되었습니다.`);
