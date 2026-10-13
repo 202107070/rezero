@@ -37,15 +37,20 @@ import type { GameMode, Room } from '../../types/lobby';
 import {
   clearPendingInviteToken,
   clearPendingJoinPassword,
+  allowExplicitRejoinFromPath,
+  clearExplicitRejoin,
   emptyPlayerSlots,
   fetchRoom,
   getRoomErrorMessage,
+  isAutoRejoinBlocked,
+  isRoomDepartedError,
   isRoomKickedError,
   isAlreadyJoinedError,
   joinRoom,
   kickRoomParticipant,
   leaveRoom,
   mapParticipantsToPlayers,
+  peekExplicitRejoin,
   peekPendingInviteMeta,
   peekPendingInviteToken,
   peekPendingJoinPassword,
@@ -185,6 +190,8 @@ export default function RoomPage() {
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
   const roomRosterReadyRef = useRef(false);
   const roomFetchGenRef = useRef(0);
+  const rosterLockRef = useRef<Set<string> | null>(null);
+  const bannedRosterIdsRef = useRef<Set<string>>(new Set());
   const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
   const roomMetaRef = useRef({ roomId: '', roomTitle: '', roomQuery: '' });
@@ -254,9 +261,31 @@ export default function RoomPage() {
   isItemModeRef.current = isItemMode;
 
   const applyRoom = useCallback((room: Room, options?: { resetChat?: boolean }) => {
-    setRoomDetail(room);
+    const rosterId = (value: string | number | null | undefined) =>
+      String(value || '').replace(/^player-/, '');
+    let participants = room.participants || [];
+    participants = participants.filter(
+      (participant) => !bannedRosterIdsRef.current.has(rosterId(participant.userId)),
+    );
+    if (rosterLockRef.current) {
+      const allowed = rosterLockRef.current;
+      participants = participants.filter((participant) => allowed.has(rosterId(participant.userId)));
+    } else if (participants.length > 0) {
+      rosterLockRef.current = new Set(participants.map((participant) => rosterId(participant.userId)));
+    }
+    const lockedRoom: Room =
+      participants.length === (room.participants || []).length
+        ? room
+        : {
+            ...room,
+            participants,
+            currentPlayers: participants.length,
+            players: `${participants.length}/${room.maxPlayers || 8}`,
+          };
+
+    setRoomDetail(lockedRoom);
     const myId = getCurrentUserId();
-    const myParticipant = (room.participants || []).find(
+    const myParticipant = (lockedRoom.participants || []).find(
       (participant) => String(participant.userId) === String(myId),
     );
     if (myParticipant?.character) {
@@ -267,7 +296,7 @@ export default function RoomPage() {
       if (matched) setMyCharacter(matched);
     }
 
-    const mapped = mapParticipantsToPlayers(room).map((player) => {
+    const mapped = mapParticipantsToPlayers(lockedRoom).map((player) => {
       if (!player) return player;
       if (String(player.userId) === String(myId)) {
         const selfName = getCurrentDisplayName() || getCurrentUserName();
@@ -299,16 +328,16 @@ export default function RoomPage() {
       // rematch → WAITING: backend clears is_ready; trust participant payload
       setIsReady(Boolean(myParticipant.isReady));
     }
-    setMyLanguage(LANG_MAP[room.lang] || 'java');
+    setMyLanguage(LANG_MAP[lockedRoom.lang] || 'java');
     setSettings({
       time: urlTimeRaw,
-      diff: DIFF_MAP[room.diff] || 'NORMAL',
+      diff: DIFF_MAP[lockedRoom.diff] || 'NORMAL',
       theme: 'ALGORITHM: DP',
-      count: room.count || '5',
-      maxPlayers: Math.max(2, Math.min(8, room.maxPlayers || parsedMaxPlayers)),
+      count: lockedRoom.count || '5',
+      maxPlayers: Math.max(2, Math.min(8, lockedRoom.maxPlayers || parsedMaxPlayers)),
     });
     if (options?.resetChat) {
-      setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapped));
+      setMessages(buildInitialMessages(lockedRoom.mode || '1/1', lockedRoom.maxPlayers || parsedMaxPlayers, mapped));
     } else if (arrivals.length > 0) {
       setMessages((prev) => [
         ...prev,
@@ -474,6 +503,11 @@ export default function RoomPage() {
 
       const inviteMeta = peekPendingInviteMeta();
       let joinedThisAttempt = false;
+      const explicitRejoin = peekExplicitRejoin(numericRoomId) || Boolean(peekPendingInviteToken());
+      if (isAutoRejoinBlocked(numericRoomId) && !explicitRejoin) {
+        navigate(ROUTES.LOBBY);
+        return;
+      }
       const enterGen = ++roomFetchGenRef.current;
       try {
         let room = await fetchRoom(numericRoomId);
@@ -489,14 +523,20 @@ export default function RoomPage() {
               inviteToken: peekPendingInviteToken(),
               language: room.lang,
               character: myCharacter || 'char1',
+              explicitRejoin,
             });
             joinedThisAttempt = true;
+            clearExplicitRejoin(numericRoomId);
             clearPendingJoinPassword();
             if (inviteMeta?.fromUserId) {
               ackRoomInviteOnce(inviteMeta.fromUserId, inviteMeta.roomId || String(numericRoomId));
             }
             clearPendingInviteToken();
           } catch (error) {
+            if (isRoomDepartedError(error)) {
+              navigate(ROUTES.LOBBY);
+              return;
+            }
             if (!isAlreadyJoinedError(error)) {
               clearPendingJoinPassword();
               if (inviteMeta?.fromUserId) {
@@ -513,6 +553,7 @@ export default function RoomPage() {
             room = await fetchRoom(numericRoomId);
           }
         } else {
+          clearExplicitRejoin(numericRoomId);
           clearPendingJoinPassword();
           if (inviteMeta?.fromUserId) {
             ackRoomInviteOnce(inviteMeta.fromUserId, inviteMeta.roomId || String(numericRoomId));
@@ -604,6 +645,10 @@ export default function RoomPage() {
                   return;
                 }
                 const leftId = payload.userId ? String(payload.userId).replace(/^player-/, '') : '';
+                if (leftId) {
+                  bannedRosterIdsRef.current.add(leftId);
+                  rosterLockRef.current?.delete(leftId);
+                }
                 const leftName =
                   payload.displayName ||
                   playersRef.current.find((player) => player && String(player.userId).replace(/^player-/, '') === leftId)?.name ||
@@ -645,6 +690,21 @@ export default function RoomPage() {
             unsubs.push(
               onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload: RoomRosterPayload) => {
                 if (String(payload?.roomId || '') !== String(numericRoomId)) return;
+                if (Array.isArray(payload.participantIds)) {
+                  const ids = payload.participantIds.map((id) => String(id).replace(/^player-/, ''));
+                  rosterLockRef.current = new Set(ids);
+                  const allowed = rosterLockRef.current;
+                  ids.forEach((id) => bannedRosterIdsRef.current.delete(id));
+                  const leftId = payload.leftUserId ? String(payload.leftUserId).replace(/^player-/, '') : '';
+                  if (leftId && !allowed.has(leftId)) bannedRosterIdsRef.current.add(leftId);
+                  setPlayers((prev) =>
+                    prev.map((player) => {
+                      if (!player?.userId) return player;
+                      const id = String(player.userId).replace(/^player-/, '');
+                      return allowed.has(id) ? player : null;
+                    }),
+                  );
+                }
                 const gen = ++roomFetchGenRef.current;
                 void fetchRoom(numericRoomId)
                   .then((nextRoom) => {
@@ -1470,6 +1530,7 @@ export default function RoomPage() {
               }
             }
             const query = invite.roomQuery.replace(/^\?/, '');
+            allowExplicitRejoinFromPath(`?${query}`);
             navigate(`${ROUTES.ROOM}?${query}`);
           })();
         }}

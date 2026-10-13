@@ -20,6 +20,8 @@ export interface JoinRoomParams {
   language?: string;
   character?: string;
   inviteToken?: string;
+  /** 로비에서 방을 직접 고른 재입장. 중도 퇴장 자동 복귀를 막기 위한 값이다. */
+  explicitRejoin?: boolean;
 }
 
 export interface LeaveRoomResult {
@@ -65,6 +67,79 @@ export function takePendingJoinPassword(): string {
 
 export function clearPendingJoinPassword(): void {
   pendingJoinPassword = '';
+}
+
+const BLOCK_REJOIN_KEY = 'rezero_block_rejoin';
+const EXPLICIT_REJOIN_KEY = 'rezero_explicit_join';
+
+function writeSessionFlag(key: string, value: string | null): void {
+  try {
+    if (value) sessionStorage.setItem(key, value);
+    else sessionStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+/** 경기 중 퇴장. 이 방의 자동 재입장을 막는다. */
+export function blockAutoRejoin(roomId: string | number): void {
+  writeSessionFlag(BLOCK_REJOIN_KEY, String(roomId));
+  writeSessionFlag(EXPLICIT_REJOIN_KEY, null);
+}
+
+/** 로비·초대처럼 유저가 직접 고른 입장. */
+export function allowExplicitRejoin(roomId: string | number): void {
+  const id = String(roomId);
+  if (!/^\d+$/.test(id)) return;
+  writeSessionFlag(EXPLICIT_REJOIN_KEY, id);
+  try {
+    if (sessionStorage.getItem(BLOCK_REJOIN_KEY) === id) {
+      sessionStorage.removeItem(BLOCK_REJOIN_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function allowExplicitRejoinFromPath(path: string): void {
+  const match = /(?:\?|&)id=(\d+)/.exec(path);
+  if (match) allowExplicitRejoin(match[1]);
+}
+
+export function clearAutoRejoinBlock(roomId: string | number): void {
+  try {
+    if (sessionStorage.getItem(BLOCK_REJOIN_KEY) === String(roomId)) {
+      sessionStorage.removeItem(BLOCK_REJOIN_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function isAutoRejoinBlocked(roomId: string | number): boolean {
+  try {
+    return sessionStorage.getItem(BLOCK_REJOIN_KEY) === String(roomId);
+  } catch {
+    return false;
+  }
+}
+
+export function peekExplicitRejoin(roomId: string | number): boolean {
+  try {
+    return sessionStorage.getItem(EXPLICIT_REJOIN_KEY) === String(roomId);
+  } catch {
+    return false;
+  }
+}
+
+export function clearExplicitRejoin(roomId: string | number): void {
+  try {
+    if (sessionStorage.getItem(EXPLICIT_REJOIN_KEY) === String(roomId)) {
+      sessionStorage.removeItem(EXPLICIT_REJOIN_KEY);
+    }
+  } catch {
+    // ignore
+  }
 }
 
 export function setPendingInviteToken(token: string): void {
@@ -190,14 +265,14 @@ export function normalizeRoom(raw: unknown): Room {
 }
 
 export async function fetchRooms(): Promise<Room[]> {
-  const result = await apiRequest<{ rooms?: unknown[] }>('/rooms');
+  const result = await apiRequest<{ rooms?: unknown[] }>(`/rooms?t=${Date.now()}`);
   return normalizeRoomList((result.rooms || []).map(normalizeRoom)).filter(
     (room) => Boolean(room.hostUserId) && Number(room.currentPlayers) > 0,
   );
 }
 
 export async function fetchRoom(roomId: number | string): Promise<Room> {
-  const result = await apiRequest<unknown>(`/rooms/${roomId}`);
+  const result = await apiRequest<unknown>(`/rooms/${roomId}?t=${Date.now()}`);
   return normalizeRoom(result);
 }
 
@@ -218,7 +293,7 @@ export async function createRoom(params: CreateRoomParams): Promise<Room> {
 }
 
 export async function joinRoom(roomId: number | string, params: JoinRoomParams = {}): Promise<Room> {
-  const key = `${roomId}:${params.inviteToken || ''}:${params.password || ''}`;
+  const key = `${roomId}:${params.inviteToken || ''}:${params.password || ''}:${params.explicitRejoin ? '1' : '0'}`;
   if (joinInFlight && joinInFlightKey === key) {
     return joinInFlight;
   }
@@ -230,6 +305,7 @@ export async function joinRoom(roomId: number | string, params: JoinRoomParams =
       language: params.language || '',
       character: params.character || '',
       inviteToken: params.inviteToken || '',
+      explicitRejoin: params.explicitRejoin === true,
     }),
   })
     .then((result) => normalizeRoom(result))
@@ -264,6 +340,10 @@ export function isAlreadyJoinedError(error: unknown): boolean {
 
 export function isRoomKickedError(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'ROOM_KICKED';
+}
+
+export function isRoomDepartedError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'ROOM_DEPARTED';
 }
 
 export function getRoomErrorMessage(error: unknown): string {

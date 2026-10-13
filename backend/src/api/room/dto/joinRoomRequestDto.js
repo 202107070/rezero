@@ -38,6 +38,7 @@ export function parseJoinRoomRequest(body = {}) {
     language: language || null,
     character: character || null,
     inviteToken: inviteToken || null,
+    explicitRejoin: body.explicitRejoin === true,
   };
 }
 

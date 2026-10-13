@@ -18,6 +18,10 @@ function roomReadyKey(roomId) {
   return `room:${roomId}:ready`;
 }
 
+function roomDepartedKey(roomId) {
+  return `room:${roomId}:departed`;
+}
+
 function roomNotFound() {
   return new AppError(404, "ROOM_NOT_FOUND", "방을 찾을 수 없습니다.");
 }
@@ -64,6 +68,7 @@ async function saveLeftRoomState(roomId, userId, result) {
       `room:${roomId}:messages`,
       `chat:room:${roomId}:recent`,
       `room:kicked:${roomId}`,
+      roomDepartedKey(roomId),
     ]);
   } else {
     const room = await roomModel.findRoomById(roomId);
@@ -87,7 +92,24 @@ async function clearRoomState(roomId) {
     `room:${roomId}:messages`,
     `chat:room:${roomId}:recent`,
     `room:kicked:${roomId}`,
+    roomDepartedKey(roomId),
   ]);
+}
+
+async function broadcastRoomRoster(roomId, extra = {}) {
+  const io = getSocket();
+  if (!io) return;
+  const room = await roomModel.findRoomById(roomId);
+  const participants = await roomModel.findRoomParticipants(roomId);
+  io.emit(SOCKET_EVENTS.ROOM_ROSTER, {
+    roomId: String(roomId),
+    currentPlayers: (participants || []).length,
+    participantIds: (participants || []).map(function (participant) {
+      return String(participant.userId);
+    }),
+    status: room?.status || "WAITING",
+    ...extra,
+  });
 }
 
 export async function createRoom(input, hostUserId) {
@@ -254,6 +276,26 @@ export async function joinRoom(roomId, userId, input) {
     }
   }
 
+  // 경기 중 퇴장한 유저는 방이 WAITING으로 돌아온 뒤 자동 재입장을 거절한다.
+  // 로비에서 방을 직접 고르거나 초대를 수락한 경우만 다시 받는다.
+  if (!inviteBypass && input.explicitRejoin !== true) {
+    try {
+      const departed = await redisClient.sIsMember(
+        roomDepartedKey(roomId),
+        String(userId),
+      );
+      if (departed) {
+        throw new AppError(
+          409,
+          "ROOM_DEPARTED",
+          "경기 중 나간 방에는 자동으로 다시 들어갈 수 없습니다.",
+        );
+      }
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+    }
+  }
+
   if (room.passwordHash && !inviteBypass) {
     const passwordMatches = input.password
       ? await comparePassword(input.password, room.passwordHash)
@@ -313,6 +355,13 @@ export async function joinRoom(roomId, userId, input) {
           // ignore
         }
       }
+      if (input.explicitRejoin === true || inviteBypass) {
+        try {
+          await redisClient.sRem(roomDepartedKey(roomId), String(userId));
+        } catch {
+          // ignore
+        }
+      }
       return toRoomResponse(
         (await roomModel.findRoomById(roomId)) || room,
         existing,
@@ -345,6 +394,20 @@ export async function joinRoom(roomId, userId, input) {
     );
   }
 
+  if (input.explicitRejoin === true || inviteBypass) {
+    try {
+      await redisClient.sRem(roomDepartedKey(roomId), String(userId));
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    await broadcastRoomRoster(roomId);
+  } catch {
+    // 입장 자체는 성공. 명단 갱신 실패는 다음 조회가 메운다.
+  }
+
   const participants = await roomModel.findRoomParticipants(roomId);
   return toRoomResponse(updatedRoom, participants);
 }
@@ -374,9 +437,18 @@ export async function leaveRoom(roomId, userId) {
 
   await saveLeftRoomState(roomId, userId, result);
 
+  const wasStarted = roomBefore && roomBefore.status === "STARTED";
+  if (wasStarted && !result.roomClosed) {
+    try {
+      await redisClient.sAdd(roomDepartedKey(roomId), String(userId));
+      await redisClient.expire(roomDepartedKey(roomId), 6 * 60 * 60);
+    } catch {
+      // ignore
+    }
+  }
+
   const io = getSocket();
   const remainingPlayers = Number(result.currentPlayers || 0);
-  const wasStarted = roomBefore && roomBefore.status === "STARTED";
   const abandonNoPlayers =
     wasStarted && !result.roomClosed && remainingPlayers <= 1;
 

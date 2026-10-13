@@ -53,7 +53,7 @@ import {
   type RoomRosterPayload,
   type UserReconnectedPayload,
 } from '../../services/roomSocket';
-import { fetchRoom, leaveRoom, getRoomErrorMessage } from '../../services/roomService';
+import { blockAutoRejoin, clearAutoRejoinBlock, fetchRoom, isAutoRejoinBlocked, leaveRoom, getRoomErrorMessage } from '../../services/roomService';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import { emitUpdateLocation } from '../../services/roomSocket';
 import { collectSolvedProblemKeys, isPreviouslySolvedProblem } from '../../utils/codeHistoryUtils';
@@ -1064,6 +1064,7 @@ export default function BattlePage() {
                   ? payload.remainingPlayers
                   : undefined;
               // 남은 인원이 1명 이하면 대기실로 (본인만 남은 경우)
+              if (isAutoRejoinBlocked(roomId)) return;
               if (payload?.roomClosed || (remainingAfter !== undefined && remainingAfter <= 1)) {
                 setChatMessages((prev) => [
                   ...prev,
@@ -1112,7 +1113,7 @@ export default function BattlePage() {
               );
             }
             const remaining = Number(payload?.currentPlayers ?? active.size);
-            if (leavingToLobbyRef.current || (myId && !active.has(myId))) return;
+            if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId) || (myId && !active.has(myId))) return;
             if (remaining <= 1) {
               clearBattleAndLeave(sessionId, roomId);
               navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
@@ -1129,7 +1130,7 @@ export default function BattlePage() {
               ]);
             }
             if (payload.reason === 'no_players' || payload.message?.includes('대기실로 이동')) {
-              if (leavingToLobbyRef.current) return;
+              if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId)) return;
               clearBattleAndLeave(sessionId, roomId);
               navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
               return;
@@ -1940,6 +1941,7 @@ export default function BattlePage() {
   const confirmLeaveBattle = async () => {
     const numericRoomId = roomId ? Number(roomId) : NaN;
     leavingToLobbyRef.current = true;
+    if (roomId) blockAutoRejoin(roomId);
     try {
       if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
         await leaveRoom(numericRoomId);
@@ -1949,6 +1951,7 @@ export default function BattlePage() {
       navigate(ROUTES.LOBBY);
     } catch (error) {
       leavingToLobbyRef.current = false;
+      if (roomId) clearAutoRejoinBlock(roomId);
       setShowLeaveConfirm(false);
       setLeaveAlertMessage(getRoomErrorMessage(error) || '방 나가기에 실패했습니다. 다시 시도해 주세요.');
     }

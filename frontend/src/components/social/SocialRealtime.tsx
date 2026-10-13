@@ -16,7 +16,7 @@ import {
   getActiveRoomId,
   subscribeSocialEvents,
 } from '../../services/roomSocket';
-import { leaveRoom, setPendingInviteMeta } from '../../services/roomService';
+import { allowExplicitRejoinFromPath, leaveRoom, setPendingInviteMeta } from '../../services/roomService';
 
 interface FriendRequestNotice {
   fromUserId: string;
@@ -225,6 +225,7 @@ export function SocialRealtime() {
                       }
                     }
                     const query = invite.roomQuery.replace(/^\?/, '');
+                    allowExplicitRejoinFromPath(`?${query}`);
                     navigate(`${ROUTES.ROOM}?${query}`);
                   })();
                 }}

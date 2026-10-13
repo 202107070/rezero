@@ -22,6 +22,8 @@ import { ROUTES } from '../../constants/routes';
 import { useAuth, useAuthUser } from '../../contexts/AuthContext';
 import { loadTitles, type TitleData } from '../../constants/titleTypes';
 import {
+  allowExplicitRejoin,
+  allowExplicitRejoinFromPath,
   buildRoomSearchParams,
   createRoom,
   fetchRooms,
@@ -568,12 +570,21 @@ export default function LobbyPage() {
   }, [authUser.id]);
 
   const roomListGenRef = useRef(0);
+  const rosterCountRef = useRef<Map<string, number>>(new Map());
   const refreshRooms = useCallback(async () => {
     const gen = ++roomListGenRef.current;
     try {
       const nextRooms = await fetchRooms();
       if (gen !== roomListGenRef.current) return;
-      setRooms(nextRooms);
+      setRooms(
+        nextRooms.map((room) => {
+          const cap = rosterCountRef.current.get(String(room.id));
+          const playersNow = room.currentPlayers ?? 0;
+          if (cap == null || playersNow <= cap) return room;
+          const max = room.maxPlayers || 8;
+          return { ...room, currentPlayers: cap, players: `${cap}/${max}` };
+        }),
+      );
     } catch (error) {
       if (gen !== roomListGenRef.current) return;
       setRooms([]);
@@ -684,6 +695,8 @@ export default function LobbyPage() {
       const roomId = String(payload?.roomId || '');
       if (!roomId) return;
       const current = Number(payload.currentPlayers || 0);
+      if (current <= 0) rosterCountRef.current.delete(roomId);
+      else rosterCountRef.current.set(roomId, current);
       setRooms((prev) => {
         if (current <= 0) return prev.filter((room) => String(room.id) !== roomId);
         return prev.map((room) => {
@@ -864,6 +877,7 @@ export default function LobbyPage() {
           break;
         }
         appendSystemChat(`${user.name} 님이 있는 방으로 이동합니다.`);
+        allowExplicitRejoinFromPath(roomPath);
         navigate(roomPath);
         break;
       }
@@ -902,6 +916,7 @@ export default function LobbyPage() {
   };
 
   const enterRoom = (room: Room, password = '') => {
+    allowExplicitRejoin(room.id);
     setPendingJoinPassword(password);
     navigate(`${ROUTES.ROOM}?${buildRoomSearchParams(room).toString()}`);
   };
@@ -973,7 +988,8 @@ export default function LobbyPage() {
     const password = joinPwd.trim();
     setJoiningRoom(true);
     setJoinError('');
-    void joinRoom(target.id, { password })
+    allowExplicitRejoin(target.id);
+    void joinRoom(target.id, { password, explicitRejoin: true })
       .then(() => {
         enterRoom(target, password);
         setJoinTarget(null);
@@ -1473,6 +1489,7 @@ export default function LobbyPage() {
             });
           }
           const query = invite.roomQuery.replace(/^\?/, '');
+          allowExplicitRejoinFromPath(`?${query}`);
           navigate(`${ROUTES.ROOM}?${query}`);
         }}
         onDecline={() => {

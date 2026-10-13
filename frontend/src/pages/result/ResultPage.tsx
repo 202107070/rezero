@@ -23,7 +23,7 @@ import { ROUTES } from '../../constants/routes';
 import { ENABLE_RESULT_BOT_DEPARTURE, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../constants/resultConstants';
 import { useAuthUser } from '../../contexts/AuthContext';
 import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot, saveFinalRankingSnapshot } from '../../services/battleSessionService';
-import { fetchRoom, leaveRoom } from '../../services/roomService';
+import { allowExplicitRejoin, allowExplicitRejoinFromPath, fetchRoom, leaveRoom } from '../../services/roomService';
 import {
   emitReviewInvite,
   emitReviewInviteResponse,
@@ -1217,6 +1217,7 @@ export default function ResultPage() {
           break;
         }
         appendSystemChat(`${userName} 님이 있는 방으로 이동합니다.`);
+        allowExplicitRejoinFromPath(roomPath);
         navigate(roomPath);
         break;
       }
@@ -1241,6 +1242,7 @@ export default function ResultPage() {
       return;
     }
     try {
+      allowExplicitRejoin(roomId);
       setActiveRoomId(roomId);
       await joinRoomSocket(roomId);
       await fetchRoom(Number(roomId));
