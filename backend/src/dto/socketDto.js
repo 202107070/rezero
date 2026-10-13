@@ -118,6 +118,7 @@ export const socketDto = {
       remainingTime: params.remainingTime,
       scores: params.scores,
       submitStatuses: params.submitStatuses,
+      submissions: params.submissions || [],
     };
   },
 

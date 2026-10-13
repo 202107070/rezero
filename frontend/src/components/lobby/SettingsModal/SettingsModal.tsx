@@ -97,7 +97,7 @@ export function SettingsModal({
             <div className="settings-audio-item">
               <div className="settings-audio-copy">
                 <span className="settings-audio-name">🎵 로비 음악</span>
-                <span className="settings-audio-desc">로비에서 재생되는 차분한 픽셀 BGM</span>
+                <span className="settings-audio-desc">로비·대기방·결과·연습·빌드에서 재생되는 BGM</span>
               </div>
               <button
                 type="button"

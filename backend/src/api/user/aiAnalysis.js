@@ -285,6 +285,171 @@ export function polishAnalysisText(text) {
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
 
+function looseAnswer(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function isFilledText(value) {
+  const text = String(value || "").trim();
+  return text.length > 0 && text !== "(미입력)";
+}
+
+export function buildRoomChart(entry) {
+  const lang = String(entry?.lang || "UNKNOWN").toUpperCase();
+  const problems = Array.isArray(entry?.problems) ? entry.problems : [];
+  const total = problems.length;
+  let correct = 0;
+  let attempted = 0;
+  let blankTotal = 0;
+  let blankCorrect = 0;
+  let choiceTotal = 0;
+  let choiceCorrect = 0;
+  let shortTotal = 0;
+  let shortCorrect = 0;
+
+  for (let i = 0; i < problems.length; i++) {
+    const problem = problems[i] || {};
+    const type = String(problem.type || "");
+    const blanks = Array.isArray(problem.userBlanks) ? problem.userBlanks : [];
+    const answerMap = problem.answer && typeof problem.answer === "object" ? problem.answer : {};
+    const expected = Array.isArray(answerMap[lang])
+      ? answerMap[lang]
+      : Array.isArray(answerMap.JAVA)
+        ? answerMap.JAVA
+        : [];
+    const wrote =
+      blanks.some(function (blank) {
+        return isFilledText(blank);
+      }) ||
+      (problem.selectedOption != null && Number(problem.selectedOption) >= 0) ||
+      isFilledText(problem.userAnswer);
+    if (wrote) attempted += 1;
+
+    const blankCount = (String(problem.question || "").match(/_____/g) || []).length;
+    let ok = false;
+    if (type === "multiple_choice" || (Array.isArray(problem.options) && problem.options.length > 0 && blankCount === 0)) {
+      choiceTotal += 1;
+      ok = Number(problem.selectedOption) === Number(problem.correctIndex);
+      if (ok) choiceCorrect += 1;
+    } else if (blankCount > 0 || blanks.length > 1) {
+      blankTotal += 1;
+      ok =
+        expected.length > 0 &&
+        expected.every(function (answer, index) {
+          return looseAnswer(blanks[index]) !== "" && looseAnswer(blanks[index]) === looseAnswer(answer);
+        });
+      if (ok) blankCorrect += 1;
+    } else {
+      shortTotal += 1;
+      const user = isFilledText(blanks[0]) ? blanks[0] : problem.userAnswer;
+      ok = expected.length > 0 && looseAnswer(user) !== "" && looseAnswer(user) === looseAnswer(expected[0]);
+      if (ok) shortCorrect += 1;
+    }
+    if (ok) correct += 1;
+  }
+
+  const percent = function (num, den) {
+    if (!den) return 0;
+    return Math.max(0, Math.min(100, Math.round((num / den) * 1000) / 10));
+  };
+  const roomLabel = entry?.roomId ? String(entry.roomId) + "번 방" : "이 방";
+  const solveRate = percent(correct, total);
+  const attemptRate = percent(attempted, total);
+  const blankRate = percent(blankCorrect, blankTotal);
+  const choiceRate = percent(choiceCorrect, choiceTotal);
+  const shortRate = percent(shortCorrect, shortTotal);
+  const missed = Math.max(0, total - correct);
+
+  return {
+    roomId: entry?.roomId ? String(entry.roomId) : "",
+    lang,
+    problemCount: total,
+    winrate: solveRate,
+    solveRate,
+    ratingScore: 0,
+    avgSolveTimeSec: 0,
+    totalWins: correct,
+    losses: missed,
+    recentMatchCount: 1,
+    axes: [
+      {
+        label: "정답",
+        value: solveRate,
+        detail: roomLabel + " · " + lang,
+        why:
+          total +
+          "문제 중 " +
+          correct +
+          "문제를 맞혀 이 판의 정답률은 " +
+          solveRate +
+          "%입니다.\n다른 방 전적은 넣지 않고, 이 방에 남긴 답만 정답과 비교했습니다.",
+      },
+      {
+        label: "시도",
+        value: attemptRate,
+        detail: attempted + "/" + total + "문제",
+        why:
+          attempted +
+          "문제에 답을 적고 " +
+          Math.max(0, total - attempted) +
+          "문제는 비워 두었습니다.\n비운 문제는 정답률에서 빠지므로, 막혀도 일부만 적어도 시도 점수가 올라갑니다.",
+      },
+      {
+        label: "빈칸",
+        value: blankTotal ? blankRate : attemptRate,
+        detail: blankTotal ? blankCorrect + "/" + blankTotal + "빈칸" : "빈칸 문제 없음",
+        why: blankTotal
+          ? "빈칸 " +
+            blankTotal +
+            "개 중 " +
+            blankCorrect +
+            "개가 맞았습니다.\n공백과 대소문자는 같은 답으로 보고, 글자 내용이 다를 때만 오답입니다."
+          : "이 방에는 빈칸 문제가 없어 시도율로 대신 표시했습니다.\n빈칸이 있는 판과 숫자를 섞지 않기 위한 값입니다.",
+      },
+      {
+        label: "객관식",
+        value: choiceTotal ? choiceRate : attemptRate,
+        detail: choiceTotal ? choiceCorrect + "/" + choiceTotal + "문항" : "객관식 없음",
+        why: choiceTotal
+          ? "객관식 " +
+            choiceTotal +
+            "문항 중 " +
+            choiceCorrect +
+            "개를 골랐습니다.\n보기를 고른 번호가 정답 번호와 같은지만 이 축에 반영됩니다."
+          : "이 방에는 객관식이 없어 시도율로 대신 표시했습니다.\n선택지가 있는 판의 그래프와 기준을 맞추기 위해서입니다.",
+      },
+      {
+        label: "단답",
+        value: shortTotal ? shortRate : solveRate,
+        detail: shortTotal ? shortCorrect + "/" + shortTotal + "문항" : lang,
+        why: shortTotal
+          ? "단답 " +
+            shortTotal +
+            "문항 중 " +
+            shortCorrect +
+            "개가 맞았습니다.\n" +
+            lang +
+            " 표기에서 띄어쓰기만 다른 답은 정답으로 인정합니다."
+          : "단답형 문항이 없어 이 방 정답률을 그대로 씁니다.\n언어는 " + lang + " 한 판만 반영했습니다.",
+      },
+      {
+        label: "완성",
+        value: percent(correct, Math.max(attempted, 1)),
+        detail: "맞힌 " + correct + " · 틀린 " + Math.max(0, attempted - correct),
+        why:
+          "답을 쓴 " +
+          attempted +
+          "문제 가운데 " +
+          correct +
+          "개가 맞았습니다.\n비운 문제는 빼서, 손댄 문제만 얼마나 맞았는지 보여 줍니다.",
+      },
+    ],
+  };
+}
+
 export function buildMatchAnalysisText(entry, profileSummary) {
   const codes = Array.isArray(entry?.codes) ? entry.codes : [];
   const lang = entry?.lang || "UNKNOWN";

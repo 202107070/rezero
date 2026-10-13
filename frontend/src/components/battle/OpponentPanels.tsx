@@ -210,6 +210,7 @@ export default function OpponentPanels({
     const effIcon = effectIcons(panelEff, now);
     const botProb = problems[viewProblemIndex] || currentProblem;
     const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
+    const revealWritten = demoSpectating && (bot.solvedProblems || []).includes(viewProblemIndex);
 
     return (
       <div
@@ -255,7 +256,7 @@ export default function OpponentPanels({
               isItemMode={isItemMode}
               langKey={langKey}
               compact
-              showAnswers={demoSpectating}
+              showAnswers={revealWritten}
             />
           </div>
         </div>
@@ -275,6 +276,7 @@ export default function OpponentPanels({
     const isRevealed = demoSpectating;
     const botProb = problems[viewProblemIndex] || currentProblem;
     const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
+    const revealWritten = demoSpectating && (bot.solvedProblems || []).includes(viewProblemIndex);
 
     return (
       <div
@@ -330,7 +332,7 @@ export default function OpponentPanels({
               viewProblemIndex={viewProblemIndex}
               isItemMode={isItemMode}
               langKey={langKey}
-              showAnswers={demoSpectating}
+              showAnswers={revealWritten}
             />
           </div>
         </div>

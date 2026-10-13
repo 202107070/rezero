@@ -78,7 +78,6 @@ import {
   type RoomReadyStatePayload,
   type ChatMessagePayload,
   type GameStartedPayload,
-  type RoomInvitePayload,
   type RoomInviteResponsePayload,
   type UserLeftPayload,
 } from '../../services/roomSocket';
@@ -105,6 +104,7 @@ import {
   UserListContextMenu,
   type UserListMenuAction,
 } from '../../components/lobby/UserListContextMenu/UserListContextMenu';
+import { LobbyBGM, RoomBGM } from '../../utils/audio/gameAudio';
 import './room.css';
 
 const recentRoomNotices = new Map<string, number>();
@@ -335,6 +335,12 @@ export default function RoomPage() {
         }
       })
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    LobbyBGM.stop();
+    RoomBGM.start();
+    return () => RoomBGM.stop();
   }, []);
 
   useEffect(() => {
@@ -650,36 +656,6 @@ export default function RoomPage() {
                 if (!payload?.userId) return;
                 removeFriendByUserId(String(payload.userId));
               }),
-            );
-
-            unsubs.push(
-              onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_INVITE, (payload: RoomInvitePayload) => {
-                if (!payload?.fromUserId || !payload.roomId) return;
-                if (String(payload.fromUserId) === String(getCurrentUserId())) return;
-                if (String(payload.roomId) === String(roomId)) return;
-                setPendingRoomInvite({
-                  fromUserId: String(payload.fromUserId),
-                  fromUserName: payload.fromUserName || 'UNKNOWN',
-                  roomId: String(payload.roomId),
-                  roomTitle: payload.roomTitle || '대기실',
-                  roomQuery: payload.roomQuery || `id=${payload.roomId}`,
-                  inviteToken: payload.inviteToken,
-                });
-              }),
-            );
-
-            unsubs.push(
-              onRoomEvent(
-                ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
-                (payload?: { fromUserId?: string; fromUserName?: string }) => {
-                  if (!payload?.fromUserId) return;
-                  if (String(payload.fromUserId) === String(getCurrentUserId())) return;
-                  setPendingFriendRequest({
-                    fromUserId: String(payload.fromUserId),
-                    fromUserName: payload.fromUserName || 'UNKNOWN',
-                  });
-                },
-              ),
             );
 
             unsubs.push(
@@ -1223,7 +1199,6 @@ export default function RoomPage() {
       }
       setActiveRoomId(null);
       clearRoomSession(roomId);
-      disconnectRoomSocket(true);
       navigate(ROUTES.LOBBY);
     } catch (error) {
       showStartAlert(getRoomErrorMessage(error));

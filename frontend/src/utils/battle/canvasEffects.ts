@@ -42,12 +42,12 @@ export function startPaintCanvas(containerEl: HTMLElement | null, botId: string)
 
   const colors = ['#EE5A24', '#FF6B6B', '#FFE66D', '#4ECDC4', '#A78BFA', '#F472B6', '#38BDF8', '#FB923C', '#10AC84', '#FF9F43', '#E74C3C'];
   const startTime = performance.now();
-  const ix = W * (0.2 + Math.random() * 0.35);
-  const iy = H * (0.08 + Math.random() * 0.18);
+  const ix = W * (0.46 + Math.random() * 0.08);
+  const iy = H * (0.4 + Math.random() * 0.1);
 
   const splats = Array.from({ length: 35 }, () => {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 40 + Math.random() * 180;
+    const dist = 18 + Math.random() * 90;
     return {
       x: Math.max(5, Math.min(W - 5, ix + Math.cos(angle) * dist * (0.6 + Math.random() * 0.4))),
       y: Math.max(2, Math.min(H - 2, iy + Math.sin(angle) * dist * (0.5 + Math.random() * 0.5))),

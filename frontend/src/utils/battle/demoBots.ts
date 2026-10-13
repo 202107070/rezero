@@ -1,6 +1,5 @@
 import { resolveProblemStyle } from '../problemCapabilities';
 import { getProblemAnswersForLang } from '../problemTypeUtils';
-import problems from '../../data/problems.js';
 
 export interface DemoBot {
   id: string;
@@ -360,29 +359,10 @@ export function areAllBotsSolvedOnPlayerProblem(
 export function getBotSpectatorAnswers(
   bot: Pick<DemoBot, 'blankAnswersByProblem'>,
   problemIndex: number,
-  problem?: ProblemLike,
-  langKey?: string,
+  _problem?: ProblemLike,
+  _langKey?: string,
 ): string[] {
   const stored = bot.blankAnswersByProblem?.[problemIndex] || [];
-  const hasStored = stored.some((value) => String(value || '').trim() !== '');
-  if (hasStored) return stored;
-  if (problem && langKey) {
-    const fromProblem = getProblemAnswersForLang(problem.answer, langKey);
-    if (fromProblem.some((value) => String(value || '').trim() !== '')) {
-      return fromProblem;
-    }
-    const bank = problems as ProblemLike[];
-    const match =
-      bank.find(
-        (entry) =>
-          entry.title === problem.title &&
-          String(entry.question || '').trim() === String(problem.question || '').trim(),
-      ) || bank.find((entry) => entry.title === problem.title);
-    if (match) {
-      const fromBank = getProblemAnswersForLang(match.answer, langKey);
-      if (fromBank.length) return fromBank;
-    }
-  }
   return stored;
 }
 
@@ -397,8 +377,6 @@ export function getBotSpectatorMcIndex(
     const idx = Number.parseInt(raw, 10);
     if (!Number.isNaN(idx) && idx >= 0 && idx < problem.options.length) return idx;
   }
-  const fallback = problem.correctIndex;
-  if (fallback != null && fallback >= 0 && fallback < problem.options.length) return fallback;
   return null;
 }
 

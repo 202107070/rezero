@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { GuestRoute } from './components/auth/GuestRoute';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ROUTES } from './constants/routes';
+import { SocialRealtime } from './components/social/SocialRealtime';
 import { AuthProvider } from './contexts/AuthContext';
 import LobbyPage from './pages/lobby/LobbyPage';
 import LoginPage from './pages/login/LoginPage';
@@ -33,6 +34,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <SocialRealtime />
         <Routes>
           <Route
             path={ROUTES.LOGIN}

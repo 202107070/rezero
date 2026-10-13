@@ -260,26 +260,34 @@
 }
 
 .ai-radar-tip {
-  position: absolute;
-  left: 50%;
-  bottom: 8px;
-  transform: translate(-50%, 8px);
-  min-width: 180px;
-  max-width: 280px;
-  padding: 8px 12px;
+  position: fixed;
+  z-index: 7000;
+  width: min(260px, 70vw);
+  padding: 10px 12px;
   background: #1c2420;
   border: 3px solid var(--px-primary);
   color: #e8f0ea;
-  font-size: 14px;
-  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  box-shadow: 4px 4px 0 #000;
 }
 
-.ai-radar-tip.is-on {
-  opacity: 1;
-  transform: translate(-50%, 0);
+.ai-radar-tip strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--px-primary);
+}
+
+.ai-radar-tip span {
+  display: block;
+  margin-bottom: 6px;
+  color: #c9d4cc;
+}
+
+.ai-radar-tip p {
+  margin: 0 0 4px;
 }
 
 .tier-chart-launch {

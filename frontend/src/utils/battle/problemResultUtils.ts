@@ -1,4 +1,5 @@
 import type { BattleProblem } from '../../types/battle';
+import { looseAnswerEqual } from '../problemTypeUtils';
 
 export type ProblemResultsMap = Record<number, boolean>;
 
@@ -53,17 +54,13 @@ export function isProblemAnswerCorrect(params: {
     const user = blankAnswers[problemIndex] || [];
     if (correct.length === 0) return false;
     for (let i = 0; i < correct.length; i++) {
-      const u = String(user[i] || '').trim().toLowerCase();
-      const c = String(correct[i] || '').trim().toLowerCase();
-      if (u !== c) return false;
+      if (!looseAnswerEqual(user[i], correct[i])) return false;
     }
     return true;
   }
 
   if (problem.type === 'short_answer') {
-    const u = String(blankAnswers[problemIndex]?.[0] || '').trim().toLowerCase();
-    const c = String(problem.answer?.[langKey]?.[0] || '').trim().toLowerCase();
-    return u !== '' && u === c;
+    return looseAnswerEqual(blankAnswers[problemIndex]?.[0], problem.answer?.[langKey]?.[0]);
   }
 
   if (problem.type === 'multiple_choice') {

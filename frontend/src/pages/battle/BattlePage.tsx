@@ -45,7 +45,6 @@ import {
   onRoomEvent,
   createChatMessageId,
   sendRoomMessage,
-  disconnectRoomSocket,
   ROOM_SOCKET_EVENTS,
   type BattleGameEndedPayload,
   type BattleItemUsedPayload,
@@ -1128,6 +1127,7 @@ export default function BattlePage() {
             const myId = getCurrentUserId();
             const scores = Array.isArray(payload.scores) ? payload.scores : [];
             const statuses = Array.isArray(payload.submitStatuses) ? payload.submitStatuses : [];
+            const submissions = Array.isArray(payload.submissions) ? payload.submissions : [];
 
             setBattleBots((prev) =>
               prev.map((bot) => {
@@ -1153,27 +1153,37 @@ export default function BattlePage() {
                 });
                 solvedProblems.sort((a, b) => a - b);
 
+                const written = submissions.filter((item) => matchesUser(String(item.userId)));
+                const blankAnswersByProblem = [...(bot.blankAnswersByProblem || [])];
+                written.forEach((item) => {
+                  const idx = Number(item.problemIndex);
+                  if (!Number.isInteger(idx) || idx < 0) return;
+                  while (blankAnswersByProblem.length <= idx) blankAnswersByProblem.push([]);
+                  if (item.selectedOption != null && Number.isFinite(Number(item.selectedOption))) {
+                    blankAnswersByProblem[idx] = [String(item.selectedOption)];
+                  } else if (Array.isArray(item.answers)) {
+                    blankAnswersByProblem[idx] = item.answers.map((answer) => String(answer ?? ''));
+                  }
+                  if (!solvedProblems.includes(idx)) solvedProblems.push(idx);
+                });
+                solvedProblems.sort((a, b) => a - b);
+
                 if (entry) {
                   const score = Number(entry.score) || 0;
-                  const approxSolved = Math.min(
-                    problems.length,
-                    Math.max(0, Math.floor(score / Math.max(1, BATTLE_CORRECT_SCORE))),
-                  );
-                  if (approxSolved > solvedProblems.length) {
-                    solvedProblems = Array.from({ length: approxSolved }, (_, i) => i);
-                  }
                   return {
                     ...bot,
                     score,
                     solvedProblems,
+                    blankAnswersByProblem,
                     status: 'playing',
                   };
                 }
 
-                if (fromStatus.length === 0) return bot;
+                if (fromStatus.length === 0 && written.length === 0) return bot;
                 return {
                   ...bot,
                   solvedProblems,
+                  blankAnswersByProblem,
                   status: 'playing',
                 };
               }),
@@ -1891,7 +1901,6 @@ export default function BattlePage() {
       }
       setShowLeaveConfirm(false);
       clearBattleAndLeave(sessionId, roomId);
-      disconnectRoomSocket(true);
       navigate(ROUTES.LOBBY);
     } catch (error) {
       setShowLeaveConfirm(false);

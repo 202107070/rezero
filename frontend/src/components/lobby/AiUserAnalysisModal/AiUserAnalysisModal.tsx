@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useModalShake } from '../../../hooks/useModalShake';
 import { ApiError, apiRequest } from '../../../services/apiClient';
 
@@ -30,6 +31,7 @@ interface AiAnalysisResponse {
     roomId?: string;
     lang?: string;
     problemCount?: number;
+    axes?: Array<{ label: string; value: number; detail?: string; why?: string }>;
   };
 }
 
@@ -42,9 +44,13 @@ function clampPercent(value: number | undefined): number {
 function RadarChart({
   axes,
 }: {
-  axes: Array<{ label: string; value: number; detail: string }>;
+  axes: Array<{ label: string; value: number; detail: string; why?: string }>;
 }) {
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover] = useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const size = 460;
   const cx = size / 2;
   const cy = size / 2;
@@ -64,7 +70,8 @@ function RadarChart({
   });
   const polygon = points.map((point) => `${point.x},${point.y}`).join(' ');
   const grid = [0.35, 0.65, 1];
-  const active = hover == null ? null : points[hover];
+  const active = hover == null ? null : points[hover.index];
+  const activeAxis = hover == null ? null : axes[hover.index];
   return (
     <div className="ai-radar-wrap">
     <svg className="ai-radar" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="분석 그래프">
@@ -89,19 +96,40 @@ function RadarChart({
       {points.map((point, index) => (
         <g
           key={`${point.label}-label`}
-          onMouseEnter={() => setHover(index)}
+          onMouseEnter={(event) => setHover({ index, x: event.clientX, y: event.clientY })}
+          onMouseMove={(event) => setHover({ index, x: event.clientX, y: event.clientY })}
           onMouseLeave={() => setHover(null)}
         >
-          <circle cx={point.gx} cy={point.gy} r="18" fill="transparent" />
+          <circle cx={point.lx} cy={point.ly} r="22" fill="transparent" />
           <text x={point.lx} y={point.ly} textAnchor="middle" className="ai-radar-label">
             {point.label}
           </text>
         </g>
       ))}
     </svg>
-    <div className={`ai-radar-tip${active ? ' is-on' : ''}`} role="status">
-      {active ? `${active.label} · ${axes[hover ?? 0]?.detail || ''}` : ''}
-    </div>
+    {hover &&
+      active &&
+      activeAxis &&
+      createPortal(
+        <div
+          className="ai-radar-tip is-on"
+          style={{
+            left: Math.min(hover.x + 16, window.innerWidth - 280),
+            top: Math.min(hover.y + 18, window.innerHeight - 140),
+          }}
+          role="status"
+        >
+          <strong>{active.label}</strong>
+          <span>{activeAxis.detail}</span>
+          {(activeAxis.why || '')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -172,38 +200,23 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
           <>
             {summary && (
               <RadarChart
-                axes={[
-                  {
-                    label: '승률',
-                    value: clampPercent(summary.winrate),
-                    detail: `${summary.winrate ?? 0}% · ${summary.totalWins ?? 0}승 ${summary.losses ?? 0}패`,
-                  },
-                  {
-                    label: '해결',
-                    value: clampPercent(summary.solveRate),
-                    detail: `해결률 ${summary.solveRate ?? 0}%`,
-                  },
-                  {
-                    label: '레이팅',
-                    value: clampPercent(((summary.ratingScore || 0) / 2200) * 100),
-                    detail: `레이팅 ${summary.ratingScore ?? 0}`,
-                  },
-                  {
-                    label: '속도',
-                    value: clampPercent(100 - Math.min(90, (summary.avgSolveTimeSec || 0) / 2)),
-                    detail: `평균 풀이 ${summary.avgSolveTimeSec ?? 0}초`,
-                  },
-                  {
-                    label: '경험',
-                    value: clampPercent(((summary.totalWins || 0) + (summary.losses || 0)) * 4),
-                    detail: `${(summary.totalWins ?? 0) + (summary.losses ?? 0)}경기`,
-                  },
-                  {
-                    label: '문제',
-                    value: clampPercent((summary.problemCount || summary.recentMatchCount || 0) * 12),
-                    detail: `${summary.problemCount || summary.recentMatchCount || 0}문제`,
-                  },
-                ]}
+                axes={
+                  summary.axes && summary.axes.length > 0
+                    ? summary.axes.map((axis) => ({
+                        label: axis.label,
+                        value: clampPercent(axis.value),
+                        detail: axis.detail || '',
+                        why: axis.why || '',
+                      }))
+                    : [
+                        {
+                          label: '정답',
+                          value: clampPercent(summary.solveRate ?? summary.winrate),
+                          detail: `${summary.roomId ? `${summary.roomId}번 방` : userName}`,
+                          why: '이 방의 답안만 정답과 비교한 비율입니다.\n다른 방의 승패는 이 그래프에 넣지 않습니다.',
+                        },
+                      ]
+                }
               />
             )}
           </>

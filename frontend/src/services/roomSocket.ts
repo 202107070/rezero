@@ -191,6 +191,12 @@ export interface GameStateUpdatePayload {
     isSubmitted?: boolean;
     isCorrect?: boolean;
   }>;
+  submissions?: Array<{
+    userId: string;
+    problemIndex?: number;
+    answers?: string[];
+    selectedOption?: number | null;
+  }>;
 }
 
 export interface UserReconnectedPayload {
@@ -249,6 +255,58 @@ export function getActiveRoomId(): string | null {
   return activeRoomId;
 }
 
+type SocialListener = (event: string, payload: unknown) => void;
+
+const SOCIAL_EVENT_NAMES = [
+  ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
+  ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
+  ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
+  ROOM_SOCKET_EVENTS.ROOM_INVITE,
+  ROOM_SOCKET_EVENTS.USER_DELETED,
+];
+
+const socialListeners = new Set<SocialListener>();
+const socialQueue: Array<{ event: string; payload: unknown }> = [];
+
+function deliverSocial(event: string, payload: unknown) {
+  if (socialListeners.size === 0) {
+    socialQueue.push({ event, payload });
+    if (socialQueue.length > 40) socialQueue.shift();
+    return;
+  }
+  socialListeners.forEach((listener) => {
+    try {
+      listener(event, payload);
+    } catch {
+      // 한 구독자 오류가 나머지를 막지 않게 한다
+    }
+  });
+}
+
+function bindSocialBridge(client: Socket) {
+  const marked = client as Socket & { __socialBound?: boolean };
+  if (marked.__socialBound) return;
+  marked.__socialBound = true;
+  SOCIAL_EVENT_NAMES.forEach((event) => {
+    client.on(event, (payload: unknown) => deliverSocial(event, payload));
+  });
+}
+
+/** 로비·대기방·대결·결과·연습·빌드 어디에서든 친구/초대를 받는다. */
+export function subscribeSocialEvents(listener: SocialListener): () => void {
+  socialListeners.add(listener);
+  const pending = socialQueue.splice(0, socialQueue.length);
+  pending.forEach((item) => listener(item.event, item.payload));
+  try {
+    bindSocialBridge(getRoomSocket());
+  } catch {
+    // 로그인 토큰이 없으면 다음 렌더에서 다시 붙인다
+  }
+  return () => {
+    socialListeners.delete(listener);
+  };
+}
+
 export function getRoomSocket(): Socket {
   const token = getAccessToken();
   if (!token) {
@@ -256,12 +314,14 @@ export function getRoomSocket(): Socket {
   }
 
   if (socket && socket.connected) {
+    bindSocialBridge(socket);
     return socket;
   }
 
   if (socket) {
     socket.auth = { token: `Bearer ${token}` };
     intentionalDisconnect = false;
+    bindSocialBridge(socket);
     socket.connect();
     return socket;
   }
@@ -282,6 +342,8 @@ export function getRoomSocket(): Socket {
     if (intentionalDisconnect || reason === 'io client disconnect') return;
     scheduleServerDownCheck();
   });
+
+  bindSocialBridge(socket);
 
   socket.on('connect_error', (error: Error) => {
     const message = String(error?.message || '');

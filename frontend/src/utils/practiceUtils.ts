@@ -1,6 +1,6 @@
 import problems from '../data/problems.js';
 import type { ProblemVisual } from '../types/battle';
-import { isBlankBasedType, problemSupportsLang } from './problemTypeUtils';
+import { isBlankBasedType, looseAnswerEqual, problemSupportsLang } from './problemTypeUtils';
 
 export interface PracticeExercise {
   id: string;
@@ -94,12 +94,11 @@ export function isExerciseCorrect(
     const correct = ex.answer?.[lang] || [];
     return (
       blanks.length === correct.length &&
-      blanks.every((b, i) => (b || '').trim().toLowerCase() === (correct[i] || '').trim().toLowerCase())
+      blanks.every((b, i) => looseAnswerEqual(b, correct[i]))
     );
   }
   if (ex.type === 'short_answer') {
-    const ans = (blankAnswers[idx]?.[0] || '').trim().toLowerCase();
-    return ans === (ex.answer?.[lang]?.[0] || '').trim().toLowerCase();
+    return looseAnswerEqual(blankAnswers[idx]?.[0], ex.answer?.[lang]?.[0]);
   }
   return false;
 }

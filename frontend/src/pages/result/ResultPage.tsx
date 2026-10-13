@@ -25,7 +25,6 @@ import { useAuthUser } from '../../contexts/AuthContext';
 import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot, saveFinalRankingSnapshot } from '../../services/battleSessionService';
 import { fetchRoom, leaveRoom } from '../../services/roomService';
 import {
-  disconnectRoomSocket,
   emitReviewInvite,
   emitReviewInviteResponse,
   emitFriendRemove,
@@ -74,6 +73,7 @@ import {
   removeFriend,
   removeFriendByUserId,
 } from '../../services/friendStore';
+import { BattleBGM, ResultBGM } from '../../utils/audio/gameAudio';
 import { getTierByRating } from '../../utils/tierUtils';
 import {
   clearReviewInvite,
@@ -204,6 +204,12 @@ export default function ResultPage() {
     allPlayers.find((p) => p.id === `player-${myUserId}`) ||
     allPlayers.find((p) => p.name === myUserName);
   const myScore = myPlayer?.ingameScore || 0;
+
+  useEffect(() => {
+    BattleBGM.stop();
+    ResultBGM.start();
+    return () => ResultBGM.stop();
+  }, []);
 
   useEffect(() => {
     if (!myPlayer) return;
@@ -364,20 +370,6 @@ export default function ResultPage() {
               return [...prev, { id: messageId || undefined, sender: name, text, type: 'user' as const, mode: modeLabel, time: timeStr }];
             });
           }),
-        );
-
-        unsubs.push(
-          onRoomEvent(
-            ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
-            (payload?: { fromUserId?: string; fromUserName?: string }) => {
-              if (!payload?.fromUserId) return;
-              if (String(payload.fromUserId) === String(myUserId)) return;
-              setPendingFriendRequest({
-                fromUserId: String(payload.fromUserId),
-                fromUserName: payload.fromUserName || 'UNKNOWN',
-              });
-            },
-          ),
         );
 
         unsubs.push(
@@ -1180,8 +1172,6 @@ export default function ResultPage() {
       }
     }
     setActiveRoomId(null);
-    // 로비에서 새 소켓을 붙일 수 있도록 강제 종료
-    disconnectRoomSocket(true);
     navigate(ROUTES.LOBBY);
   };
 

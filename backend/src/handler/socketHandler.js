@@ -46,6 +46,17 @@ export function registerSocketHandlers(io, socket) {
     try {
       const { listPendingFriendRequests } = await import("../api/user/friendModel.js");
       const pending = await listPendingFriendRequests(socket.user.id);
+      const inviteKey = "pending:invites:" + String(socket.user.id);
+      const savedInvites = await redisClient.hGetAll(inviteKey);
+      const inviteTokens = Object.keys(savedInvites || {});
+      for (let i = 0; i < inviteTokens.length; i++) {
+        try {
+          const payload = JSON.parse(savedInvites[inviteTokens[i]]);
+          socket.emit(SOCKET_EVENTS.ROOM_INVITE, payload);
+        } catch {
+          // 깨진 초대 기록은 건너뛴다
+        }
+      }
       for (let i = 0; i < pending.length; i++) {
         const row = pending[i];
         socket.emit(SOCKET_EVENTS.FRIEND_REQUEST, {
@@ -548,7 +559,7 @@ export function registerSocketHandlers(io, socket) {
   socket.on(SOCKET_EVENTS.FRIEND_REQUEST, async function (data, callback) {
     try {
       const { createFriendRequest, userExists } = await import("../api/user/friendModel.js");
-      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      const toUserId = data?.toUserId ? String(data.toUserId).replace(/^player-/, "") : "";
       if (!toUserId) throw new Error("친구 요청 대상이 없습니다.");
       if (toUserId === String(socket.user.id)) {
         throw new Error("자기 자신에게 친구 요청을 보낼 수 없습니다.");
@@ -586,7 +597,7 @@ export function registerSocketHandlers(io, socket) {
   socket.on(SOCKET_EVENTS.FRIEND_REQUEST_RESULT, async function (data, callback) {
     try {
       const { acceptFriendRequest, declineFriendRequest } = await import("../api/user/friendModel.js");
-      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      const toUserId = data?.toUserId ? String(data.toUserId).replace(/^player-/, "") : "";
       if (!toUserId) throw new Error("응답 대상이 없습니다.");
       const accepted = Boolean(data?.accepted);
       if (accepted) {
@@ -674,6 +685,8 @@ export function registerSocketHandlers(io, socket) {
         inviteToken,
         createdAt: Date.now(),
       };
+      await redisClient.hSet("pending:invites:" + toUserId, inviteToken, JSON.stringify(payload));
+      await redisClient.expire("pending:invites:" + toUserId, 300);
       io.to("user:" + toUserId).emit(SOCKET_EVENTS.ROOM_INVITE, payload);
       if (typeof callback === "function") {
         callback({ success: true, inviteToken });
@@ -709,9 +722,23 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
-  socket.on(SOCKET_EVENTS.ROOM_INVITE_RESPONSE, function (data, callback) {
+  socket.on(SOCKET_EVENTS.ROOM_INVITE_RESPONSE, async function (data, callback) {
     try {
-      const toUserId = data?.toUserId ? String(data.toUserId) : "";
+      const inviteKey = "pending:invites:" + String(socket.user.id);
+      const savedInvites = await redisClient.hGetAll(inviteKey);
+      const roomId = data?.roomId != null ? String(data.roomId) : "";
+      const tokens = Object.keys(savedInvites || {});
+      for (let i = 0; i < tokens.length; i++) {
+        try {
+          const saved = JSON.parse(savedInvites[tokens[i]]);
+          if (!roomId || String(saved.roomId) === roomId) {
+            await redisClient.hDel(inviteKey, tokens[i]);
+          }
+        } catch {
+          await redisClient.hDel(inviteKey, tokens[i]);
+        }
+      }
+      const toUserId = data?.toUserId ? String(data.toUserId).replace(/^player-/, "") : "";
       if (!toUserId) throw new Error("응답 대상이 없습니다.");
       const payload = {
         fromUserId: String(socket.user.id),

@@ -43,7 +43,10 @@ function parseJson(value, fallbackValue) {
 }
 
 function normalizeAnswer(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, "")
+    .toLowerCase();
 }
 
 function getAnswersForLanguage(answer, language) {

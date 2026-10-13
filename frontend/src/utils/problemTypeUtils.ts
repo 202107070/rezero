@@ -88,6 +88,18 @@ export function getProblemAnswersForLang(
   return [];
 }
 
+/** 공백·대소문자를 무시하고 정답을 비교한다. "stack overflow"와 "StackOverflow"는 같은 답이다. */
+export function looseAnswerEqual(user: unknown, expected: unknown): boolean {
+  const normalize = (value: unknown) =>
+    String(value ?? '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+  const left = normalize(user);
+  const right = normalize(expected);
+  return left.length > 0 && left === right;
+}
+
 export function problemSupportsLang(answer: Record<string, string[]> | undefined, langKey: string): boolean {
   if (!answer) return false;
   const key = String(langKey || '').toUpperCase();

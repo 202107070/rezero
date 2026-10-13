@@ -359,6 +359,7 @@ export async function analyzeMatchHistory(userId, historyId) {
   const {
     buildAnalyticsSummary,
     buildMatchAnalysisText,
+    buildRoomChart,
     generateCursorAnalysis,
     polishAnalysisText,
   } = await import("./aiAnalysis.js");
@@ -379,17 +380,7 @@ export async function analyzeMatchHistory(userId, historyId) {
   const profile = await getUserProfile(user);
   const matches = await findUserMatchAnalytics(userId, 40);
   const career = buildAnalyticsSummary(profile, matches);
-  const chartSummary = {
-    roomId: entry.roomId,
-    lang: entry.lang,
-    problemCount: Array.isArray(entry.problems) ? entry.problems.length : 0,
-    winrate: career.winrate,
-    solveRate: career.solveRate,
-    ratingScore: career.ratingScore,
-    avgSolveTimeSec: career.avgSolveTimeSec,
-    totalWins: career.totalWins,
-    losses: career.losses,
-  };
+  const chartSummary = buildRoomChart(entry);
   if (entry.aiAnalysis) {
     return {
       userId,

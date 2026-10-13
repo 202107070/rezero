@@ -4,7 +4,7 @@ import { loadAudioSettings } from './audioSettings';
 
 type WaveType = OscillatorType;
 type BattleMode = 'normal' | 'urgent';
-type MusicKind = 'none' | 'lobby' | 'battle';
+type MusicKind = 'none' | 'lobby' | 'room' | 'battle' | 'result' | 'practice' | 'build';
 type SfxType =
   | 'lightning'
   | 'paint'
@@ -37,36 +37,70 @@ interface MelodyStep {
 }
 
 const LOBBY_LOOP: MelodyStep[] = [
-  { freq: NOTE.C4, dur: 0.45, wave: 'triangle', gain: 0.18 },
-  { freq: NOTE.E4, dur: 0.45, wave: 'triangle', gain: 0.18 },
-  { freq: NOTE.G4, dur: 0.45, wave: 'triangle', gain: 0.2 },
-  { freq: NOTE.C5, dur: 0.6, wave: 'sine', gain: 0.16 },
-  { freq: NOTE.A4, dur: 0.45, wave: 'triangle', gain: 0.17 },
-  { freq: NOTE.F4, dur: 0.45, wave: 'triangle', gain: 0.17 },
-  { freq: NOTE.D4, dur: 0.6, wave: 'sine', gain: 0.16 },
-  { freq: NOTE.G4, dur: 0.75, wave: 'triangle', gain: 0.18 },
+  { freq: NOTE.C4, dur: 0.7, wave: 'sine', gain: 0.12 },
+  { freq: NOTE.E4, dur: 0.5, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.G4, dur: 0.7, wave: 'sine', gain: 0.12 },
+  { freq: NOTE.A4, dur: 0.5, wave: 'triangle', gain: 0.09 },
+  { freq: NOTE.G4, dur: 0.8, wave: 'sine', gain: 0.11 },
+  { freq: NOTE.E4, dur: 0.5, wave: 'triangle', gain: 0.09 },
+  { freq: NOTE.F4, dur: 0.6, wave: 'sine', gain: 0.1 },
+  { freq: NOTE.D4, dur: 0.9, wave: 'triangle', gain: 0.1 },
+];
+
+const ROOM_LOOP: MelodyStep[] = [
+  { freq: NOTE.D4, dur: 0.42, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.F4, dur: 0.42, wave: 'sine', gain: 0.09 },
+  { freq: NOTE.A4, dur: 0.55, wave: 'triangle', gain: 0.11 },
+  { freq: NOTE.G4, dur: 0.42, wave: 'sine', gain: 0.09 },
+  { freq: NOTE.F4, dur: 0.42, wave: 'triangle', gain: 0.09 },
+  { freq: NOTE.A4, dur: 0.7, wave: 'sine', gain: 0.1 },
 ];
 
 const BATTLE_NORMAL: MelodyStep[] = [
-  { freq: NOTE.E4, dur: 0.22, wave: 'square', gain: 0.12 },
-  { freq: NOTE.G4, dur: 0.22, wave: 'square', gain: 0.12 },
-  { freq: NOTE.B4, dur: 0.22, wave: 'square', gain: 0.13 },
-  { freq: NOTE.E5, dur: 0.28, wave: 'triangle', gain: 0.14 },
-  { freq: NOTE.D5, dur: 0.22, wave: 'square', gain: 0.12 },
-  { freq: NOTE.B4, dur: 0.22, wave: 'square', gain: 0.12 },
-  { freq: NOTE.G4, dur: 0.22, wave: 'square', gain: 0.11 },
-  { freq: NOTE.E4, dur: 0.34, wave: 'triangle', gain: 0.13 },
+  { freq: NOTE.A4, dur: 0.28, wave: 'triangle', gain: 0.11 },
+  { freq: NOTE.C5, dur: 0.28, wave: 'square', gain: 0.07 },
+  { freq: NOTE.E4, dur: 0.28, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.G4, dur: 0.36, wave: 'sine', gain: 0.11 },
+  { freq: NOTE.F4, dur: 0.24, wave: 'triangle', gain: 0.09 },
+  { freq: NOTE.E4, dur: 0.24, wave: 'square', gain: 0.06 },
+  { freq: NOTE.D4, dur: 0.28, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.E4, dur: 0.42, wave: 'sine', gain: 0.11 },
 ];
 
 const BATTLE_URGENT: MelodyStep[] = [
-  { freq: NOTE.E5, dur: 0.13, wave: 'square', gain: 0.14 },
-  { freq: NOTE.D5, dur: 0.13, wave: 'square', gain: 0.13 },
-  { freq: NOTE.E5, dur: 0.13, wave: 'square', gain: 0.14 },
-  { freq: NOTE.G5, dur: 0.13, wave: 'square', gain: 0.15 },
-  { freq: NOTE.E5, dur: 0.13, wave: 'square', gain: 0.14 },
-  { freq: NOTE.B4, dur: 0.13, wave: 'square', gain: 0.13 },
-  { freq: NOTE.G4, dur: 0.13, wave: 'square', gain: 0.12 },
-  { freq: NOTE.E4, dur: 0.2, wave: 'triangle', gain: 0.14 },
+  { freq: NOTE.A4, dur: 0.16, wave: 'square', gain: 0.08 },
+  { freq: NOTE.C5, dur: 0.16, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.E5, dur: 0.16, wave: 'square', gain: 0.08 },
+  { freq: NOTE.D5, dur: 0.16, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.C5, dur: 0.16, wave: 'square', gain: 0.07 },
+  { freq: NOTE.A4, dur: 0.16, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.G4, dur: 0.16, wave: 'sine', gain: 0.1 },
+  { freq: NOTE.E4, dur: 0.24, wave: 'triangle', gain: 0.11 },
+];
+
+const RESULT_LOOP: MelodyStep[] = [
+  { freq: NOTE.G4, dur: 0.55, wave: 'sine', gain: 0.12 },
+  { freq: NOTE.B4, dur: 0.45, wave: 'triangle', gain: 0.1 },
+  { freq: NOTE.D5, dur: 0.55, wave: 'sine', gain: 0.11 },
+  { freq: NOTE.C5, dur: 0.4, wave: 'triangle', gain: 0.09 },
+  { freq: NOTE.A4, dur: 0.5, wave: 'sine', gain: 0.1 },
+  { freq: NOTE.G4, dur: 0.9, wave: 'triangle', gain: 0.11 },
+];
+
+const PRACTICE_LOOP: MelodyStep[] = [
+  { freq: NOTE.E4, dur: 0.8, wave: 'sine', gain: 0.08 },
+  { freq: NOTE.G4, dur: 0.8, wave: 'sine', gain: 0.07 },
+  { freq: NOTE.B4, dur: 0.9, wave: 'triangle', gain: 0.08 },
+  { freq: NOTE.A4, dur: 1.0, wave: 'sine', gain: 0.07 },
+];
+
+const BUILD_LOOP: MelodyStep[] = [
+  { freq: NOTE.C4, dur: 0.28, wave: 'triangle', gain: 0.09 },
+  { freq: NOTE.G4, dur: 0.22, wave: 'sine', gain: 0.08 },
+  { freq: NOTE.E4, dur: 0.28, wave: 'triangle', gain: 0.08 },
+  { freq: NOTE.C5, dur: 0.22, wave: 'sine', gain: 0.08 },
+  { freq: NOTE.A4, dur: 0.28, wave: 'triangle', gain: 0.08 },
+  { freq: NOTE.G4, dur: 0.36, wave: 'sine', gain: 0.09 },
 ];
 
 declare global {
@@ -170,6 +204,10 @@ class GameAudioEngine {
 
   private getLoopSteps(kind: MusicKind) {
     if (kind === 'lobby') return LOBBY_LOOP;
+    if (kind === 'room') return ROOM_LOOP;
+    if (kind === 'result') return RESULT_LOOP;
+    if (kind === 'practice') return PRACTICE_LOOP;
+    if (kind === 'build') return BUILD_LOOP;
     return this.battleMode === 'urgent' ? BATTLE_URGENT : BATTLE_NORMAL;
   }
 
@@ -197,7 +235,7 @@ class GameAudioEngine {
 
   private beginMusic(kind: Exclude<MusicKind, 'none'>) {
     const settings = loadAudioSettings();
-    const enabled = kind === 'lobby' ? settings.lobbyMusic : settings.battleMusic;
+    const enabled = kind === 'battle' ? settings.battleMusic : settings.lobbyMusic;
     if (!enabled) {
       if (this.activeMusic === kind) this.stopAllMusic();
       return;
@@ -220,6 +258,22 @@ class GameAudioEngine {
     this.stopAllMusic();
   }
 
+  startRoomMusic() {
+    this.beginMusic('room');
+  }
+
+  startResultMusic() {
+    this.beginMusic('result');
+  }
+
+  startPracticeMusic() {
+    this.beginMusic('practice');
+  }
+
+  startBuildMusic() {
+    this.beginMusic('build');
+  }
+
   startBattleMusic(mode: BattleMode = 'normal') {
     this.battleMode = mode;
     this.beginMusic('battle');
@@ -238,7 +292,13 @@ class GameAudioEngine {
   }
 
   applySettings(settings: AudioSettings) {
-    if (!settings.lobbyMusic && this.activeMusic === 'lobby') {
+    const ambient =
+      this.activeMusic === 'lobby' ||
+      this.activeMusic === 'room' ||
+      this.activeMusic === 'result' ||
+      this.activeMusic === 'practice' ||
+      this.activeMusic === 'build';
+    if (!settings.lobbyMusic && ambient) {
       this.stopAllMusic();
     }
     if (!settings.battleMusic && this.activeMusic === 'battle') {
@@ -339,6 +399,26 @@ export function applyAudioSettings(settings: AudioSettings) {
 export const LobbyBGM = {
   start: () => engine.startLobbyMusic(),
   stop: () => engine.stopLobbyMusic(),
+};
+
+export const RoomBGM = {
+  start: () => engine.startRoomMusic(),
+  stop: () => engine.resetAllMusic(),
+};
+
+export const ResultBGM = {
+  start: () => engine.startResultMusic(),
+  stop: () => engine.resetAllMusic(),
+};
+
+export const PracticeBGM = {
+  start: () => engine.startPracticeMusic(),
+  stop: () => engine.resetAllMusic(),
+};
+
+export const BuildBGM = {
+  start: () => engine.startBuildMusic(),
+  stop: () => engine.resetAllMusic(),
 };
 
 export const BattleBGM = {

@@ -51,7 +51,6 @@ import {
   setActiveRoomId,
   type ChatMessagePayload,
   type LobbyPresencePayload,
-  type RoomInvitePayload,
 } from '../../services/roomSocket';
 import {
   addFriend,
@@ -61,6 +60,7 @@ import {
   getFriendUserIds,
   isFriend,
   claimFriendNotice,
+  FRIENDS_CHANGED_EVENT,
   loadFriends,
   mergeServerFriends,
   replaceFriendsFromServer,
@@ -402,33 +402,6 @@ export default function LobbyPage() {
         );
         unsubs.push(
           onRoomEvent(
-            ROOM_SOCKET_EVENTS.FRIEND_REQUEST,
-            (payload?: { fromUserId?: string; fromUserName?: string }) => {
-              if (!payload?.fromUserId) return;
-              if (String(payload.fromUserId) === String(authUser.id)) return;
-              setPendingFriendRequest({
-                fromUserId: String(payload.fromUserId),
-                fromUserName: payload.fromUserName || 'UNKNOWN',
-              });
-            },
-          ),
-        );
-        unsubs.push(
-          onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_INVITE, (payload: RoomInvitePayload) => {
-            if (!payload?.fromUserId || !payload.roomId) return;
-            if (String(payload.fromUserId) === String(authUser.id)) return;
-            setPendingRoomInvite({
-              fromUserId: String(payload.fromUserId),
-              fromUserName: payload.fromUserName || 'UNKNOWN',
-              roomId: String(payload.roomId),
-              roomTitle: payload.roomTitle || '대기실',
-              roomQuery: payload.roomQuery || `id=${payload.roomId}`,
-              inviteToken: payload.inviteToken,
-            });
-          }),
-        );
-        unsubs.push(
-          onRoomEvent(
             ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
             (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
               if (!payload) return;
@@ -536,6 +509,11 @@ export default function LobbyPage() {
   }, [applyOnlineUsers, authUser.id]);
 
   const [friendNames, setFriendNames] = useState<string[]>(() => getFriendNames());
+  useEffect(() => {
+    const sync = () => setFriendNames(getFriendNames());
+    window.addEventListener(FRIENDS_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(FRIENDS_CHANGED_EVENT, sync);
+  }, []);
   const [pendingFriendRequest, setPendingFriendRequest] = useState<{
     fromUserId: string;
     fromUserName: string;

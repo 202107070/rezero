@@ -9,8 +9,9 @@ import { PracticeProgressPanel } from '../../components/practice/PracticeProgres
 import { PracticeSetupModal } from '../../components/practice/PracticeSetupModal/PracticeSetupModal';
 import { ROUTES } from '../../constants/routes';
 import { emitUpdateLocation } from '../../services/roomSocket';
+import { LobbyBGM, PracticeBGM } from '../../utils/audio/gameAudio';
 import { getLangKey } from '../../utils/battle/codeUtils';
-import { getProblemAnswersForLang, isBlankBasedType } from '../../utils/problemTypeUtils';
+import { getProblemAnswersForLang, isBlankBasedType, looseAnswerEqual } from '../../utils/problemTypeUtils';
 import {
   createExercisePool,
   isExerciseCorrect,
@@ -66,6 +67,12 @@ export default function PracticePage() {
   }, [hasUrlParams, startPractice]);
 
   useEffect(() => {
+    LobbyBGM.stop();
+    PracticeBGM.start();
+    return () => PracticeBGM.stop();
+  }, []);
+
+  useEffect(() => {
     void emitUpdateLocation({ location: 'practice' }).catch(() => undefined);
     return () => {
       void emitUpdateLocation({ location: 'lobby' }).catch(() => undefined);
@@ -88,7 +95,7 @@ export default function PracticePage() {
     const blanks = blankAnswers[currentIndex] || [];
     if (blanks.length !== correctAnswers.length) return false;
     for (let i = 0; i < blanks.length; i++) {
-      if ((blanks[i] || '').trim().toLowerCase() !== (correctAnswers[i] || '').trim().toLowerCase()) return false;
+      if (!looseAnswerEqual(blanks[i], correctAnswers[i])) return false;
     }
     return true;
   };
@@ -96,8 +103,7 @@ export default function PracticePage() {
   const isShortAnswerCorrect = () => {
     const blankCount = (currentEx.question?.match(/_____/g) || []).length;
     if (currentEx.type !== 'short_answer' || blankCount > 0) return false;
-    const ans = (blankAnswers[currentIndex]?.[0] || '').trim().toLowerCase();
-    return ans === (correctAnswers[0] || '').trim().toLowerCase();
+    return looseAnswerEqual(blankAnswers[currentIndex]?.[0], correctAnswers[0]);
   };
 
   const isCorrect = isMultipleChoiceCorrect || isFillBlankCorrect() || isShortAnswerCorrect();

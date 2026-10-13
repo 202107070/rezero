@@ -178,6 +178,10 @@ function parseProblemSnapshot(value) {
   }
 }
 
+function writtenKey(matchId, userId) {
+  return "battle:written:" + matchId + ":" + userId;
+}
+
 function submittedKey(matchId, problemIndex) {
   return "battle:submitted:" + matchId + ":" + problemIndex;
 }
@@ -537,6 +541,16 @@ export async function submitBattleAnswer(input) {
     .expire(scoreKey(input.matchId), 60 * 60)
     .sAdd(progressKey(input.matchId, input.userId), String(input.problemIndex))
     .expire(progressKey(input.matchId, input.userId), 60 * 60)
+    .hSet(
+      writtenKey(input.matchId, input.userId),
+      String(input.problemIndex),
+      JSON.stringify({
+        answers: Array.isArray(input.answers) ? input.answers : [],
+        selectedOption:
+          input.selectedOption == null ? null : Number(input.selectedOption),
+      }),
+    )
+    .expire(writtenKey(input.matchId, input.userId), 60 * 60)
     .exec();
 
   const io = getSocket();
@@ -562,12 +576,34 @@ export async function submitBattleAnswer(input) {
       }
     }
 
+    const submissions = [];
+    for (let i = 0; i < participants.length; i++) {
+      const uid = String(participants[i].userId);
+      const written = await redisClient.hGetAll(writtenKey(input.matchId, uid));
+      const fields = Object.keys(written || {});
+      for (let j = 0; j < fields.length; j++) {
+        try {
+          const parsed = JSON.parse(written[fields[j]]);
+          submissions.push({
+            userId: uid,
+            problemIndex: Number(fields[j]),
+            answers: Array.isArray(parsed.answers) ? parsed.answers : [],
+            selectedOption:
+              parsed.selectedOption == null ? null : Number(parsed.selectedOption),
+          });
+        } catch {
+          // 깨진 답안 기록은 건너뛴다
+        }
+      }
+    }
+
     socketGameService.broadcastGameState(io, String(matchProblem.roomId), {
       roomId: String(matchProblem.roomId),
       question: { index: input.problemIndex },
       remainingTime: null,
       scores,
       submitStatuses,
+      submissions,
     });
   }
 
