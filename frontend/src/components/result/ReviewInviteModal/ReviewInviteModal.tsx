@@ -43,16 +43,22 @@ export function ReviewInviteModal({
         <div className="player-list">
           {players.map((p) => {
             const isSelf = p.id === myUserId;
+            const pid = String(p.id).replace(/^player-/, '');
+            const departed =
+              (departedUserIds?.has(p.id) ||
+                departedUserIds?.has(pid) ||
+                departedUserIds?.has(`player-${pid}`)) ??
+              false;
             return (
               <ResultPlayerRow
                 key={p.id}
                 player={p}
                 showRank
                 panelClass={`rank-${p.rank <= 3 ? p.rank : ''}`}
-                departed={departedUserIds?.has(p.id) ?? false}
-                inviteSelectable={!isSelf && !waiting}
+                departed={departed}
+                inviteSelectable={!isSelf && !waiting && !departed}
                 inviteSelected={selectedTargetIds.has(p.id)}
-                onInviteSelect={!isSelf && !waiting ? () => onToggleTarget(p.id) : undefined}
+                onInviteSelect={!isSelf && !waiting && !departed ? () => onToggleTarget(p.id) : undefined}
               />
             );
           })}

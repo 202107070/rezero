@@ -1,3 +1,5 @@
+import { runPreviewProgram } from './previewRuntime';
+
 export type BuildLogLevel = 'info' | 'success' | 'warn' | 'error' | 'stdout';
 
 export interface BuildLogLine {
@@ -13,36 +15,8 @@ const LANG_LABEL: Record<string, string> = {
   CSS: 'CSS',
 };
 
-function unwrapLiteral(raw: string): string {
-  const text = String(raw || '').replace(/<<|endl/g, ' ').trim();
-  if (!text) return '';
-  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
-    return text.slice(1, -1);
-  }
-  return text;
-}
-
-function extractProgramOutput(code: string, lang: string): string[] {
-  const lines: string[] = [];
-  if (lang === 'JAVA') {
-    for (const match of code.matchAll(/System\.out\.println\s*\(([^)]*)\)/g)) {
-      const value = unwrapLiteral(match[1]);
-      if (value) lines.push(value);
-    }
-  } else if (lang === 'PYTHON') {
-    for (const match of code.matchAll(/print\s*\(([^)]*)\)/g)) {
-      const value = unwrapLiteral(match[1]);
-      if (value) lines.push(value);
-    }
-  } else if (lang === 'CPP') {
-    const parts = code.split(/cout\s*<</).slice(1);
-    for (const part of parts) {
-      const chunk = part.split(';')[0] || '';
-      const value = unwrapLiteral(chunk);
-      if (value) lines.push(value);
-    }
-  }
-  return lines;
+function extractProgramOutput(code: string): string[] {
+  return runPreviewProgram(code);
 }
 
 function sleep(ms: number) {
@@ -127,12 +101,20 @@ export async function runBuildSimulation(
   await emit({ level: 'info', text: '[build] 구문 검사 통과' });
   await emit({ level: 'stdout', text: '--- program output (preview) ---' }, 30);
 
-  const outputs = extractProgramOutput(code, lang);
-  if (outputs.length === 0) {
+  let outputs: string[] = [];
+  let previewError = '';
+  try {
+    outputs = extractProgramOutput(code);
+  } catch (error) {
+    previewError = error instanceof Error ? error.message : '출력 미리보기에 실패했습니다.';
+  }
+  if (previewError) {
+    await emit({ level: 'error', text: `[error] ${previewError}` }, 40);
+  } else if (outputs.length === 0) {
     await emit({ level: 'stdout', text: '(실행 출력 없음)' }, 40);
   } else {
     for (const line of outputs) {
-      await emit({ level: 'stdout', text: line }, 40);
+      await emit({ level: 'stdout', text: line.length > 0 ? line : ' ' }, 40);
     }
   }
 

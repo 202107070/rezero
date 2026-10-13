@@ -166,6 +166,17 @@ export async function listOnlineUsers() {
   }
 }
 
+export async function getUserLocation(userId) {
+  if (!userId) return "lobby";
+  try {
+    const meta = await redisClient.hGetAll(ONLINE_META_PREFIX + String(userId));
+    if (!meta || !meta.userId) return "offline";
+    return normalizeLocation(meta.location || "lobby");
+  } catch {
+    return "lobby";
+  }
+}
+
 export async function broadcastLobbyPresence(io) {
   if (!io) return;
   const users = await listOnlineUsers();

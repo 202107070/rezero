@@ -30,7 +30,13 @@ function looksLikeMarkupOrStyle(question: string): boolean {
   return false;
 }
 
-/** 빌드 시스템 대상 — 실행 결과를 알 수 있는 코드 빈칸만. CSS/HTML 은 제외 */
+function hasRunnablePreview(question: string): boolean {
+  const hasOutput = /System\.out\.print|print\s*\(|cout\s*<</.test(question);
+  const hasLoop = /\bfor\s*\(|\bfor\s+[A-Za-z_]\w*\s+in\s+range\s*\(/.test(question);
+  return hasOutput && hasLoop;
+}
+
+/** 반복 출력으로 정답을 시험할 수 있는 코드 빈칸만 빌드 시스템을 붙인다. */
 export function isCodeBlankBuildProblem(
   problem?: {
     type?: string;
@@ -46,7 +52,7 @@ export function isCodeBlankBuildProblem(
   const question = problem.question || '';
   if (!/_____/.test(question)) return false;
   if (looksLikeMarkupOrStyle(question)) return false;
-  return true;
+  return hasRunnablePreview(question);
 }
 
 export function getProblemTypeLabel(type: string): string {

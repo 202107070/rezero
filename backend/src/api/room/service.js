@@ -351,6 +351,17 @@ export async function joinRoom(roomId, userId, input) {
 
 export async function leaveRoom(roomId, userId) {
   const roomBefore = await roomModel.findRoomById(roomId);
+  let leftName = "유저";
+  try {
+    const before = await roomModel.findRoomParticipants(roomId);
+    const mine = (before || []).find(function (participant) {
+      return String(participant.userId) === String(userId);
+    });
+    leftName =
+      (mine && (mine.displayName || mine.username)) || leftName;
+  } catch {
+    // ignore
+  }
   const result = await roomModel.leaveRoomAndSelectRandomHost(roomId, userId);
 
   if (!result.success) {
@@ -373,9 +384,26 @@ export async function leaveRoom(roomId, userId) {
     io.to(String(roomId)).emit(SOCKET_EVENTS.USER_LEFT, {
       roomId: String(roomId),
       userId: String(userId),
+      displayName: leftName,
       roomClosed: Boolean(result.roomClosed),
       newHostUserId: result.newHostUserId ? String(result.newHostUserId) : null,
       remainingPlayers,
+    });
+    const rosterRoom = result.roomClosed ? null : await roomModel.findRoomById(roomId);
+    const rosterParticipants = result.roomClosed
+      ? []
+      : await roomModel.findRoomParticipants(roomId);
+    io.emit(SOCKET_EVENTS.ROOM_ROSTER, {
+      roomId: String(roomId),
+      currentPlayers: result.roomClosed ? 0 : remainingPlayers,
+      participantIds: (rosterParticipants || []).map(function (participant) {
+        return String(participant.userId);
+      }),
+      status: abandonNoPlayers
+        ? "WAITING"
+        : rosterRoom?.status || (result.roomClosed ? "CLOSED" : "WAITING"),
+      leftUserId: String(userId),
+      leftUserName: leftName,
     });
 
     if (abandonNoPlayers) {

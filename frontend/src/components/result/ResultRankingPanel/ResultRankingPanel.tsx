@@ -18,6 +18,7 @@ interface ResultRankingPanelProps {
   onStartReview: () => void;
   onCancelReview: () => void;
   onRequestReview: () => void;
+  reviewBlocked?: boolean;
 }
 
 export function ResultRankingPanel({
@@ -35,6 +36,7 @@ export function ResultRankingPanel({
   onStartReview,
   onCancelReview,
   onRequestReview,
+  reviewBlocked = false,
 }: ResultRankingPanelProps) {
   return (
     <div className="ranking-panel" style={{ borderColor: rankBorderColor, boxShadow: rankGlow }}>
@@ -66,6 +68,7 @@ export function ResultRankingPanel({
         onStartReview={onStartReview}
         onCancelReview={onCancelReview}
         onRequestReview={onRequestReview}
+        reviewBlocked={reviewBlocked}
       />
     </div>
   );

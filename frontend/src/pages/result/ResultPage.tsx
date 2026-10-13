@@ -39,6 +39,7 @@ import {
   sendRoomMessage,
   setActiveRoomId,
   type ChatMessagePayload,
+  type LobbyPresencePayload,
   type ReviewInviteResponsePayload,
   type ReviewInviteSocketPayload,
 } from '../../services/roomSocket';
@@ -296,6 +297,10 @@ export default function ResultPage() {
   ]);
   const [aiInput, setAiInput] = useState('');
   const [departedUserIds, setDepartedUserIds] = useState<Set<string>>(() => new Set());
+  const [awayUserIds, setAwayUserIds] = useState<Set<string>>(() => new Set());
+  const allPlayersRef = useRef(allPlayers);
+  const seenLocationRef = useRef(new Map<string, string>());
+  allPlayersRef.current = allPlayers;
 
   const [reviewPhase, setReviewPhase] = useState<ReviewPhase>('idle');
   const [selectedReviewProblems, setSelectedReviewProblems] = useState<Set<number>>(() => new Set());
@@ -422,6 +427,42 @@ export default function ResultPage() {
               ]);
             },
           ),
+        );
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.LOBBY_PRESENCE, (payload: LobbyPresencePayload) => {
+            const notices: string[] = [];
+            const away = new Set<string>();
+            for (const player of allPlayersRef.current) {
+              if (!player?.id || String(player.id) === String(myUserId) || shouldAutoAcceptReviewInvite(player.id)) {
+                continue;
+              }
+              const pid = String(player.id).replace(/^player-/, '');
+              const remote = (payload.users || []).find(
+                (user) => String(user.userId || '').replace(/^player-/, '') === pid,
+              );
+              if (!remote) continue;
+              const loc = String(remote.location || '');
+              const prev = seenLocationRef.current.get(pid);
+              const name = player.name || remote.displayName || '상대';
+              if (prev !== loc) {
+                if (loc === 'lobby') notices.push(`${name} 유저가 로비로 이동하였습니다.`);
+                if (loc === 'room') notices.push(`${name} 유저가 대기방으로 이동하였습니다.`);
+                seenLocationRef.current.set(pid, loc);
+              }
+              if (loc === 'lobby' || loc === 'room') {
+                away.add(player.id);
+                away.add(pid);
+                away.add(`player-${pid}`);
+              }
+            }
+            setAwayUserIds(away);
+            if (notices.length === 0) return;
+            setChatMessages((prev) => [
+              ...prev,
+              ...notices.map((text) => ({ sender: 'SYSTEM', text, type: 'sys' as const })),
+            ]);
+          }),
         );
 
         unsubs.push(
@@ -816,7 +857,35 @@ export default function ResultPage() {
     });
   };
 
+  const unavailableIds = useMemo(() => {
+    const next = new Set(departedUserIds);
+    awayUserIds.forEach((id) => next.add(id));
+    return next;
+  }, [departedUserIds, awayUserIds]);
+
+  const reviewBlocked = useMemo(() => {
+    const humans = allPlayers.filter(
+      (player) => player.id !== myUserId && !shouldAutoAcceptReviewInvite(player.id),
+    );
+    if (humans.length === 0) return false;
+    return humans.every((player) => {
+      const pid = String(player.id).replace(/^player-/, '');
+      return unavailableIds.has(player.id) || unavailableIds.has(pid) || unavailableIds.has(`player-${pid}`);
+    });
+  }, [allPlayers, myUserId, unavailableIds]);
+
   const handleStartReview = () => {
+    if (reviewBlocked) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          sender: 'SYSTEM',
+          text: '상대가 이미 대기방이나 로비로 이동하여 리뷰할 수 없습니다.',
+          type: 'sys',
+        },
+      ]);
+      return;
+    }
     setReviewPhase('selecting');
     setSelectedReviewProblems(new Set());
     setReviewPulse((value) => value + 1);
@@ -857,6 +926,21 @@ export default function ResultPage() {
   const handleInvite = () => {
     const targets = [...inviteTargetIds];
     if (targets.length === 0 || selectedReviewProblems.size === 0) return;
+    const moved = targets.filter((id) => {
+      const pid = String(id).replace(/^player-/, '');
+      return unavailableIds.has(id) || unavailableIds.has(pid) || unavailableIds.has(`player-${pid}`);
+    });
+    if (moved.length > 0) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          sender: 'SYSTEM',
+          text: '상대가 이미 대기방이나 로비로 이동하여 리뷰할 수 없습니다.',
+          type: 'sys',
+        },
+      ]);
+      return;
+    }
 
     const targetNames = targets
       .map((id) => allPlayers.find((p) => p.id === id)?.name || '')
@@ -1202,7 +1286,7 @@ export default function ResultPage() {
               players={allPlayers}
               rankBorderColor={rankBorderColor}
               rankGlow={rankGlow}
-              departedUserIds={departedUserIds}
+              departedUserIds={unavailableIds}
               myUserId={myUserId}
               reviewSelectMode={reviewSelectMode}
               reviewPulse={reviewPulse}
@@ -1213,6 +1297,7 @@ export default function ResultPage() {
               onStartReview={handleStartReview}
               onCancelReview={handleCancelReview}
               onRequestReview={handleRequestReview}
+              reviewBlocked={reviewBlocked}
             />
           </div>
         ) : (
@@ -1221,7 +1306,7 @@ export default function ResultPage() {
               <ResultTeamPanel
                 variant="win"
                 players={winners}
-                departedUserIds={departedUserIds}
+                departedUserIds={unavailableIds}
                 myUserId={myUserId}
                 reviewSelectMode={reviewSelectMode}
                 reviewPulse={reviewPulse}
@@ -1235,7 +1320,7 @@ export default function ResultPage() {
               <ResultTeamPanel
                 variant="lose"
                 players={losers}
-                departedUserIds={departedUserIds}
+                departedUserIds={unavailableIds}
                 myUserId={myUserId}
                 reviewSelectMode={reviewSelectMode}
                 reviewPulse={reviewPulse}
@@ -1250,6 +1335,7 @@ export default function ResultPage() {
                 playerCount={allPlayers.length}
                 reviewSelectMode={reviewSelectMode}
                 selectedCount={selectedReviewProblems.size}
+                reviewBlocked={reviewBlocked}
                 onStartReview={handleStartReview}
                 onCancelReview={handleCancelReview}
                 onRequestReview={handleRequestReview}
@@ -1295,7 +1381,7 @@ export default function ResultPage() {
         myUserId={myUserId}
         rankBorderColor={rankBorderColor}
         rankGlow={rankGlow}
-        departedUserIds={departedUserIds}
+        departedUserIds={unavailableIds}
         selectedTargetIds={inviteTargetIds}
         allowMultiple={isVersusMany}
         waiting={inviteWaiting}

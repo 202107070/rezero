@@ -25,6 +25,7 @@ export const SOCKET_EVENTS = {
 
   /** 로비 접속자 목록 */
   LOBBY_PRESENCE: "lobby_presence",
+  ROOM_ROSTER: "room_roster",
   /** 결과 화면 리뷰 초대 */
   REVIEW_INVITE: "review_invite",
   REVIEW_INVITE_RESPONSE: "review_invite_response",

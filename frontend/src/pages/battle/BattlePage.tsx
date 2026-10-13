@@ -50,6 +50,7 @@ import {
   type BattleItemUsedPayload,
   type ChatMessagePayload,
   type GameStateUpdatePayload,
+  type RoomRosterPayload,
   type UserReconnectedPayload,
 } from '../../services/roomSocket';
 import { fetchRoom, leaveRoom, getRoomErrorMessage } from '../../services/roomService';
@@ -74,7 +75,7 @@ import {
   type ScribbleStroke,
 } from '../../utils/battle/canvasEffects';
 import { ExitConfirmModal } from '../../components/lobby/ExitConfirmModal/ExitConfirmModal';
-import { assembleCode, buildPreviewSource, DEFAULT_TEMPLATE, detectBuildLang, getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
+import { assembleCode, buildPreviewSource, DEFAULT_TEMPLATE, getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
 import { canUseItem, resolveProblemCapabilities } from '../../utils/problemCapabilities';
 import {
   areAllBotsSolvedOnPlayerProblem,
@@ -304,7 +305,7 @@ export default function BattlePage() {
     [currentProblem, currentIndex, langKey, blankAnswers, selectedOption],
   );
 
-  const buildLangKey = detectBuildLang(currentProblem?.question || '', langKey);
+  const buildLangKey = getLangKey(langKey);
   const buildLangLabel = getLangLabel(buildLangKey);
   const showBuildPanel = currentCaps.showCodePanel && isCodeBlankBuildProblem(currentProblem, buildLangKey);
   const buildsAllowed = BATTLE_BUILD_LIMIT + (buildBonusByProblem[currentIndex] || 0);
@@ -1046,7 +1047,7 @@ export default function BattlePage() {
               if (!alreadyDeparted) {
                 setChatMessages((messages) => [
                   ...messages,
-                  { sender: 'SYSTEM', text: `${leftName} 님이 게임에서 나갔습니다.`, time: '' },
+                  { sender: 'SYSTEM', text: `${leftName}가 퇴장하였습니다`, time: '' },
                 ]);
               }
               setBattleBots((prev) =>
@@ -1075,6 +1076,44 @@ export default function BattlePage() {
               }
             },
           ),
+        );
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload?: RoomRosterPayload) => {
+            if (String(payload?.roomId || '') !== String(roomId)) return;
+            const active = new Set(
+              (payload?.participantIds || []).map((id) => String(id).replace(/^player-/, '')),
+            );
+            const roster = Array.isArray(battleMeta.roomRoster)
+              ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
+              : [];
+            const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
+            const newlyLeft: string[] = [];
+            for (const player of roster) {
+              const id = String(player.userId || '').replace(/^player-/, '');
+              if (!id || id === myId || active.has(id) || departedUserIdsRef.current.has(id)) continue;
+              departedUserIdsRef.current.add(id);
+              newlyLeft.push(player.name || '상대');
+            }
+            if (newlyLeft.length > 0) {
+              setChatMessages((messages) => [
+                ...messages,
+                ...newlyLeft.map((name) => ({
+                  sender: 'SYSTEM',
+                  text: `${name}가 퇴장하였습니다`,
+                  time: '',
+                })),
+              ]);
+              setBattleBots((prev) =>
+                prev.filter((bot) => !departedUserIdsRef.current.has(String(bot.id).replace(/^player-/, ''))),
+              );
+            }
+            const remaining = Number(payload?.currentPlayers ?? active.size);
+            if (remaining <= 1) {
+              clearBattleAndLeave(sessionId, roomId);
+              navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
+            }
+          }),
         );
 
         unsubs.push(
@@ -1275,7 +1314,7 @@ export default function BattlePage() {
             ...messages,
             ...newlyLeft.map((name) => ({
               sender: 'SYSTEM',
-              text: `${name} 님이 게임에서 나갔습니다.`,
+              text: `${name}가 퇴장하였습니다`,
               time: '',
             })),
           ]);

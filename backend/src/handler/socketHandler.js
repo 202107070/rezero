@@ -17,6 +17,7 @@ import {
   broadcastLobbyPresence,
   listOnlineUsers,
   updateUserLocation,
+  getUserLocation,
   LOBBY_ROOM_ID,
 } from "#service/socketService.js";
 import gameStartService from "#service/manageGameService.js";
@@ -466,7 +467,7 @@ export function registerSocketHandlers(io, socket) {
     },
   );
 
-  socket.on(SOCKET_EVENTS.REVIEW_INVITE, function (data, callback) {
+  socket.on(SOCKET_EVENTS.REVIEW_INVITE, async function (data, callback) {
     try {
       const roomId = data?.roomId ? String(data.roomId) : "";
       const toUserIds = Array.isArray(data?.toUserIds)
@@ -476,6 +477,14 @@ export function registerSocketHandlers(io, socket) {
           : [];
       if (!roomId || toUserIds.length === 0) {
         throw new Error("리뷰 초대 대상이 없습니다.");
+      }
+      for (let i = 0; i < toUserIds.length; i++) {
+        const targetId = String(toUserIds[i] || "").replace(/^player-/, "");
+        if (!targetId || targetId.startsWith("bot-") || targetId.includes("demo-bot")) continue;
+        const location = await getUserLocation(targetId);
+        if (location === "lobby" || location === "room" || location === "offline") {
+          throw new Error("상대가 이미 대기방이나 로비로 이동하여 리뷰할 수 없습니다.");
+        }
       }
       const payload = {
         id: data.id || "review-" + Date.now(),
@@ -705,6 +714,21 @@ export function registerSocketHandlers(io, socket) {
       const roomTitle = data?.roomTitle != null ? String(data.roomTitle) : "";
       const ratingScore =
         data?.ratingScore != null ? Number(data.ratingScore) : undefined;
+      if (location === "lobby" || location === "practice" || location === "build") {
+        try {
+          const { leaveRoom } = await import("../api/room/service.js");
+          const activeRooms = await roomModel.findActiveRoomIdsByUser(socket.user.id);
+          for (let i = 0; i < activeRooms.length; i++) {
+            try {
+              await leaveRoom(activeRooms[i], socket.user.id);
+            } catch {
+              // 이미 나간 방은 무시
+            }
+          }
+        } catch (leaveError) {
+          console.error("[location leaveRoom] " + leaveError.message);
+        }
+      }
       await updateUserLocation(socket.user, {
         location,
         roomId,

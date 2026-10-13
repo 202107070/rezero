@@ -23,6 +23,7 @@ export const ROOM_SOCKET_EVENTS = {
   REQUEST_NEXT_QUESTION: 'request_next_question',
   NEXT_QUESTION_STARTED: 'next_question_started',
   LOBBY_PRESENCE: 'lobby_presence',
+  ROOM_ROSTER: 'room_roster',
   REVIEW_INVITE: 'review_invite',
   REVIEW_INVITE_RESPONSE: 'review_invite_response',
   ROOM_INVITE: 'room_invite',
@@ -176,8 +177,19 @@ export interface GameStartedPayload {
 export interface UserLeftPayload {
   roomId: string;
   userId: string;
+  displayName?: string;
   roomClosed?: boolean;
   newHostUserId?: string | null;
+  remainingPlayers?: number;
+}
+
+export interface RoomRosterPayload {
+  roomId: string;
+  currentPlayers: number;
+  participantIds?: string[];
+  status?: string;
+  leftUserId?: string;
+  leftUserName?: string;
 }
 
 export interface GameStateUpdatePayload {

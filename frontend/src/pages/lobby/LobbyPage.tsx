@@ -51,6 +51,7 @@ import {
   setActiveRoomId,
   type ChatMessagePayload,
   type LobbyPresencePayload,
+  type RoomRosterPayload,
 } from '../../services/roomSocket';
 import {
   addFriend,
@@ -675,6 +676,26 @@ export default function LobbyPage() {
   }, [authUser.id]);
 
   useEffect(() => {
+    const unsub = onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload: RoomRosterPayload) => {
+      const roomId = String(payload?.roomId || '');
+      if (!roomId) return;
+      const current = Number(payload.currentPlayers || 0);
+      setRooms((prev) => {
+        if (current <= 0) return prev.filter((room) => String(room.id) !== roomId);
+        return prev.map((room) => {
+          if (String(room.id) !== roomId) return room;
+          const max = room.maxPlayers || 8;
+          const status = payload.status === 'STARTED' ? 'STARTED' : 'WAITING';
+          return {
+            ...room,
+            currentPlayers: current,
+            players: `${current}/${max}`,
+            status,
+          };
+        });
+      });
+      void refreshRooms();
+    });
     void refreshRooms();
     const onPageShow = () => {
       void refreshRooms();
@@ -691,6 +712,7 @@ export default function LobbyPage() {
     window.addEventListener('focus', onPageShow);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      unsub();
       window.clearInterval(timer);
       window.removeEventListener('pageshow', onPageShow);
       window.removeEventListener('focus', onPageShow);

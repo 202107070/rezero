@@ -309,6 +309,8 @@ export function buildRoomChart(entry) {
   let choiceCorrect = 0;
   let shortTotal = 0;
   let shortCorrect = 0;
+  let langSpecific = 0;
+  let langSpecificOk = 0;
 
   for (let i = 0; i < problems.length; i++) {
     const problem = problems[i] || {};
@@ -349,6 +351,15 @@ export function buildRoomChart(entry) {
       if (ok) shortCorrect += 1;
     }
     if (ok) correct += 1;
+
+    const langAnswers = JSON.stringify(answerMap[lang] || []);
+    const differs = Object.keys(answerMap).some(function (key) {
+      return key !== lang && JSON.stringify(answerMap[key] || []) !== langAnswers;
+    });
+    if (differs && Array.isArray(answerMap[lang]) && answerMap[lang].length > 0) {
+      langSpecific += 1;
+      if (ok) langSpecificOk += 1;
+    }
   }
 
   const percent = function (num, den) {
@@ -358,10 +369,22 @@ export function buildRoomChart(entry) {
   const roomLabel = entry?.roomId ? String(entry.roomId) + "번 방" : "이 방";
   const solveRate = percent(correct, total);
   const attemptRate = percent(attempted, total);
-  const blankRate = percent(blankCorrect, blankTotal);
   const choiceRate = percent(choiceCorrect, choiceTotal);
   const shortRate = percent(shortCorrect, shortTotal);
   const missed = Math.max(0, total - correct);
+  const langNames = { JAVA: "Java", PYTHON: "Python", CPP: "C++", HTML: "HTML", CSS: "CSS" };
+  const langName = langNames[lang] || lang;
+  const solveTimeList = parseMaybeArray(entry?.solveTimes)
+    .map(Number)
+    .filter(function (n) {
+      return Number.isFinite(n) && n > 0;
+    });
+  const avgSec = solveTimeList.length ? avg(solveTimeList) : 0;
+  const speedScore = solveTimeList.length
+    ? Math.max(0, Math.min(100, Math.round((1 - Math.min(avgSec, 180) / 180) * 1000) / 10))
+    : 0;
+  const times = solveTimeList;
+  const langScore = langSpecific ? percent(langSpecificOk, langSpecific) : solveRate;
 
   return {
     roomId: entry?.roomId ? String(entry.roomId) : "",
@@ -388,26 +411,29 @@ export function buildRoomChart(entry) {
           "%입니다.\n다른 방 전적은 넣지 않고, 이 방에 남긴 답만 정답과 비교했습니다.",
       },
       {
-        label: "시도",
-        value: attemptRate,
-        detail: attempted + "/" + total + "문제",
-        why:
-          attempted +
-          "문제에 답을 적고 " +
-          Math.max(0, total - attempted) +
-          "문제는 비워 두었습니다.\n비운 문제는 정답률에서 빠지므로, 막혀도 일부만 적어도 시도 점수가 올라갑니다.",
+        label: "속도",
+        value: speedScore,
+        detail: times.length ? "평균 " + formatSeconds(avgSec) : "시간 기록 없음",
+        why: times.length
+          ? "맞힌 문제의 평균 풀이 시간은 " +
+            formatSeconds(avgSec) +
+            "입니다.\n3분 안에 가까울수록 속도 점수가 높고, 이 방의 기록만 반영합니다."
+          : "이 방에는 문제별 풀이 시간이 남아 있지 않습니다.\n다음 판부터 맞힌 문제의 시간이 속도 축에 쌓입니다.",
       },
       {
-        label: "빈칸",
-        value: blankTotal ? blankRate : attemptRate,
-        detail: blankTotal ? blankCorrect + "/" + blankTotal + "빈칸" : "빈칸 문제 없음",
-        why: blankTotal
-          ? "빈칸 " +
-            blankTotal +
+        label: "언어",
+        value: langScore,
+        detail: langName + (langSpecific ? " · " + langSpecificOk + "/" + langSpecific : ""),
+        why: langSpecific
+          ? langName +
+            "에서만 표기가 다른 문제 " +
+            langSpecific +
             "개 중 " +
-            blankCorrect +
-            "개가 맞았습니다.\n공백과 대소문자는 같은 답으로 보고, 글자 내용이 다를 때만 오답입니다."
-          : "이 방에는 빈칸 문제가 없어 시도율로 대신 표시했습니다.\n빈칸이 있는 판과 숫자를 섞지 않기 위한 값입니다.",
+            langSpecificOk +
+            "개를 맞혔습니다.\nJava의 println과 Python의 print처럼, 이 방 언어의 정답만 비교했습니다."
+          : "이 방 언어는 " +
+            langName +
+            "이고, 문제는 언어마다 정답이 같지 않은 문항이 없었습니다.\n정답률과 같은 값으로, 어떤 언어 판이었는지만 따로 보여 줍니다.",
       },
       {
         label: "객관식",

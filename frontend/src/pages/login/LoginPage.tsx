@@ -108,14 +108,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-page page-container">
+    <div className={`login-page page-container${mode === 'signup' ? ' is-signup' : ''}`}>
       <div className="login-container">
         <div className="login-header">
           <h1 className="login-logo">RE:ZERO</h1>
           <p className="login-subtitle">코딩 배틀 아레나에 오신 것을 환영합니다</p>
         </div>
 
-        <div className="login-card">
+        <div className={`login-card${mode === 'signup' ? ' is-signup' : ''}`}>
           <div className="login-tabs">
             <button
               type="button"

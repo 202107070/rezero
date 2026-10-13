@@ -99,6 +99,7 @@ export async function apiRequest<T>(
     response = await fetch(`${API_PREFIX}${path}`, {
       ...options,
       headers,
+      cache: options.cache || 'no-store',
     });
   } catch {
     const error = new ApiError(0, 'NETWORK_ERROR', '서버에 연결할 수 없습니다.');

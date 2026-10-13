@@ -80,6 +80,7 @@ import {
   type GameStartedPayload,
   type RoomInviteResponsePayload,
   type UserLeftPayload,
+  type RoomRosterPayload,
 } from '../../services/roomSocket';
 import type { RoomChatMessage, RoomPlayer, RoomSettings } from '../../types/room';
 import { RoomFriendMessenger } from '../../components/room/RoomFriendMessenger/RoomFriendMessenger';
@@ -595,14 +596,20 @@ export default function RoomPage() {
                   navigate(ROUTES.LOBBY);
                   return;
                 }
-                const leftId = payload.userId ? String(payload.userId) : '';
-                const leaveLine = '>> 유저가 퇴장했습니다.';
+                const leftId = payload.userId ? String(payload.userId).replace(/^player-/, '') : '';
+                const leftName =
+                  payload.displayName ||
+                  playersRef.current.find((player) => player && String(player.userId).replace(/^player-/, '') === leftId)?.name ||
+                  '유저';
+                const leaveLine = `>> ${leftName}가 퇴장하였습니다`;
                 if (shouldShowRoomNotice(`${leaveLine}:${leftId || 'unknown'}`)) {
                   setMessages((prev) => [...prev, { type: 'sys', text: leaveLine }]);
                 }
                 if (leftId) {
                   setPlayers((prev) =>
-                    prev.map((player) => (player && String(player.userId) === leftId ? null : player)),
+                    prev.map((player) =>
+                      player && String(player.userId).replace(/^player-/, '') === leftId ? null : player,
+                    ),
                   );
                 }
                 if (payload.newHostUserId) {
@@ -619,6 +626,17 @@ export default function RoomPage() {
                     ),
                   );
                 }
+                void fetchRoom(numericRoomId)
+                  .then((nextRoom) => {
+                    if (!cancelled) applyRoom(nextRoom, { resetChat: false });
+                  })
+                  .catch(() => undefined);
+              }),
+            );
+
+            unsubs.push(
+              onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload: RoomRosterPayload) => {
+                if (String(payload?.roomId || '') !== String(numericRoomId)) return;
                 void fetchRoom(numericRoomId)
                   .then((nextRoom) => {
                     if (!cancelled) applyRoom(nextRoom, { resetChat: false });
