@@ -300,6 +300,7 @@ export default function ResultPage() {
   const [awayUserIds, setAwayUserIds] = useState<Set<string>>(() => new Set());
   const allPlayersRef = useRef(allPlayers);
   const seenLocationRef = useRef(new Map<string, string>());
+  const awayStayRef = useRef(new Set<string>());
   allPlayersRef.current = allPlayers;
 
   const [reviewPhase, setReviewPhase] = useState<ReviewPhase>('idle');
@@ -445,12 +446,18 @@ export default function ResultPage() {
               const loc = String(remote.location || '');
               const prev = seenLocationRef.current.get(pid);
               const name = player.name || remote.displayName || '상대';
-              if (prev !== loc) {
-                if (loc === 'lobby') notices.push(`${name} 유저가 로비로 이동하였습니다.`);
-                if (loc === 'room') notices.push(`${name} 유저가 대기방으로 이동하였습니다.`);
-                seenLocationRef.current.set(pid, loc);
+              const wasInMatch = prev === 'result' || prev === 'battle';
+              if (prev && prev !== loc && wasInMatch && (loc === 'lobby' || loc === 'room')) {
+                notices.push(
+                  loc === 'lobby'
+                    ? `${name} 유저가 로비로 이동하였습니다.`
+                    : `${name} 유저가 대기방으로 이동하였습니다.`,
+                );
+                awayStayRef.current.add(pid);
               }
-              if (loc === 'lobby' || loc === 'room') {
+              if (loc === 'result' || loc === 'battle') awayStayRef.current.delete(pid);
+              seenLocationRef.current.set(pid, loc);
+              if (awayStayRef.current.has(pid)) {
                 away.add(player.id);
                 away.add(pid);
                 away.add(`player-${pid}`);

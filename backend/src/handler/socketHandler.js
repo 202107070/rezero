@@ -122,21 +122,29 @@ export function registerSocketHandlers(io, socket) {
         return;
       }
 
-      // 숫자 방이면 대기방 위치로 표시
+      // 채팅용 소켓 입장만으로 결과/배틀 위치를 대기방으로 바꾸지 않는다.
       if (/^\d+$/.test(String(roomId))) {
-        let roomTitle = "";
-        try {
-          const room = await roomModel.findRoomById(roomId);
-          roomTitle = room?.title ? String(room.title) : `${roomId}번 방`;
-        } catch {
-          roomTitle = `${roomId}번 방`;
+        const currentLocation = await getUserLocation(socket.user.id);
+        const keepLocation =
+          currentLocation === "battle" ||
+          currentLocation === "result" ||
+          currentLocation === "practice" ||
+          currentLocation === "build";
+        if (!keepLocation) {
+          let roomTitle = "";
+          try {
+            const room = await roomModel.findRoomById(roomId);
+            roomTitle = room?.title ? String(room.title) : `${roomId}번 방`;
+          } catch {
+            roomTitle = `${roomId}번 방`;
+          }
+          await updateUserLocation(socket.user, {
+            location: "room",
+            roomId: String(roomId),
+            roomTitle,
+          });
+          await broadcastLobbyPresence(io);
         }
-        await updateUserLocation(socket.user, {
-          location: "room",
-          roomId: String(roomId),
-          roomTitle,
-        });
-        await broadcastLobbyPresence(io);
       }
 
       // Valkey에서 게임 진행 상태 확인 후 재접속 복원 처리

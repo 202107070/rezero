@@ -184,6 +184,7 @@ export default function RoomPage() {
   const leavingToGameRef = useRef(false);
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
   const roomRosterReadyRef = useRef(false);
+  const roomFetchGenRef = useRef(0);
   const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
   const roomMetaRef = useRef({ roomId: '', roomTitle: '', roomQuery: '' });
@@ -473,6 +474,7 @@ export default function RoomPage() {
 
       const inviteMeta = peekPendingInviteMeta();
       let joinedThisAttempt = false;
+      const enterGen = ++roomFetchGenRef.current;
       try {
         let room = await fetchRoom(numericRoomId);
         const myId = getCurrentUserId();
@@ -518,7 +520,7 @@ export default function RoomPage() {
           clearPendingInviteToken();
         }
 
-        if (!cancelled) {
+        if (!cancelled && enterGen === roomFetchGenRef.current) {
           applyRoom(room, { resetChat: true });
           try {
             await joinRoomSocket(numericRoomId);
@@ -583,9 +585,10 @@ export default function RoomPage() {
                   user?: { id?: string; displayName?: string; username?: string };
                 }) => {
                   if (!payload?.user) return;
+                  const gen = ++roomFetchGenRef.current;
                   void fetchRoom(numericRoomId)
                     .then((nextRoom) => {
-                      if (!cancelled) applyRoom(nextRoom, { resetChat: false });
+                      if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
                     })
                     .catch(() => undefined);
                 },
@@ -630,9 +633,10 @@ export default function RoomPage() {
                     ),
                   );
                 }
+                const gen = ++roomFetchGenRef.current;
                 void fetchRoom(numericRoomId)
                   .then((nextRoom) => {
-                    if (!cancelled) applyRoom(nextRoom, { resetChat: false });
+                    if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
                   })
                   .catch(() => undefined);
               }),
@@ -641,9 +645,10 @@ export default function RoomPage() {
             unsubs.push(
               onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload: RoomRosterPayload) => {
                 if (String(payload?.roomId || '') !== String(numericRoomId)) return;
+                const gen = ++roomFetchGenRef.current;
                 void fetchRoom(numericRoomId)
                   .then((nextRoom) => {
-                    if (!cancelled) applyRoom(nextRoom, { resetChat: false });
+                    if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
                   })
                   .catch(() => undefined);
               }),
@@ -859,8 +864,11 @@ export default function RoomPage() {
     if (!Number.isInteger(numericRoomId) || numericRoomId <= 0) return;
     const timer = window.setInterval(() => {
       if (!roomRosterReadyRef.current) return;
+      const gen = ++roomFetchGenRef.current;
       void fetchRoom(numericRoomId)
-        .then((nextRoom) => applyRoom(nextRoom, { resetChat: false }))
+        .then((nextRoom) => {
+          if (gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
+        })
         .catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(timer);

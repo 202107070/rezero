@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InventoryPanel } from '../../components/lobby/InventoryPanel/InventoryPanel';
 import { InventoryItemsModal } from '../../components/lobby/InventoryItemsModal/InventoryItemsModal';
@@ -567,11 +567,15 @@ export default function LobbyPage() {
     setFriendNames(getFriendNames());
   }, [authUser.id]);
 
+  const roomListGenRef = useRef(0);
   const refreshRooms = useCallback(async () => {
+    const gen = ++roomListGenRef.current;
     try {
       const nextRooms = await fetchRooms();
+      if (gen !== roomListGenRef.current) return;
       setRooms(nextRooms);
     } catch (error) {
+      if (gen !== roomListGenRef.current) return;
       setRooms([]);
       if (isBackendDown(error)) return;
       setChatMessages((prev) => {

@@ -186,6 +186,7 @@ export default function BattlePage() {
   const [battleBots, setBattleBots] = useState<DemoBot[]>([]);
   const battleBotsRef = useRef<DemoBot[]>([]);
   const departedUserIdsRef = useRef<Set<string>>(new Set());
+  const leavingToLobbyRef = useRef(false);
   useEffect(() => {
     battleBotsRef.current = battleBots;
   }, [battleBots]);
@@ -1036,6 +1037,8 @@ export default function BattlePage() {
             (payload?: { userId?: string; roomClosed?: boolean; remainingPlayers?: number }) => {
               const leftId = String(payload?.userId || '').replace(/^player-/, '');
               if (!leftId) return;
+              const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
+              if (leftId === myId || leavingToLobbyRef.current) return;
               const alreadyDeparted = departedUserIdsRef.current.has(leftId);
               departedUserIdsRef.current.add(leftId);
               const roster = Array.isArray(battleMeta.roomRoster)
@@ -1109,6 +1112,7 @@ export default function BattlePage() {
               );
             }
             const remaining = Number(payload?.currentPlayers ?? active.size);
+            if (leavingToLobbyRef.current || (myId && !active.has(myId))) return;
             if (remaining <= 1) {
               clearBattleAndLeave(sessionId, roomId);
               navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
@@ -1125,6 +1129,7 @@ export default function BattlePage() {
               ]);
             }
             if (payload.reason === 'no_players' || payload.message?.includes('대기실로 이동')) {
+              if (leavingToLobbyRef.current) return;
               clearBattleAndLeave(sessionId, roomId);
               navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
               return;
@@ -1934,6 +1939,7 @@ export default function BattlePage() {
 
   const confirmLeaveBattle = async () => {
     const numericRoomId = roomId ? Number(roomId) : NaN;
+    leavingToLobbyRef.current = true;
     try {
       if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
         await leaveRoom(numericRoomId);
@@ -1942,6 +1948,7 @@ export default function BattlePage() {
       clearBattleAndLeave(sessionId, roomId);
       navigate(ROUTES.LOBBY);
     } catch (error) {
+      leavingToLobbyRef.current = false;
       setShowLeaveConfirm(false);
       setLeaveAlertMessage(getRoomErrorMessage(error) || '방 나가기에 실패했습니다. 다시 시도해 주세요.');
     }
