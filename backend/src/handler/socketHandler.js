@@ -714,21 +714,6 @@ export function registerSocketHandlers(io, socket) {
       const roomTitle = data?.roomTitle != null ? String(data.roomTitle) : "";
       const ratingScore =
         data?.ratingScore != null ? Number(data.ratingScore) : undefined;
-      if (location === "lobby" || location === "practice" || location === "build") {
-        try {
-          const { leaveRoom } = await import("../api/room/service.js");
-          const activeRooms = await roomModel.findActiveRoomIdsByUser(socket.user.id);
-          for (let i = 0; i < activeRooms.length; i++) {
-            try {
-              await leaveRoom(activeRooms[i], socket.user.id);
-            } catch {
-              // 이미 나간 방은 무시
-            }
-          }
-        } catch (leaveError) {
-          console.error("[location leaveRoom] " + leaveError.message);
-        }
-      }
       await updateUserLocation(socket.user, {
         location,
         roomId,

@@ -447,14 +447,18 @@ export default function RoomPage() {
       roomId,
       roomTitle,
     }).catch(() => undefined);
+  }, [roomId, roomTitle, roomQuery]);
 
+  useEffect(() => {
+    const me = getCurrentDisplayName() || getCurrentUserName();
+    const username = getCurrentUserName();
     return () => {
       if (leavingToGameRef.current) return;
       setUserPresence(me, { status: 'lobby' });
       if (username && username !== me) setUserPresence(username, { status: 'lobby' });
       void emitUpdateLocation({ location: 'lobby' }).catch(() => undefined);
     };
-  }, [roomId, roomTitle, roomQuery]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
