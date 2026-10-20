@@ -54,6 +54,7 @@ import {
   type UserReconnectedPayload,
 } from '../../services/roomSocket';
 import { blockAutoRejoin, clearAutoRejoinBlock, fetchRoom, isAutoRejoinBlocked, leaveRoom, getRoomErrorMessage } from '../../services/roomService';
+import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import { emitUpdateLocation } from '../../services/roomSocket';
 import { collectSolvedProblemKeys, isPreviouslySolvedProblem } from '../../utils/codeHistoryUtils';
@@ -1948,6 +1949,7 @@ export default function BattlePage() {
       }
       setShowLeaveConfirm(false);
       clearBattleAndLeave(sessionId, roomId);
+      markLobbyChatReset();
       navigate(ROUTES.LOBBY);
     } catch (error) {
       leavingToLobbyRef.current = false;

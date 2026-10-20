@@ -17,6 +17,7 @@ import {
   subscribeSocialEvents,
 } from '../../services/roomSocket';
 import { allowExplicitRejoinFromPath, leaveRoom, setPendingInviteMeta } from '../../services/roomService';
+import { markLobbyChatReset } from '../../services/lobbyChatStore';
 
 interface FriendRequestNotice {
   fromUserId: string;
@@ -226,6 +227,7 @@ export function SocialRealtime() {
                     }
                     const query = invite.roomQuery.replace(/^\?/, '');
                     allowExplicitRejoinFromPath(`?${query}`);
+                    markLobbyChatReset();
                     navigate(`${ROUTES.ROOM}?${query}`);
                   })();
                 }}

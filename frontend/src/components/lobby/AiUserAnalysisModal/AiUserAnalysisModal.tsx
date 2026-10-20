@@ -210,15 +210,34 @@ export function AiUserAnalysisModal({ open, userId, userName, historyId, onClose
                       }))
                     : [
                         {
-                          label: '정답',
+                          label: '정확도',
                           value: clampPercent(summary.solveRate ?? summary.winrate),
                           detail: `${summary.roomId ? `${summary.roomId}번 방` : userName}`,
-                          why: '이 방의 답안만 정답과 비교한 비율입니다.\n다른 방의 승패는 이 그래프에 넣지 않습니다.',
+                          why: '정답률과 오답 수를 이 경기 답안만으로 비교했습니다.',
+                        },
+                        {
+                          label: '지식 숙련도',
+                          value: clampPercent(summary.solveRate ?? summary.winrate),
+                          detail: String(summary.lang || summary.favoriteLang || ''),
+                          why: '출제 분야별 정답률입니다. 객관식과 단답형은 별도 축이 아닙니다.',
+                        },
+                        {
+                          label: '일관성',
+                          value: clampPercent(summary.solveRate ?? summary.winrate),
+                          detail: '초반·후반',
+                          why: '문항 순서와 난이도가 달라질 수 있어 초반·후반만으로 집중력 저하라고 단정하지 않습니다.',
+                        },
+                        {
+                          label: '성장 가능성',
+                          value: clampPercent(summary.solveRate ?? summary.winrate),
+                          detail: '다음 경기 목표',
+                          why: '이전 기록이 있을 때만 향상·하락을 판단하고, 없으면 이번 경기 기준으로 복습 방향을 제안합니다.',
                         },
                       ]
                 }
               />
             )}
+            {result.analysis ? <div className="ai-analysis-body">{result.analysis}</div> : null}
           </>
         )}
 

@@ -10,26 +10,70 @@ type ProblemLike = Pick<
   'id' | 'type' | 'title' | 'question' | 'answer' | 'options' | 'correctIndex' | 'visual'
 >;
 
-function lookupAnswerBlanks(problem: ProblemLike, langKey: string): string[] {
-  const fromProblem = getProblemAnswersForLang(problem.answer, langKey);
-  if (fromProblem.length) return fromProblem;
+function normLookupText(value: unknown): string {
+  return String(value || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
+export function findBankProblem(problem: ProblemLike | null | undefined): ProblemLike | undefined {
+  if (!problem) return undefined;
   const bank = problems as ProblemLike[];
-  const match =
-    (problem.id ? bank.find((entry) => entry.id === problem.id) : undefined) ||
-    bank.find(
+  const id = String(problem.id || '').trim();
+  if (id) {
+    const byId = bank.find((entry) => String(entry.id || '').trim().toLowerCase() === id.toLowerCase());
+    if (byId) return byId;
+  }
+  const question = normLookupText(problem.question);
+  const title = normLookupText(problem.title);
+  if (question) {
+    const byQuestion = bank.find((entry) => normLookupText(entry.question) === question);
+    if (byQuestion) return byQuestion;
+  }
+  if (title && question) {
+    const prefix = question.slice(0, 80);
+    const byBoth = bank.find(
       (entry) =>
-        entry.title === problem.title &&
-        String(entry.question || '').trim() === String(problem.question || '').trim(),
-    ) ||
-    bank.find((entry) => entry.title === problem.title);
+        normLookupText(entry.title) === title && normLookupText(entry.question).slice(0, 80) === prefix,
+    );
+    if (byBoth) return byBoth;
+  }
+  if (title) {
+    const sameTitle = bank.filter((entry) => normLookupText(entry.title) === title);
+    if (sameTitle.length === 1) return sameTitle[0];
+  }
+  return undefined;
+}
 
-  if (!match) return [];
-  return getProblemAnswersForLang(match.answer, langKey);
+export function hydrateBattleProblem(problem: ProblemLike, langKey?: string): BattleProblem {
+  const match = findBankProblem(problem);
+  const merged = {
+    ...(match || {}),
+    ...problem,
+    type: problem.type || match?.type,
+    options: problem.options?.length ? problem.options : match?.options,
+    correctIndex: problem.correctIndex ?? match?.correctIndex ?? null,
+    answer:
+      problem.answer && Object.keys(problem.answer).length > 0 ? problem.answer : match?.answer,
+    question: problem.question || match?.question,
+    title: problem.title || match?.title,
+    id: problem.id || match?.id,
+    explanation:
+      (problem as BattleProblem).explanation ||
+      (match as BattleProblem | undefined)?.explanation,
+  } as BattleProblem;
+  void langKey;
+  return normalizeBattleProblem(merged);
+}
+
+function lookupAnswerBlanks(problem: ProblemLike, langKey: string): string[] {
+  const hydrated = hydrateBattleProblem(problem, langKey);
+  return getProblemAnswersForLang(hydrated.answer, langKey);
 }
 
 export function formatCorrectAnswer(problem: ProblemLike, langKey: string): string {
-  const normalized = normalizeBattleProblem(problem as BattleProblem);
+  const normalized = hydrateBattleProblem(problem, langKey);
   const resolvedLangKey = getLangKey(langKey);
 
   if (normalized.type === 'multiple_choice') {

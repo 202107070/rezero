@@ -24,6 +24,7 @@ import { ENABLE_RESULT_BOT_DEPARTURE, REVIEW_BOT_ACCEPT_DELAY_MS } from '../../c
 import { useAuthUser } from '../../contexts/AuthContext';
 import { clearBattleAndLeave, getSessionId, readFinalRankingSnapshot, saveFinalRankingSnapshot } from '../../services/battleSessionService';
 import { allowExplicitRejoin, allowExplicitRejoinFromPath, fetchRoom, leaveRoom } from '../../services/roomService';
+import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import {
   emitReviewInvite,
   emitReviewInviteResponse,
@@ -84,12 +85,12 @@ import {
   shouldAutoAcceptReviewInvite,
 } from '../../services/reviewSessionService';
 import type { DemoBot } from '../../utils/battle/demoBots';
-import { normalizeCodeHistoryEntry, saveMatchHistoryEntry } from '../../utils/codeHistoryUtils';
+import { getSolution, normalizeCodeHistoryEntry, saveMatchHistoryEntry } from '../../utils/codeHistoryUtils';
 import type { BattleProblem } from '../../types/battle';
 import type { FinalRankingSnapshot } from '../../utils/battle/rankUtils';
 import { getLangKey } from '../../utils/battle/codeUtils';
 import { buildResultPlayers, type ResultPlayer } from '../../utils/resultUtils';
-import { formatCorrectAnswer, formatSubmittedAnswer, getResultPlayerAnswer } from '../../utils/resultAnswerUtils';
+import { formatCorrectAnswer, formatSubmittedAnswer, getResultPlayerAnswer, hydrateBattleProblem } from '../../utils/resultAnswerUtils';
 import './result.css';
 
 interface BattleSubmission {
@@ -1094,14 +1095,20 @@ export default function ResultPage() {
 
     return [...selectedReviewProblems].sort((a, b) => a - b).map((index) => {
       const problem = problems[index];
-      const correctAnswer = problem ? formatCorrectAnswer(problem as BattleProblem, langKey) : '';
+      const battleProblem = problem as BattleProblem | undefined;
+      const correctAnswer = battleProblem
+        ? formatCorrectAnswer(battleProblem, langKey) || getSolution(battleProblem, langKey)
+        : '';
       return {
         index,
         title: problem?.title || `문제 ${index + 1}`,
         question: problem?.question || '',
         myAnswer: mySubmissionCodes[index] || '',
         correctAnswer,
-        explanation: problem?.explanation || '',
+        explanation:
+          problem?.explanation ||
+          (battleProblem ? hydrateBattleProblem(battleProblem, langKey).explanation : '') ||
+          '',
         isCorrect: myResults[index] === true,
       };
     });
@@ -1238,6 +1245,7 @@ export default function ResultPage() {
   const replayToRoom = async () => {
     removeMyPresence(myUserId);
     if (!roomId) {
+      markLobbyChatReset();
       navigate(ROUTES.LOBBY);
       return;
     }
@@ -1265,6 +1273,7 @@ export default function ResultPage() {
       }
     }
     setActiveRoomId(null);
+    markLobbyChatReset();
     navigate(ROUTES.LOBBY);
   };
 

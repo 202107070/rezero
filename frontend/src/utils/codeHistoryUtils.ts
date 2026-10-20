@@ -3,21 +3,9 @@ import type { BattleProblem } from '../types/battle';
 import { persistUserCodeHistory, readUserCodeHistory } from '../services/userService';
 import { apiRequest } from '../services/apiClient';
 import { getCurrentUserId } from '../services/authService';
-import problems from '../data/problems.js';
 import { getLangKey } from './battle/codeUtils';
 import { getProblemAnswersForLang } from './problemTypeUtils';
-import { formatCorrectAnswer } from './resultAnswerUtils';
-
-type ProblemRecord = {
-  id?: string;
-  type?: string;
-  title?: string;
-  question?: string;
-  lang?: string;
-  answer?: Record<string, string[]>;
-  options?: string[] | null;
-  correctIndex?: number | null;
-};
+import { formatCorrectAnswer, hydrateBattleProblem } from './resultAnswerUtils';
 
 export function normalizeCodeHistoryEntry(entry: unknown): CodeHistoryEntry | null {
   if (!entry || typeof entry !== 'object') return null;
@@ -235,35 +223,17 @@ export function getSolution(
 ): string {
   if (!problem) return '// 정답이 준비되지 않았습니다.';
   const stored = String(problem.solution || '').trim();
-  if (stored && stored !== String(problem.question || '').trim()) return stored;
+  if (stored && stored !== String(problem.question || '').trim() && !stored.includes('정답이 준비되지')) {
+    return stored;
+  }
 
   const lang = getLangKey(problem.lang || langHint || 'JAVA');
-  const bank = problems as ProblemRecord[];
-  const question = String(problem.question || '').trim();
-  const match =
-    (problem.id ? bank.find((entry) => entry.id === problem.id) : undefined) ||
-    bank.find(
-      (entry) =>
-        entry.title === problem.title && String(entry.question || '').trim() === question,
-    ) ||
-    (question
-      ? bank.find((entry) => String(entry.question || '').trim() === question)
-      : undefined) ||
-    bank.find((entry) => entry.title === problem.title);
-
-  const merged = {
-    ...(match || {}),
-    ...problem,
-    type: problem.type || match?.type,
-    options: problem.options?.length ? problem.options : match?.options,
-    correctIndex: problem.correctIndex ?? match?.correctIndex ?? null,
-    answer: problem.answer || match?.answer,
-    question: problem.question || match?.question,
-  };
-  const formatted = formatCorrectAnswer(merged as BattleProblem, lang).trim();
+  const merged = hydrateBattleProblem(problem as BattleProblem, lang);
+  const formatted = formatCorrectAnswer(merged, lang).trim();
   if (formatted) return formatted;
 
   const blanks = getProblemAnswersForLang(merged.answer, lang);
   if (blanks.length > 0) return blanks.join('\n');
+  if (merged.explanation) return String(merged.explanation);
   return '// 정답이 준비되지 않았습니다.';
 }

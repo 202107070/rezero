@@ -57,6 +57,7 @@ import {
   setPendingInviteMeta,
   startRoom as startRoomApi,
 } from '../../services/roomService';
+import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { getMatchErrorMessage, parseRoomTimeToSeconds, startMatch, type MatchStartResponse } from '../../services/matchService';
 import {
   clearRoomSession,
@@ -1289,6 +1290,7 @@ export default function RoomPage() {
       }
       setActiveRoomId(null);
       clearRoomSession(roomId);
+      markLobbyChatReset();
       navigate(ROUTES.LOBBY);
     } catch (error) {
       showStartAlert(getRoomErrorMessage(error));

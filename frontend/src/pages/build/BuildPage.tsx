@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import { emitUpdateLocation } from '../../services/roomSocket';
+import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { BuildBGM, LobbyBGM } from '../../utils/audio/gameAudio';
 import { DEFAULT_TEMPLATE } from '../../utils/battle/codeUtils';
 import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSimulator';
@@ -107,7 +108,14 @@ export default function BuildPage() {
           >
             빌드
           </button>
-          <button type="button" className="pixel-btn pixel-btn-secondary" onClick={() => navigate(ROUTES.LOBBY)}>
+          <button
+            type="button"
+            className="pixel-btn pixel-btn-secondary"
+            onClick={() => {
+              markLobbyChatReset();
+              navigate(ROUTES.LOBBY);
+            }}
+          >
             로비
           </button>
         </div>

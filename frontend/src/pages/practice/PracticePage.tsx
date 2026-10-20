@@ -9,6 +9,7 @@ import { PracticeProgressPanel } from '../../components/practice/PracticeProgres
 import { PracticeSetupModal } from '../../components/practice/PracticeSetupModal/PracticeSetupModal';
 import { ROUTES } from '../../constants/routes';
 import { emitUpdateLocation } from '../../services/roomSocket';
+import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { LobbyBGM, PracticeBGM } from '../../utils/audio/gameAudio';
 import { getLangKey } from '../../utils/battle/codeUtils';
 import { getProblemAnswersForLang, isBlankBasedType, looseAnswerEqual } from '../../utils/problemTypeUtils';
@@ -262,7 +263,10 @@ export default function PracticePage() {
         message="로비로 이동하시겠습니까?"
         confirmLabel="로비로"
         cancelLabel="계속하기"
-        onConfirm={() => navigate(ROUTES.LOBBY)}
+        onConfirm={() => {
+          markLobbyChatReset();
+          navigate(ROUTES.LOBBY);
+        }}
         onCancel={() => setShowExitConfirm(false)}
       />
     </div>

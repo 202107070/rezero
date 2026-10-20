@@ -2,6 +2,7 @@ import ProblemVisualPreview from '../../battle/ProblemVisualPreview';
 import { useModalShake } from '../../../hooks/useModalShake';
 import type { BattleProblem } from '../../../types/battle';
 import type { ResultPlayer } from '../../../utils/resultUtils';
+import { getSolution } from '../../../utils/codeHistoryUtils';
 import { formatCorrectAnswer } from '../../../utils/resultAnswerUtils';
 
 interface ResultProblemModalProps {
@@ -29,7 +30,9 @@ export function ResultProblemModal({
   if (!isOpen || !player) return null;
 
   const currentProblem = problems[problemIndex];
-  const correctAnswer = currentProblem ? formatCorrectAnswer(currentProblem, langKey) : '';
+  const correctAnswer = currentProblem
+    ? formatCorrectAnswer(currentProblem, langKey) || getSolution(currentProblem, langKey)
+    : '';
   const isCorrect = player.problemResults[problemIndex] === true;
   const playerLabel = player.name.split(' ')[0];
 

@@ -35,6 +35,7 @@ import {
 } from '../../services/roomService';
 import { getCurrentDisplayName, getCurrentUserId, getCurrentUserName, refreshMeProfile } from '../../services/authService';
 import { ApiError, apiRequest, isBackendDown } from '../../services/apiClient';
+import { loadLobbyChat, markLobbyChatReset, persistLobbyChat } from '../../services/lobbyChatStore';
 import { useServerDownChat } from '../../hooks/useServerDownChat';
 import {
   emitFriendRemove,
@@ -224,7 +225,6 @@ function syncFriendPresenceFromOnline(
 }
 
 const LOBBY_ROSTER_KEY = 'rezero_lobby_roster';
-const LOBBY_CHAT_KEY = 'rezero_lobby_chat';
 
 function loadInitialUsers(): LobbyUser[] {
   const me = getCurrentDisplayName() || getCurrentUserName();
@@ -241,16 +241,6 @@ function loadInitialUsers(): LobbyUser[] {
     cached.unshift({ name: me, rank: getTierByRating(getRatingScore()), title: getEquippedTitleId(), userId: meId });
   }
   return cached;
-}
-
-function loadLobbyChat(): ChatMessage[] {
-  try {
-    const raw = sessionStorage.getItem(LOBBY_CHAT_KEY);
-    const parsed = raw ? (JSON.parse(raw) as ChatMessage[]) : [];
-    return Array.isArray(parsed) ? parsed.slice(-40) : [];
-  } catch {
-    return [];
-  }
 }
 
 export default function LobbyPage() {
@@ -613,7 +603,7 @@ export default function LobbyPage() {
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(LOBBY_CHAT_KEY, JSON.stringify(chatMessages.slice(-40)));
+      persistLobbyChat(chatMessages);
     } catch {
       // ignore
     }
@@ -878,6 +868,7 @@ export default function LobbyPage() {
         }
         appendSystemChat(`${user.name} 님이 있는 방으로 이동합니다.`);
         allowExplicitRejoinFromPath(roomPath);
+        markLobbyChatReset();
         navigate(roomPath);
         break;
       }
@@ -918,6 +909,7 @@ export default function LobbyPage() {
   const enterRoom = (room: Room, password = '') => {
     allowExplicitRejoin(room.id);
     setPendingJoinPassword(password);
+    markLobbyChatReset();
     navigate(`${ROUTES.ROOM}?${buildRoomSearchParams(room).toString()}`);
   };
 
@@ -992,8 +984,8 @@ export default function LobbyPage() {
     void joinRoom(target.id, { password, explicitRejoin: true })
       .then(() => {
         enterRoom(target, password);
-        setJoinTarget(null);
-        setJoinPwd('');
+    setJoinTarget(null);
+    setJoinPwd('');
       })
       .catch((error) => {
         if (error instanceof ApiError && error.code === 'ROOM_PASSWORD_INVALID') {
@@ -1005,7 +997,7 @@ export default function LobbyPage() {
         setJoinError(getRoomErrorMessage(error));
       })
       .finally(() => {
-        setJoiningRoom(false);
+    setJoiningRoom(false);
       });
   };
 
@@ -1034,11 +1026,11 @@ export default function LobbyPage() {
         setGold(result.gold);
         setGoldState(result.gold);
       } else {
-        setGoldState((p) => {
+    setGoldState((p) => {
           const v = Math.max(0, p - ROULETTE_COST);
-          setGold(v);
-          return v;
-        });
+      setGold(v);
+      return v;
+    });
       }
 
       if (result.items != null) {
@@ -1048,20 +1040,20 @@ export default function LobbyPage() {
       }
 
       const correction = 360 - resolvedIdx * SEG_ANGLE - SEG_ANGLE / 2;
-      const minTarget = wheelDeg + 360 * 8;
-      const base = Math.ceil((minTarget - correction) / 360) * 360;
-      const targetDeg = base + correction;
-      setWheelDeg(targetDeg);
+    const minTarget = wheelDeg + 360 * 8;
+    const base = Math.ceil((minTarget - correction) / 360) * 360;
+    const targetDeg = base + correction;
+    setWheelDeg(targetDeg);
 
       window.setTimeout(() => {
         const sel = ROULETTE_ITEMS[resolvedIdx] || ROULETTE_ITEMS.find((item) => item.type === 'miss');
         if (!sel || sel.type === 'miss' || result.missed) {
-          setRouletteResult('💀 꽝! 아쉽습니다.');
-        } else {
-          setRouletteResult(`${sel.icon} ${sel.name} 획득!`);
-        }
+        setRouletteResult('💀 꽝! 아쉽습니다.');
+      } else {
+        setRouletteResult(`${sel.icon} ${sel.name} 획득!`);
+      }
         window.setTimeout(() => setRouletteSpinning(false), 1200);
-      }, 3200);
+    }, 3200);
     } catch (error) {
       setRouletteSpinning(false);
       const message =
@@ -1074,10 +1066,10 @@ export default function LobbyPage() {
   const handleDeleteSelectedHistory = () => {
     if (selectedHistoryIds.length === 0) return;
     void deleteMatchHistoryEntries(selectedHistoryIds).then((nextHistory) => {
-      setCodeHistory(nextHistory);
-      setSelectedHistoryIds([]);
-      setSelectedHistoryIndex((prev) => (nextHistory.length === 0 ? 0 : Math.min(prev, nextHistory.length - 1)));
-      setSelectedHistoryProblemIndex(0);
+    setCodeHistory(nextHistory);
+    setSelectedHistoryIds([]);
+    setSelectedHistoryIndex((prev) => (nextHistory.length === 0 ? 0 : Math.min(prev, nextHistory.length - 1)));
+    setSelectedHistoryProblemIndex(0);
     });
   };
 
@@ -1125,6 +1117,7 @@ export default function LobbyPage() {
       diff: practiceDiff,
       count: practiceCount,
     });
+    markLobbyChatReset();
     navigate(`${ROUTES.PRACTICE}?${params.toString()}`);
   };
 
@@ -1144,7 +1137,10 @@ export default function LobbyPage() {
                   resetCreateForm();
                   setShowModal(true);
                 }}
-                onOpenBuild={() => navigate(ROUTES.BUILD)}
+                onOpenBuild={() => {
+                  markLobbyChatReset();
+                  navigate(ROUTES.BUILD);
+                }}
                 onOpenFilter={() => setShowRoomFilterModal(true)}
                 onPractice={() => setShowPracticeModal(true)}
               />
@@ -1490,6 +1486,7 @@ export default function LobbyPage() {
           }
           const query = invite.roomQuery.replace(/^\?/, '');
           allowExplicitRejoinFromPath(`?${query}`);
+          markLobbyChatReset();
           navigate(`${ROUTES.ROOM}?${query}`);
         }}
         onDecline={() => {

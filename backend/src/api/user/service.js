@@ -356,6 +356,7 @@ export async function analyzeMatchHistory(userId, historyId) {
   const findUserById = getModelFunction("findUserById");
   const findUserMatchAnalytics = getModelFunction("findUserMatchAnalytics");
   const findMatchCodeHistoryById = getModelFunction("findMatchCodeHistoryById");
+  const listMatchCodeHistory = getModelFunction("listMatchCodeHistory");
   const {
     buildAnalyticsSummary,
     buildMatchAnalysisText,
@@ -380,7 +381,11 @@ export async function analyzeMatchHistory(userId, historyId) {
   const profile = await getUserProfile(user);
   const matches = await findUserMatchAnalytics(userId, 40);
   const career = buildAnalyticsSummary(profile, matches);
-  const chartSummary = buildRoomChart(entry);
+  const historyList = await listMatchCodeHistory(userId);
+  const previousEntries = (historyList || []).filter(function (item) {
+    return String(item.historyId) !== String(entry.historyId);
+  });
+  const chartSummary = buildRoomChart(entry, previousEntries);
   if (entry.aiAnalysis) {
     return {
       userId,
@@ -409,6 +414,8 @@ export async function analyzeMatchHistory(userId, historyId) {
     avgSolveTimeSec: career.avgSolveTimeSec,
     lang: entry.lang || "UNKNOWN",
     problemCount: problems.length || codes.length || 0,
+    chart: chartSummary,
+    previousMatchCount: previousEntries.length,
     userSubmissions: (codes.length > 0 ? codes : [entry.code || ""]).slice(0, 8).map(function (code, index) {
       return {
         order: index + 1,
@@ -447,7 +454,7 @@ export async function analyzeMatchHistory(userId, historyId) {
     console.error("[analyzeMatchHistory] Cursor AI error:", error.message);
     const fallbackText = polishAnalysisText(
       "사용자 분석을 잠시 불러오지 못해, 이 판의 제출과 전적으로 간단히 정리했습니다.\n\n" +
-        buildMatchAnalysisText(entry, career),
+        buildMatchAnalysisText(entry, career, previousEntries),
     );
     chartSummary.problemCount = summary.problemCount;
     await saveMatchAiAnalysis(userId, entry.historyId, fallbackText);
