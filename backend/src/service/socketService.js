@@ -532,6 +532,10 @@ export const socketGameService = {
     io.to(roomId).emit(SOCKET_EVENTS.NEXT_QUESTION_STARTED, payload);
   },
 
+  broadcastMatchResultPending(io, roomId, payload) {
+    io.to(String(roomId)).emit(SOCKET_EVENTS.MATCH_RESULT_PENDING, payload);
+  },
+
   async broadcastGameEnded(io, roomId, resultData) {
     io.to(String(roomId)).emit(SOCKET_EVENTS.GAME_ENDED, resultData);
     await resetRoomAfterMatch(roomId);

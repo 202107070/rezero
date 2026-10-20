@@ -170,6 +170,14 @@ export async function fetchMatchRanking(matchId: string): Promise<MatchRanking> 
   return apiRequest<MatchRanking>(`/matches/${encodeURIComponent(matchId)}/ranking`);
 }
 
+export async function fetchMatchPending(matchId: string): Promise<{
+  roomId?: number;
+  resultReady: boolean;
+  waitingForUserIds: string[];
+}> {
+  return apiRequest(`/matches/${encodeURIComponent(matchId)}/pending`);
+}
+
 export function isAlreadySubmittedError(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'PROBLEM_ALREADY_SUBMITTED';
 }

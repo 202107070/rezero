@@ -16,6 +16,7 @@ export const ROOM_SOCKET_EVENTS = {
   USE_ITEM: 'use_item',
   ITEM_USED: 'item_used',
   GAME_ENDED: 'game_ended',
+  MATCH_RESULT_PENDING: 'match_result_pending',
   GAME_STATE_UPDATE: 'game_state_update',
   USER_RECONNECTED: 'user_reconnected',
   SUBMIT_CODE: 'submit_code',
@@ -138,6 +139,12 @@ export interface BattleGameEndedPayload {
     ratingDelta?: number;
     newTitleIds?: string[];
   }>;
+}
+
+export interface MatchResultPendingPayload {
+  roomId?: number | string;
+  matchId?: string;
+  waitingForUserIds?: string[];
 }
 
 export interface RoomReadyStatePayload {

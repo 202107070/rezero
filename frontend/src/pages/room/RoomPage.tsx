@@ -58,7 +58,8 @@ import {
   startRoom as startRoomApi,
 } from '../../services/roomService';
 import { markLobbyChatReset } from '../../services/lobbyChatStore';
-import { getMatchErrorMessage, parseRoomTimeToSeconds, startMatch, type MatchStartResponse } from '../../services/matchService';
+import { getMatchErrorMessage, startMatch, type MatchStartResponse } from '../../services/matchService';
+import { getTotalBattleSeconds } from '../../utils/battle/codeUtils';
 import {
   clearRoomSession,
   prepareBattleStart,
@@ -1230,7 +1231,7 @@ export default function RoomPage() {
         try {
           const match = await startMatch({
             roomId: numericRoomId,
-            roundSeconds: parseRoomTimeToSeconds(settings.time),
+            roundSeconds: getTotalBattleSeconds(settings.diff, Number(settings.count) || 5),
           });
           matchId = match.matchId;
           applyMatchStart({

@@ -4,7 +4,7 @@ import { DIFF_TO_KOREAN } from '../constants/roomConstants';
 import type { GameMode } from '../types/lobby';
 import type { RoomPlayer } from '../types/room';
 import type { ProblemVisual } from '../types/battle';
-import { getLangKey } from '../utils/battle/codeUtils';
+import { getLangKey, getTotalBattleSeconds } from '../utils/battle/codeUtils';
 import { problemSupportsLang } from '../utils/problemTypeUtils';
 import { normalizeBattleProblem } from '../utils/battle/problemResultUtils';
 import { normalizeProblemVisual } from '../utils/problemVisualUtils';
@@ -138,6 +138,7 @@ export function prepareBattleStart(params: {
       maxPlayers: String(params.settingsMaxPlayers),
       roomMode: params.roomMode,
       gameMode: params.gameMode || 'item',
+      roundSeconds: getTotalBattleSeconds(params.settingsDiff, selectedProblems.length || count),
       selectedItems: params.selectedItems || [],
       roomRoster: (params.roomRoster || []).map((player) => ({
         id: player.id,

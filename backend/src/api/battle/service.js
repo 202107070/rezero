@@ -10,7 +10,7 @@ import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { toMatchStartResponse } from "./dto/matchStartResponseDto.js";
 import { socketGameService } from "#service/socketService.js";
 
-const DEFAULT_ROUND_SECONDS = 2700;
+const SECONDS_PER_PROBLEM = 120;
 const CORRECT_ANSWER_SCORE = 100;
 const ITEM_KEYS = new Set([
   "paint",
@@ -67,7 +67,8 @@ export async function createBattle(roomId, userId, options = {}) {
     throw error;
   }
   const matchId = createMatchId(room.id);
-  let roundSeconds = DEFAULT_ROUND_SECONDS;
+  const problemCount = Number(room.problemCount) || problems.length || 5;
+  let roundSeconds = SECONDS_PER_PROBLEM * Math.max(1, problemCount);
 
   if (options.roundSeconds !== undefined) {
     roundSeconds = Number(options.roundSeconds);
@@ -721,6 +722,48 @@ export async function submitMatchResult(input) {
     earnedGold: myReward?.earnedGold || 0,
     ratingDelta: myReward?.ratingDelta || 0,
     newTitleIds: myReward?.newTitleIds || [],
+  };
+}
+
+export async function getMatchPendingUsers(matchId, userId) {
+  const match = await battleModel.findMatchById(matchId);
+
+  if (!match) {
+    throw new AppError(404, "MATCH_NOT_FOUND", "경기를 찾을 수 없습니다.");
+  }
+
+  const isParticipant = await battleModel.isMatchParticipant(matchId, userId);
+  if (!isParticipant) {
+    throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
+  }
+
+  if (match.status === "FINISHED") {
+    return {
+      roomId: match.roomId,
+      resultReady: true,
+      waitingForUserIds: [],
+    };
+  }
+
+  const participants = await battleModel.findMatchParticipantsForResult(matchId);
+  const submissions = await battleModel.findMatchSubmissions(matchId);
+  const submittedUserIds = new Set(
+    submissions.map(function (submission) {
+      return String(submission.userId);
+    }),
+  );
+  const waitingForUserIds = participants
+    .map(function (item) {
+      return String(item.userId);
+    })
+    .filter(function (id) {
+      return !submittedUserIds.has(id);
+    });
+
+  return {
+    roomId: match.roomId,
+    resultReady: waitingForUserIds.length === 0,
+    waitingForUserIds,
   };
 }
 

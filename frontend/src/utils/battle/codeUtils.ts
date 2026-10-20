@@ -59,13 +59,12 @@ export const DIFFICULTY_MAP: Record<string, string> = {
   HARD: 'hard',
 };
 
-export function getSecondsPerProblem(diff: string): number {
-  const upper = String(diff || '').toUpperCase();
-  if (upper === 'EASY' || diff === '쉬움' || diff === 'easy') return 60;
-  if (upper === 'HARD' || diff === '어려움' || diff === 'hard') return 180;
-  return 120;
+export const SECONDS_PER_PROBLEM = 120;
+
+export function getSecondsPerProblem(_diff?: string): number {
+  return SECONDS_PER_PROBLEM;
 }
 
-export function getTotalBattleSeconds(diff: string, problemCount: number): number {
-  return getSecondsPerProblem(diff) * Math.max(1, problemCount);
+export function getTotalBattleSeconds(_diff: string, problemCount: number): number {
+  return SECONDS_PER_PROBLEM * Math.max(1, problemCount);
 }

@@ -266,7 +266,7 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .action-buttons { display:flex; justify-content:center; gap:10px; }
 
 .opponent-timer-strip { padding:6px 10px; display:flex; align-items:center; justify-content:center; gap:10px; background: linear-gradient(180deg, rgba(52, 73, 94, 0.92), rgba(44, 62, 80, 0.98)); border:4px solid var(--px-border); box-shadow:none; overflow:hidden; }
-.opponent-timer-kicker { color:#8d8d8d; font-size:14px; letter-spacing:1.2px; text-transform:uppercase; }
+.opponent-timer-kicker { color:var(--px-warning); font-size:14px; letter-spacing:1.2px; text-transform:uppercase; text-shadow:2px 2px 0 #000; }
 .opponent-timer-clock { color:var(--px-danger); font-size:30px; text-shadow:2px 2px 0 #000; white-space:nowrap; text-align:center; flex:1; }
 .opponent-timer-detail { color:var(--px-warning); font-size:16px; text-shadow:2px 2px 0 #000; white-space:nowrap; }
 .battle-page .chat-panel-fixed {

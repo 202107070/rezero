@@ -6,6 +6,7 @@ import { parseSubmitMatchResultRequest } from "./dto/submitMatchResultRequestDto
 import {
   createBattle,
   getActiveMatchForRoom,
+  getMatchPendingUsers,
   getMatchResult,
   submitBattleAnswer,
   submitMatchResult,
@@ -78,22 +79,37 @@ export async function submitResult(req, res, next) {
       userId: req.user.id,
     });
 
-    if (
-      result.resultReady === true &&
-      Array.isArray(result.ranking?.rewards)
-    ) {
-      const io = getSocket();
-
-      if (io) {
+    const io = getSocket();
+    if (io && result.roomId) {
+      if (result.resultReady === true && Array.isArray(result.ranking?.rewards)) {
         await socketGameService.broadcastGameEnded(io, String(result.roomId), {
           roomId: result.roomId,
           matchId: input.matchId,
           ranking: result.ranking.players,
           rewards: result.ranking.rewards,
         });
+      } else if (Array.isArray(result.waitingForUserIds)) {
+        socketGameService.broadcastMatchResultPending(io, String(result.roomId), {
+          roomId: result.roomId,
+          matchId: input.matchId,
+          waitingForUserIds: result.waitingForUserIds,
+        });
       }
     }
 
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getPending(req, res, next) {
+  try {
+    const matchId = String(req.params.matchId || "");
+    if (!matchId) {
+      throw new AppError(400, "INVALID_MATCH_ID", "경기 ID가 필요합니다.");
+    }
+    const result = await getMatchPendingUsers(matchId, req.user.id);
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);

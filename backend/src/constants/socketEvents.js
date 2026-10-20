@@ -21,6 +21,7 @@ export const SOCKET_EVENTS = {
   NEXT_QUESTION_STARTED: "next_question_started",
 
   GAME_ENDED: "game_ended",
+  MATCH_RESULT_PENDING: "match_result_pending",
   USER_RECONNECTED: "user_reconnected",
 
   /** 로비 접속자 목록 */

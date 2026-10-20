@@ -35,6 +35,7 @@ import {
   isAlreadySubmittedError,
   getMatchErrorMessage,
   fetchActiveMatch,
+  fetchMatchPending,
   submitMatchAnswer,
   submitMatchResult,
   useMatchItem,
@@ -48,6 +49,7 @@ import {
   ROOM_SOCKET_EVENTS,
   type BattleGameEndedPayload,
   type BattleItemUsedPayload,
+  type MatchResultPendingPayload,
   type ChatMessagePayload,
   type GameStateUpdatePayload,
   type RoomRosterPayload,
@@ -180,6 +182,9 @@ export default function BattlePage() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [showGameOver, setShowGameOver] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [finalSubmitKind, setFinalSubmitKind] = useState<'spectate' | 'result'>('spectate');
+  const [showResultLeavingModal, setShowResultLeavingModal] = useState(false);
+  const [pendingResultUserIds, setPendingResultUserIds] = useState<string[]>([]);
   const [showClearFlash, setShowClearFlash] = useState(false);
   const [demoSpectating, setDemoSpectating] = useState(false);
   const [spectatorLocked, setSpectatorLocked] = useState(false);
@@ -251,6 +256,8 @@ export default function BattlePage() {
   const itemInventoryInitialized = useRef(false);
   const answerSubmittingRef = useRef(false);
   const matchResultSubmittedRef = useRef(false);
+  const leavingToResultRef = useRef(false);
+  const resultLeavingNavRef = useRef(false);
 
   const currentProblem = useMemo(
     () => normalizeBattleProblem(problems[currentIndex] || ({} as BattleProblem)),
@@ -1154,17 +1161,22 @@ export default function BattlePage() {
                 },
               });
             }
-            // 이미 제출하고 대기 중인 클라이언트만 결과로 이동 (플레이 중이면 로컬 종료 후 제출)
-            if (matchResultSubmittedRef.current) {
+            if (leavingToResultRef.current) {
               setBattleFinished(true);
               setShowGameOver(true);
-              const resultParams = new URLSearchParams({ roomId });
-              if (payload.matchId || matchId) resultParams.set('matchId', String(payload.matchId || matchId));
-              navigate(`${ROUTES.RESULT}?${resultParams.toString()}`, { replace: true });
-            } else {
-              setBattleFinished(true);
-              setShowGameOver(true);
+              return;
             }
+            setShowSaveModal(false);
+            setShowResultLeavingModal(true);
+          }),
+        );
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.MATCH_RESULT_PENDING, (payload: MatchResultPendingPayload) => {
+            const waiting = Array.isArray(payload.waitingForUserIds)
+              ? payload.waitingForUserIds.map((id) => String(id))
+              : [];
+            setPendingResultUserIds(waiting);
           }),
         );
 
@@ -1511,16 +1523,54 @@ export default function BattlePage() {
     advanceQueuedRef.current = false;
   };
 
-  const lockAndSpectate = () => {
-    if (showSaveModal || demoSpectating || spectatorLocked) return;
+  const goToResultPage = () => {
+    if (resultLeavingNavRef.current) return;
+    resultLeavingNavRef.current = true;
+    const resultParams = new URLSearchParams({ roomId });
+    if (matchId) resultParams.set('matchId', matchId);
+    navigate(`${ROUTES.RESULT}?${resultParams.toString()}`, { replace: true });
+  };
+
+  const resolveIsLastFinisher = async () => {
+    const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
+    if (!isLiveMatch || !matchId) return true;
+    let waiting = pendingResultUserIds;
+    try {
+      const pending = await fetchMatchPending(matchId);
+      waiting = Array.isArray(pending.waitingForUserIds) ? pending.waitingForUserIds.map(String) : waiting;
+      setPendingResultUserIds(waiting);
+      if (pending.resultReady) return true;
+    } catch {
+      /* 소켓 대기 목록으로 판단 */
+    }
+    const others = waiting
+      .map((id) => String(id).replace(/^player-/, ''))
+      .filter((id) => id && id !== myId && !departedUserIdsRef.current.has(id));
+    if (waiting.length === 0) {
+      const roster = Array.isArray(battleMeta.roomRoster)
+        ? (battleMeta.roomRoster as Array<{ userId?: string }>)
+        : [];
+      const humans = roster
+        .map((player) => String(player.userId || '').replace(/^player-/, ''))
+        .filter((id) => id && !id.startsWith('bot') && !departedUserIdsRef.current.has(id));
+      return humans.filter((id) => id !== myId).length === 0;
+    }
+    return others.length === 0;
+  };
+
+  const handleFinalSubmitClick = async () => {
+    if (demoSpectating || spectatorLocked || showSaveModal || showResultLeavingModal) return;
+    if (!hasCurrentAnswerAttempted()) {
+      setShowAnswerRequiredModal(true);
+      return;
+    }
+    const isLast = await resolveIsLastFinisher();
+    setFinalSubmitKind(isLast ? 'result' : 'spectate');
     setShowSaveModal(true);
   };
 
   const cancelFinalSubmit = () => {
     setShowSaveModal(false);
-    if (!demoSpectating && !spectatorLocked && currentIndex >= problems.length - 1) {
-      setProblemSolved(false);
-    }
   };
 
   const finalizeSaveAndSpectate = async () => {
@@ -1530,7 +1580,6 @@ export default function BattlePage() {
       if (!submitted) return;
     }
     setShowSaveModal(false);
-    setDemoSpectating(true);
     setSpectatorLocked(true);
     setRevealHint(null);
     setSpectatorMyViewProblem(currentIndex);
@@ -1539,11 +1588,18 @@ export default function BattlePage() {
     }
     setSessionSavedSnapshot(answers.join('||'));
     setSaveStatus('saved');
-    setShowClearFlash(true);
+    if (finalSubmitKind === 'result') {
+      leavingToResultRef.current = true;
+      setBattleFinished(true);
+      setShowGameOver(true);
+    } else {
+      setDemoSpectating(true);
+      setShowClearFlash(true);
+    }
     syncBattleDemoState(sessionId, {
       event: 'submit-lock',
       lockedProblemIndex: currentIndex,
-      demoSpectating: true,
+      demoSpectating: finalSubmitKind !== 'result',
       spectatorLocked: true,
       currentProblemLocked: true,
       answers,
@@ -1555,6 +1611,18 @@ export default function BattlePage() {
     }
     doPersistSubmission(answers, currentIndex);
   };
+
+  useEffect(() => {
+    if (!showResultLeavingModal) return;
+    const timer = window.setTimeout(() => {
+      if (resultLeavingNavRef.current) return;
+      resultLeavingNavRef.current = true;
+      const resultParams = new URLSearchParams({ roomId });
+      if (matchId) resultParams.set('matchId', matchId);
+      navigate(`${ROUTES.RESULT}?${resultParams.toString()}`, { replace: true });
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [showResultLeavingModal, roomId, matchId, navigate]);
 
   const updateBlankAnswer = (problemIndex: number, blankIndex: number, value: string) => {
     if (problemSolved) return;
@@ -1635,8 +1703,7 @@ export default function BattlePage() {
       return;
     }
     if (currentIndex >= problems.length - 1) {
-      setProblemSolved(true);
-      lockAndSpectate();
+      await handleFinalSubmitClick();
       return;
     }
 
@@ -1654,7 +1721,7 @@ export default function BattlePage() {
       markProblemWrong(currentIndex);
     }
     if (currentIndex >= problems.length - 1) {
-      lockAndSpectate();
+      void handleFinalSubmitClick();
       return;
     }
     setCurrentIndex(currentIndex + 1);
@@ -2053,10 +2120,21 @@ export default function BattlePage() {
   const activeLocked = demoSpectating || isLocked;
   const activeShouldRenderVisual = demoSpectating ? displayedShouldRenderVisual : shouldRenderProblemVisual;
 
+  const isLastProblem = currentIndex >= problems.length - 1;
   const battleActionBar = (
     <div className="battle-action-bar">
       {!demoSpectating &&
-        (!problemSolved ? (
+        (isLastProblem ? (
+          <button
+            type="button"
+            className="pixel-btn pixel-btn-success"
+            onClick={() => void handleFinalSubmitClick()}
+            style={{ padding: '4px 10px', fontSize: '14px' }}
+            disabled={spectatorLocked}
+          >
+            최종제출
+          </button>
+        ) : !problemSolved ? (
           <button
             type="button"
             className="pixel-btn pixel-btn-success"
@@ -2073,7 +2151,7 @@ export default function BattlePage() {
             onClick={handleAdvance}
             style={{ padding: '4px 10px', fontSize: '14px' }}
           >
-            {currentIndex >= problems.length - 1 ? '최종 제출' : '다음 문제'}
+            다음 문제
           </button>
         ))}
       <button type="button" className="pixel-btn pixel-btn-danger" onClick={leaveBattle} style={{ padding: '4px 10px', fontSize: '14px' }}>
@@ -2260,10 +2338,7 @@ export default function BattlePage() {
     <div className={`battle-opponent-column${demoSpectating ? ' is-spectator-side' : ''}`}>
             <div className="opponent-timer-strip" style={{ height: 119, flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
-                  <div className="opponent-timer-kicker">TIME LEFT</div>
-                  <div className="opponent-timer-detail">전체 제한 {formatTime(totalBattleSeconds)}</div>
-                </div>
+                <div className="opponent-timer-kicker">TIME LEFT</div>
                 <div className="opponent-timer-clock" style={{ fontSize: 36 }}>
                   {formatTime(remaining)}
                 </div>
@@ -2322,18 +2397,30 @@ export default function BattlePage() {
       {showSaveModal && (
         <div className="game-over-overlay" style={{ zIndex: 3100 }}>
           <div className="game-over-box" style={{ maxWidth: '520px', borderColor: 'var(--px-warning)' }}>
-            <div className="game-over-text" style={{ fontSize: '26px', color: 'var(--px-warning)' }}>
-              제출할까요?
+            <div className="game-over-text" style={{ fontSize: '22px', color: 'var(--px-warning)', lineHeight: 1.4 }}>
+              {finalSubmitKind === 'result' ? '제출 후 결과창으로 넘어갑니다.' : '제출 후 관전 모드로 넘어갑니다.'}
             </div>
-            <div className="game-over-sub" style={{ marginBottom: '18px' }}>
-              답안을 제출하고 관전모드로 전환합니다.
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button type="button" className="pixel-btn pixel-btn-success" onClick={finalizeSaveAndSpectate}>
-                제출 후 관전
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '18px' }}>
+              <button type="button" className="pixel-btn pixel-btn-success" onClick={() => void finalizeSaveAndSpectate()}>
+                확인
               </button>
               <button type="button" className="pixel-btn pixel-btn-secondary" onClick={cancelFinalSubmit}>
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showResultLeavingModal && (
+        <div className="game-over-overlay" style={{ zIndex: 3200 }}>
+          <div className="game-over-box" style={{ maxWidth: '520px', borderColor: 'var(--px-warning)' }}>
+            <div className="game-over-text" style={{ fontSize: '22px', color: 'var(--px-warning)', lineHeight: 1.4 }}>
+              결과창으로 넘어갑니다.
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '18px' }}>
+              <button type="button" className="pixel-btn pixel-btn-success" onClick={goToResultPage}>
+                확인
               </button>
             </div>
           </div>
