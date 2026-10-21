@@ -284,8 +284,13 @@ export default function BattlePage() {
   const hasProblems = problems.length > 0;
   const totalProblems = hasProblems ? problems.length : 1;
   const currentProblemNumber = hasProblems ? currentIndex + 1 : 0;
-  const problemProgressText = hasProblems ? `${currentProblemNumber}/${totalProblems}` : '0/1';
-  const progressPercent = hasProblems ? (currentProblemNumber / totalProblems) * 100 : 0;
+  const allProblemsSubmitted = spectatorLocked || demoSpectating || battleFinished;
+  const problemProgressText = hasProblems
+    ? `${allProblemsSubmitted ? totalProblems : currentProblemNumber}/${totalProblems}`
+    : '0/1';
+  const progressPercent = hasProblems
+    ? ((allProblemsSubmitted ? totalProblems : currentProblemNumber) / totalProblems) * 100
+    : 0;
 
   const finalizedProblemResults = useMemo(() => {
     problemResultsRef.current = problemResults;
@@ -1589,6 +1594,9 @@ export default function BattlePage() {
   };
 
   const openReviseSelect = () => {
+    if (selectedOption !== null) {
+      setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: selectedOption }));
+    }
     setShowReviseAskModal(false);
     setSelectedReviseProblems([]);
     setShowReviseSelectModal(true);
@@ -1611,10 +1619,10 @@ export default function BattlePage() {
     });
   };
 
-  const goToReviseProblem = async (index: number) => {
+  const goToReviseProblem = (index: number) => {
     if (!revisionEditMode || !selectedReviseProblems.includes(index)) return;
-    if (index !== currentIndex && hasCurrentAnswerAttempted()) {
-      await submitCurrentProblem({ force: true });
+    if (selectedOption !== null) {
+      setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: selectedOption }));
     }
     setCurrentIndex(index);
     setProblemSolved(false);
@@ -1653,15 +1661,24 @@ export default function BattlePage() {
 
   const finalizeSaveAndSpectate = async () => {
     if (saveModalTimerRef.current) clearTimeout(saveModalTimerRef.current);
-    if (revisionEditMode || currentIndex >= problems.length - 1) {
-      const submitted = await submitCurrentProblem({ force: true });
-      if (!submitted && hasCurrentAnswerAttempted()) return;
+    const lastIndex = Math.max(0, problems.length - 1);
+    const indexesToSubmit = new Set<number>();
+    if (revisionEditMode) {
+      selectedReviseProblems.forEach((index) => indexesToSubmit.add(index));
     }
+    if (problems.length > 0) indexesToSubmit.add(lastIndex);
+    let submittedAny = false;
+    for (const index of [...indexesToSubmit].sort((a, b) => a - b)) {
+      const ok = await submitProblemAt(index, { force: true });
+      if (ok) submittedAny = true;
+    }
+    if (!submittedAny && hasCurrentAnswerAttempted()) return;
+    setCurrentIndex(lastIndex);
     setRevisionEditMode(false);
     setShowSaveModal(false);
     setSpectatorLocked(true);
     setRevealHint(null);
-    setSpectatorMyViewProblem(currentIndex);
+    setSpectatorMyViewProblem(lastIndex);
     if (selectedOption !== null) {
       setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: selectedOption }));
     }
@@ -1713,10 +1730,22 @@ export default function BattlePage() {
     });
   };
 
-  const submitCurrentProblem = async (options?: { force?: boolean }) => {
+  const submitProblemAt = async (problemIndex: number, options?: { force?: boolean }) => {
     if (demoSpectating || spectatorLocked) return false;
-    if (problemSolved && !options?.force) return false;
-    if (!hasCurrentAnswerAttempted()) return false;
+    if (problemIndex === currentIndex && problemSolved && !options?.force) return false;
+    const optionForProblem =
+      problemIndex === currentIndex
+        ? selectedOption
+        : (selectedOptionByProblem[problemIndex] ?? null);
+    const problem = normalizeBattleProblem(problems[problemIndex] || ({} as BattleProblem));
+    const attempted = hasProblemAnswerAttempted({
+      problem,
+      problemIndex,
+      langKey,
+      blankAnswers,
+      selectedOption: optionForProblem,
+    });
+    if (!attempted) return false;
     if (answerSubmittingRef.current) return false;
     answerSubmittingRef.current = true;
 
@@ -1726,17 +1755,23 @@ export default function BattlePage() {
 
     try {
       if (isLiveMatch) {
-        const answersForProblem = (blankAnswers[currentIndex] || []).map((value) => String(value ?? ''));
+        const answersForProblem = (blankAnswers[problemIndex] || []).map((value) => String(value ?? ''));
         const result = await submitMatchAnswer(matchId, {
-          problemIndex: currentIndex,
+          problemIndex,
           answers: answersForProblem,
-          selectedOption: selectedOption === null ? undefined : selectedOption,
+          selectedOption: optionForProblem === null ? undefined : optionForProblem,
         });
         isCorrect = Boolean(result.isCorrect);
         setIngameScore(Number(result.score) || 0);
       } else {
-        isCorrect = isCurrentAnswerCorrect();
-        const wasCorrect = problemResults[currentIndex] === true;
+        isCorrect = isProblemAnswerCorrect({
+          problem,
+          problemIndex,
+          langKey,
+          blankAnswers,
+          selectedOption: optionForProblem,
+        });
+        const wasCorrect = problemResults[problemIndex] === true;
         if (isCorrect && !wasCorrect) {
           setIngameScore((prev) => prev + BATTLE_CORRECT_SCORE);
         } else if (!isCorrect && wasCorrect) {
@@ -1744,15 +1779,15 @@ export default function BattlePage() {
         }
       }
 
-      setProblemResults((prev) => ({ ...prev, [currentIndex]: isCorrect }));
+      setProblemResults((prev) => ({ ...prev, [problemIndex]: isCorrect }));
       setSolveTimes((prev) =>
-        prev[currentIndex] != null ? prev : { ...prev, [currentIndex]: elapsed },
+        prev[problemIndex] != null ? prev : { ...prev, [problemIndex]: elapsed },
       );
 
       setLocalSolvedProblems((prev) => {
         const next = isCorrect
-          ? Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b)
-          : prev.filter((index) => index !== currentIndex);
+          ? Array.from(new Set([...prev, problemIndex])).sort((a, b) => a - b)
+          : prev.filter((index) => index !== problemIndex);
         markProblemSubmitted(sessionId, next);
         if (isCorrect && next.length >= totalProblems) {
           setFinishedAtElapsedSec(battleElapsed);
@@ -1760,11 +1795,11 @@ export default function BattlePage() {
         return next;
       });
 
-      setProblemSolved(true);
+      if (problemIndex === currentIndex) setProblemSolved(true);
       return true;
     } catch (error) {
       if (isAlreadySubmittedError(error)) {
-        setProblemSolved(true);
+        if (problemIndex === currentIndex) setProblemSolved(true);
         return true;
       }
       setChatMessages((prev) => [
@@ -1776,6 +1811,9 @@ export default function BattlePage() {
       answerSubmittingRef.current = false;
     }
   };
+
+  const submitCurrentProblem = async (options?: { force?: boolean }) =>
+    submitProblemAt(currentIndex, options);
 
   const handleSubmit = async () => {
     if (demoSpectating || spectatorLocked || problemSolved) return;
@@ -2177,7 +2215,7 @@ export default function BattlePage() {
   const renderMySpectatorProblemTabs = () => (
     <div className="battle-my-problem-tabs">
       {Array.from({ length: totalProblems }).map((_, idx) => {
-        const checked = idx <= currentIndex;
+        const checked = allProblemsSubmitted || idx <= currentIndex;
         const isActive = myViewProblemIndex === idx;
         return (
           <span
@@ -2214,20 +2252,12 @@ export default function BattlePage() {
                 type="button"
                 className={`pixel-btn${idx === currentIndex ? ' pixel-btn-success' : ' pixel-btn-secondary'}`}
                 style={{ padding: '4px 8px', fontSize: '13px' }}
-                onClick={() => void goToReviseProblem(idx)}
+                onClick={() => goToReviseProblem(idx)}
               >
                 {idx + 1}번
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="pixel-btn pixel-btn-primary"
-            onClick={() => void submitCurrentProblem({ force: true })}
-            style={{ padding: '4px 10px', fontSize: '14px' }}
-          >
-            제출
-          </button>
           <button
             type="button"
             className="pixel-btn pixel-btn-success"
