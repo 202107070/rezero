@@ -117,6 +117,7 @@ function inventoryFromItems(items: unknown): ItemInventory {
     scribble: 0,
     blankBreak: 0,
     buildCharge: 0,
+    revise: 0,
   };
   if (!Array.isArray(items)) {
     if (items && typeof items === 'object') {

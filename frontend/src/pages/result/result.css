@@ -285,6 +285,7 @@
 
 .team-panel.win { border-color: var(--px-success); box-shadow: 0 0 0 4px #000, 0 0 30px rgba(146, 204, 65, 0.3); }
 .team-panel.lose { border-color: var(--px-danger); box-shadow: 0 0 0 4px #000, 0 0 30px rgba(231, 110, 85, 0.3); }
+.team-panel.draw { border-color: var(--px-warning); box-shadow: 0 0 0 4px #000, 0 0 30px rgba(247, 213, 29, 0.28); }
 
 .team-title {
   font-size: 22px;
@@ -297,6 +298,7 @@
 
 .win .team-title { color: var(--px-success); text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
 .lose .team-title { color: var(--px-danger); text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+.draw .team-title { color: var(--px-warning); text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
 
 .player-list {
   display: flex;

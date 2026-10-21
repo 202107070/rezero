@@ -14,6 +14,7 @@ export const DEV_TEST_USER_LOADOUT = {
     scribble: 10,
     blankBreak: 10,
     buildCharge: 10,
+    revise: 10,
   },
   /** 대기실 아이템 로드아웃에 전부 자동 선택 */
   autoSelectAllItemsInRoom: true,

@@ -82,6 +82,7 @@ const STARTER_ITEM_KEYS = [
   "scribble",
   "blankBreak",
   "buildCharge",
+  "revise",
 ];
 
 /** 회원가입/시드용: 모든 아이템 quantity개 지급 */

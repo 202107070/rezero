@@ -79,8 +79,32 @@ function computeRatingDelta(ingameScore: number, isWinner: boolean): number {
   return isWinner ? magnitude : -magnitude;
 }
 
+export function isNoSolveDraw(
+  players: Array<{
+    ingameScore?: number;
+    solvedProblems?: number[];
+    problemResults?: boolean[];
+  }>,
+): boolean {
+  if (!players.length) return false;
+  return players.every((player) => {
+    const solved = Array.isArray(player.solvedProblems) ? player.solvedProblems.length : 0;
+    const correct = Array.isArray(player.problemResults)
+      ? player.problemResults.filter(Boolean).length
+      : 0;
+    return (Number(player.ingameScore) || 0) <= 0 && solved === 0 && correct === 0;
+  });
+}
+
 export function applyRatingDeltas(players: ResultPlayer[]): void {
   if (players.length === 0) return;
+  if (isNoSolveDraw(players)) {
+    players.forEach((player) => {
+      player.rank = 1;
+      player.delta = 0;
+    });
+    return;
+  }
   const winCount = Math.max(1, Math.ceil(players.length / 2));
   players.forEach((player) => {
     const isWinner = player.rank <= winCount;
@@ -238,8 +262,9 @@ function rebuildResultPlayers(params: {
   }
 
   list.sort(comparePlayersByRank);
+  const draw = isNoSolveDraw(list);
   list.forEach((p, i) => {
-    p.rank = i + 1;
+    p.rank = draw ? 1 : i + 1;
   });
   applyRatingDeltas(list);
   return list;

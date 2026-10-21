@@ -21,6 +21,7 @@ const STARTER_ITEM_KEYS = [
   "scribble",
   "blankBreak",
   "buildCharge",
+  "revise",
 ];
 
 const pool = mariadb.createPool({

@@ -128,6 +128,16 @@ export async function submitMatchAnswer(
   });
 }
 
+export async function activateMatchRevise(
+  matchId: string,
+  problemIndexes: number[],
+): Promise<{ matchId: string; problemIndexes: number[]; consumed: number; success: boolean }> {
+  return apiRequest(`/matches/${encodeURIComponent(matchId)}/items/revise`, {
+    method: 'POST',
+    body: JSON.stringify({ problemIndexes }),
+  });
+}
+
 export async function useMatchItem(
   matchId: string,
   params: {

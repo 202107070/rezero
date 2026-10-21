@@ -390,3 +390,47 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .battle-build-editor .cm-content { padding: 8px 10px; }
 .battle-build-console { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .battle-build-console .terminal-content { font-size: 16px; line-height: 1.4; }
+
+.battle-revise-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.revise-select-overlay { flex-direction: column; gap: 12px; }
+.revise-select-toast {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--px-warning);
+  color: #000;
+  border: 4px solid #000;
+  padding: 8px 16px;
+  font-size: 22px;
+  z-index: 2;
+  box-shadow: 4px 4px 0 #000;
+}
+.revise-select-board {
+  max-width: min(920px, 92vw);
+  width: 100%;
+  background: var(--px-surface);
+  border: 4px solid var(--px-warning);
+  box-shadow: 4px 4px 0 #000;
+  padding: 16px 18px 18px;
+}
+.revise-select-title { text-align: center; color: var(--px-warning); font-size: 24px; margin-bottom: 6px; text-shadow: 2px 2px 0 #000; }
+.revise-select-sub { text-align: center; color: var(--px-text-muted); font-size: 16px; margin-bottom: 14px; }
+.revise-select-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.revise-problem-card {
+  background: var(--px-surface-light);
+  border: 4px solid #000;
+  color: var(--px-text);
+  font-family: var(--font-pixel);
+  padding: 12px 10px;
+  cursor: pointer;
+  text-align: left;
+  min-height: 92px;
+}
+.revise-problem-card.is-selected {
+  border-color: var(--px-warning);
+  box-shadow: 0 0 0 3px var(--px-warning);
+  background: #3d3a14;
+}
+.revise-problem-index { color: var(--px-warning); font-size: 16px; margin-bottom: 6px; }
+.revise-problem-title { font-size: 16px; line-height: 1.3; }

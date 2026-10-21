@@ -166,6 +166,7 @@ const ROULETTE_POOL = [
   "scribble",
   "blankBreak",
   "buildCharge",
+  "revise",
 ];
 const ROULETTE_COST = 1000;
 

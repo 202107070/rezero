@@ -12,6 +12,7 @@ const EMPTY_ITEM_INVENTORY: ItemInventory = {
   scribble: 0,
   blankBreak: 0,
   buildCharge: 0,
+  revise: 0,
 };
 
 const EMPTY_TITLE_STATS: TitleStats = {

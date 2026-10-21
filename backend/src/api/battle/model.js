@@ -192,6 +192,21 @@ export async function consumeUserItem(userId, itemKey) {
   return Number(result.affectedRows) === 1;
 }
 
+export async function consumeUserItemCount(userId, itemKey, count) {
+  const amount = Number(count);
+  if (!Number.isInteger(amount) || amount < 1) return false;
+  const result = await pool.query(
+    `UPDATE user_items
+     SET quantity = quantity - ?
+     WHERE user_id = ?
+       AND item_key = ?
+       AND quantity >= ?`,
+    [amount, userId, itemKey, amount],
+  );
+
+  return Number(result.affectedRows) === 1;
+}
+
 export async function findMatchParticipantsForResult(matchId) {
   return pool.query(
     `SELECT

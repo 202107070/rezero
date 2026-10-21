@@ -21,6 +21,7 @@ const ITEM_KEYS = new Set([
   "scribble",
   "blankBreak",
   "buildCharge",
+  "revise",
 ]);
 
 function createMatchId(roomId) {
@@ -195,6 +196,21 @@ function progressKey(matchId, userId) {
   return "battle:progress:" + matchId + ":" + userId;
 }
 
+function reviseAllowKey(matchId, userId) {
+  return "battle:revise:" + matchId + ":" + userId;
+}
+
+function isNoSolveDraw(players) {
+  if (!Array.isArray(players) || players.length === 0) return false;
+  return players.every(function (player) {
+    const solved = Array.isArray(player.solvedProblems) ? player.solvedProblems.length : 0;
+    const correct = Array.isArray(player.problemResults)
+      ? player.problemResults.filter(Boolean).length
+      : 0;
+    return numberOrZero(player.ingameScore) === 0 && solved === 0 && correct === 0;
+  });
+}
+
 const CHARACTER_ICONS = {
   char1: "🤺",
   char2: "🧙",
@@ -283,7 +299,7 @@ function titleIdsFor(stats) {
   return ids;
 }
 
-function buildTitleData(previous, player, isWinner, match) {
+function buildTitleData(previous, player, isWinner, match, isDraw) {
   const owned = parseJson(previous?.ownedTitleIds, []);
   const oldStats = {
     totalWins: numberOrZero(previous?.totalWins),
@@ -298,8 +314,12 @@ function buildTitleData(previous, player, isWinner, match) {
     solvedCount > 0 ? player.totalSolveTime / solvedCount : 0;
   const totalGames = oldStats.totalGames + 1;
   const stats = {
-    totalWins: oldStats.totalWins + (isWinner ? 1 : 0),
-    consecutiveWins: isWinner ? oldStats.consecutiveWins + 1 : 0,
+    totalWins: oldStats.totalWins + (isWinner && !isDraw ? 1 : 0),
+    consecutiveWins: isDraw
+      ? oldStats.consecutiveWins
+      : isWinner
+        ? oldStats.consecutiveWins + 1
+        : 0,
     totalGames,
     perfectGame:
       oldStats.perfectGame ||
@@ -311,7 +331,7 @@ function buildTitleData(previous, player, isWinner, match) {
     langWins: { ...oldStats.langWins },
   };
 
-  if (isWinner) {
+  if (isWinner && !isDraw) {
     stats.langWins[match.language] = numberOrZero(stats.langWins[match.language]) + 1;
   }
 
@@ -407,8 +427,9 @@ async function finalizeSubmittedMatch(match, participants, submissions) {
     );
   }).sort(comparePlayersByRank);
 
+  const noSolveDraw = isNoSolveDraw(players);
   players.forEach(function (player, index) {
-    player.rank = index + 1;
+    player.rank = noSolveDraw ? 1 : index + 1;
   });
 
   const winnerRankLimit = Math.ceil(players.length / 2);
@@ -424,19 +445,20 @@ async function finalizeSubmittedMatch(match, participants, submissions) {
   );
 
   const playersWithRewards = players.map(function (player) {
-    const isWinner = player.rank <= winnerRankLimit;
-    const ratingAmount = Math.max(10, Math.floor(player.ingameScore / 10));
+    const isWinner = !noSolveDraw && player.rank <= winnerRankLimit;
+    const ratingAmount = noSolveDraw ? 0 : Math.max(10, Math.floor(player.ingameScore / 10));
     const titleData = buildTitleData(
       titleByUserId.get(String(player.id)),
       player,
       isWinner,
       match,
+      noSolveDraw,
     );
 
     return {
       ...player,
-      earnedGold: player.ingameScore,
-      ratingDelta: isWinner ? ratingAmount : -ratingAmount,
+      earnedGold: noSolveDraw ? 0 : player.ingameScore,
+      ratingDelta: noSolveDraw ? 0 : isWinner ? ratingAmount : -ratingAmount,
       titleData,
     };
   });
@@ -517,13 +539,22 @@ export async function submitBattleAnswer(input) {
   );
   const key = submittedKey(input.matchId, input.problemIndex);
   const alreadySubmitted = await redisClient.sIsMember(key, String(input.userId));
+  const reviseAllowed = alreadySubmitted
+    ? Boolean(
+        await redisClient.sIsMember(
+          reviseAllowKey(input.matchId, input.userId),
+          String(input.problemIndex),
+        ),
+      )
+    : false;
 
-  if (alreadySubmitted) {
+  if (alreadySubmitted && !reviseAllowed) {
     throw new AppError(409, "PROBLEM_ALREADY_SUBMITTED", "이미 제출한 문제입니다.");
   }
 
+  const snapshot = parseProblemSnapshot(matchProblem.problemSnapshot);
   const isCorrect = judgeProblemAnswer({
-    problem: parseProblemSnapshot(matchProblem.problemSnapshot),
+    problem: snapshot,
     language: matchProblem.language,
     answers: input.answers,
     selectedOption: input.selectedOption,
@@ -531,13 +562,39 @@ export async function submitBattleAnswer(input) {
   const currentScore = Number(
     (await redisClient.hGet(scoreKey(input.matchId), String(input.userId))) || 0,
   );
+  let previousAwarded = 0;
+  if (alreadySubmitted) {
+    const rawWritten = await redisClient.hGet(
+      writtenKey(input.matchId, input.userId),
+      String(input.problemIndex),
+    );
+    try {
+      const parsed = rawWritten ? JSON.parse(rawWritten) : {};
+      if (typeof parsed.awardedScore === "number") {
+        previousAwarded = Number(parsed.awardedScore) || 0;
+      } else if (parsed.isCorrect === true) {
+        previousAwarded = CORRECT_ANSWER_SCORE;
+      } else {
+        const oldCorrect = judgeProblemAnswer({
+          problem: snapshot,
+          language: matchProblem.language,
+          answers: Array.isArray(parsed.answers) ? parsed.answers : [],
+          selectedOption: parsed.selectedOption,
+        });
+        previousAwarded = oldCorrect ? CORRECT_ANSWER_SCORE : 0;
+      }
+    } catch {
+      previousAwarded = 0;
+    }
+  }
   const awardedScore = isCorrect ? CORRECT_ANSWER_SCORE : 0;
-  const score = currentScore + awardedScore;
+  const score = Math.max(0, currentScore - previousAwarded + awardedScore);
 
-  await redisClient
-    .multi()
-    .sAdd(key, String(input.userId))
-    .expire(key, 60 * 60)
+  const writer = redisClient.multi();
+  if (!alreadySubmitted) {
+    writer.sAdd(key, String(input.userId)).expire(key, 60 * 60);
+  }
+  await writer
     .hSet(scoreKey(input.matchId), String(input.userId), String(score))
     .expire(scoreKey(input.matchId), 60 * 60)
     .sAdd(progressKey(input.matchId, input.userId), String(input.problemIndex))
@@ -549,6 +606,8 @@ export async function submitBattleAnswer(input) {
         answers: Array.isArray(input.answers) ? input.answers : [],
         selectedOption:
           input.selectedOption == null ? null : Number(input.selectedOption),
+        isCorrect,
+        awardedScore,
       }),
     )
     .expire(writtenKey(input.matchId, input.userId), 60 * 60)
@@ -642,6 +701,58 @@ export async function useBattleItem(input) {
     problemIndex: input.problemIndex,
     itemKey: input.itemKey,
     targetUserId: input.targetUserId || null,
+    success: true,
+  };
+}
+
+export async function activateReviseItems(input) {
+  const indexes = [...new Set((input.problemIndexes || []).map(Number))].filter(function (index) {
+    return Number.isInteger(index) && index >= 0;
+  });
+  if (indexes.length < 1) {
+    throw new AppError(400, "INVALID_REVISE_SELECTION", "수정할 문제를 선택하세요.");
+  }
+
+  const match = await battleModel.findMatchById(input.matchId);
+  if (!match) {
+    throw new AppError(404, "MATCH_NOT_FOUND", "경기를 찾을 수 없습니다.");
+  }
+  if (match.status !== "IN_PROGRESS") {
+    throw new AppError(409, "MATCH_NOT_IN_PROGRESS", "진행 중인 경기만 수정할 수 있습니다.");
+  }
+  if (match.gameMode !== "item") {
+    throw new AppError(409, "ITEM_MODE_REQUIRED", "아이템 모드에서만 사용할 수 있습니다.");
+  }
+
+  const isParticipant = await battleModel.isMatchParticipant(input.matchId, input.userId);
+  if (!isParticipant) {
+    throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
+  }
+
+  const problemCount = Number(match.problemCount) || 0;
+  for (let i = 0; i < indexes.length; i++) {
+    if (problemCount > 0 && indexes[i] >= problemCount) {
+      throw new AppError(400, "INVALID_REVISE_SELECTION", "문제 번호가 올바르지 않습니다.");
+    }
+  }
+
+  const consumed = await battleModel.consumeUserItemCount(input.userId, "revise", indexes.length);
+  if (!consumed) {
+    throw new AppError(409, "ITEM_NOT_AVAILABLE", "수정 아이템이 부족합니다.");
+  }
+
+  const allowKey = reviseAllowKey(input.matchId, input.userId);
+  const writer = redisClient.multi();
+  for (let i = 0; i < indexes.length; i++) {
+    writer.sAdd(allowKey, String(indexes[i]));
+  }
+  writer.expire(allowKey, 60 * 60);
+  await writer.exec();
+
+  return {
+    matchId: input.matchId,
+    problemIndexes: indexes,
+    consumed: indexes.length,
     success: true,
   };
 }

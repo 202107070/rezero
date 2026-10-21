@@ -10,6 +10,7 @@ export interface ItemInventory {
   scribble: number;
   blankBreak: number;
   buildCharge: number;
+  revise: number;
 }
 
 export const DEFAULT_ITEM_INVENTORY: ItemInventory = {
@@ -21,6 +22,7 @@ export const DEFAULT_ITEM_INVENTORY: ItemInventory = {
   scribble: 0,
   blankBreak: 0,
   buildCharge: 0,
+  revise: 0,
 };
 
 export const BATTLE_BUILD_LIMIT = 3;
@@ -43,6 +45,7 @@ export const ROULETTE_ITEMS: RouletteItem[] = [
   { type: 'scribble', icon: '✏️', name: '낙서', rare: true },
   { type: 'blankBreak', icon: '🔨', name: '빈칸깨기', rare: true },
   { type: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
+  { type: 'revise', icon: '📝', name: '수정', rare: true },
 ];
 
 export const ROULETTE_COST = 1000;
@@ -56,6 +59,7 @@ export const ROULETTE_SEG_COLORS = [
   '#2d1a3d', // scribble
   '#6b2a1a', // blankBreak (warm brick)
   '#174a6b', // buildCharge (cool blue)
+  '#3d3a14', // revise
 ];
 
 export type ItemKey = keyof ItemInventory;
@@ -69,6 +73,7 @@ export const BATTLE_ITEM_DEFS: Array<{ key: ItemKey; icon: string; name: string;
   { key: 'scribble', icon: '✏️', name: '낙서', rare: true },
   { key: 'blankBreak', icon: '🔨', name: '빈칸깨기', rare: true },
   { key: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
+  { key: 'revise', icon: '📝', name: '수정', rare: true },
 ];
 
 export const ATTACK_ITEM_KEYS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble'];

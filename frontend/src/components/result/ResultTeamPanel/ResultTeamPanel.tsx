@@ -3,7 +3,7 @@ import type { ResultPlayer } from '../../../utils/resultUtils';
 import { ResultPlayerRow } from '../ResultPlayerRow/ResultPlayerRow';
 
 interface ResultTeamPanelProps {
-  variant: 'win' | 'lose';
+  variant: 'win' | 'lose' | 'draw';
   players: ResultPlayer[];
   departedUserIds?: Set<string>;
   myUserId?: string;
@@ -28,12 +28,17 @@ export function ResultTeamPanel({
   onNicknameContextMenu,
 }: ResultTeamPanelProps) {
   const isWin = variant === 'win';
+  const isDraw = variant === 'draw';
   const deltaSum = players.reduce((sum, player) => sum + player.delta, 0);
-  const footerLabel = isWin ? `WIN + ${Math.abs(deltaSum)}` : `LOSE - ${Math.abs(deltaSum)}`;
+  const footerLabel = isDraw
+    ? 'DRAW + 0'
+    : isWin
+      ? `WIN + ${Math.abs(deltaSum)}`
+      : `LOSE - ${Math.abs(deltaSum)}`;
 
   return (
     <div className={`team-panel ${variant}`}>
-      <div className="team-title">{isWin ? 'WIN' : 'LOSE'}</div>
+      <div className="team-title">{isDraw ? 'DRAW' : isWin ? 'WIN' : 'LOSE'}</div>
       <div className="player-list">
         {players.map((p) => (
           <ResultPlayerRow

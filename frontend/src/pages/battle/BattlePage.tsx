@@ -36,6 +36,7 @@ import {
   getMatchErrorMessage,
   fetchActiveMatch,
   fetchMatchPending,
+  activateMatchRevise,
   submitMatchAnswer,
   submitMatchResult,
   useMatchItem,
@@ -185,6 +186,11 @@ export default function BattlePage() {
   const [finalSubmitKind, setFinalSubmitKind] = useState<'spectate' | 'result'>('spectate');
   const [showResultLeavingModal, setShowResultLeavingModal] = useState(false);
   const [pendingResultUserIds, setPendingResultUserIds] = useState<string[]>([]);
+  const [showReviseAskModal, setShowReviseAskModal] = useState(false);
+  const [showReviseSelectModal, setShowReviseSelectModal] = useState(false);
+  const [showReviseHint, setShowReviseHint] = useState(false);
+  const [revisionEditMode, setRevisionEditMode] = useState(false);
+  const [selectedReviseProblems, setSelectedReviseProblems] = useState<number[]>([]);
   const [showClearFlash, setShowClearFlash] = useState(false);
   const [demoSpectating, setDemoSpectating] = useState(false);
   const [spectatorLocked, setSpectatorLocked] = useState(false);
@@ -258,6 +264,7 @@ export default function BattlePage() {
   const matchResultSubmittedRef = useRef(false);
   const leavingToResultRef = useRef(false);
   const resultLeavingNavRef = useRef(false);
+  const reviseOfferedRef = useRef(false);
 
   const currentProblem = useMemo(
     () => normalizeBattleProblem(problems[currentIndex] || ({} as BattleProblem)),
@@ -1558,15 +1565,86 @@ export default function BattlePage() {
     return others.length === 0;
   };
 
+  const canOfferRevise =
+    isItemMode &&
+    selectedItemKeys.has('revise') &&
+    itemInventory.revise > 0 &&
+    !revisionEditMode &&
+    !reviseOfferedRef.current;
+
   const handleFinalSubmitClick = async () => {
     if (demoSpectating || spectatorLocked || showSaveModal || showResultLeavingModal) return;
-    if (!hasCurrentAnswerAttempted()) {
+    if (showReviseAskModal || showReviseSelectModal) return;
+    if (!hasCurrentAnswerAttempted() && !revisionEditMode) {
       setShowAnswerRequiredModal(true);
       return;
     }
     const isLast = await resolveIsLastFinisher();
     setFinalSubmitKind(isLast ? 'result' : 'spectate');
+    if (canOfferRevise) {
+      setShowReviseAskModal(true);
+      return;
+    }
     setShowSaveModal(true);
+  };
+
+  const openReviseSelect = () => {
+    setShowReviseAskModal(false);
+    setSelectedReviseProblems([]);
+    setShowReviseSelectModal(true);
+    setShowReviseHint(true);
+    window.setTimeout(() => setShowReviseHint(false), 1800);
+  };
+
+  const skipReviseAndConfirm = () => {
+    reviseOfferedRef.current = true;
+    setShowReviseAskModal(false);
+    setShowReviseSelectModal(false);
+    setShowSaveModal(true);
+  };
+
+  const toggleReviseProblem = (index: number) => {
+    setSelectedReviseProblems((prev) => {
+      if (prev.includes(index)) return prev.filter((item) => item !== index);
+      if (prev.length >= itemInventory.revise) return prev;
+      return [...prev, index].sort((a, b) => a - b);
+    });
+  };
+
+  const goToReviseProblem = async (index: number) => {
+    if (!revisionEditMode || !selectedReviseProblems.includes(index)) return;
+    if (index !== currentIndex && hasCurrentAnswerAttempted()) {
+      await submitCurrentProblem({ force: true });
+    }
+    setCurrentIndex(index);
+    setProblemSolved(false);
+    setSelectedOption(selectedOptionByProblem[index] ?? null);
+    setProblemStartTime(Date.now());
+  };
+
+  const confirmReviseSelection = async () => {
+    if (selectedReviseProblems.length < 1) return;
+    if (isLiveMatch && matchId) {
+      try {
+        await activateMatchRevise(matchId, selectedReviseProblems);
+      } catch (error) {
+        setChatMessages((prev) => [
+          ...prev,
+          { sender: 'SYSTEM', text: getMatchErrorMessage(error), time: '' },
+        ]);
+        return;
+      }
+    }
+    const used = selectedReviseProblems.length;
+    setItemInventory((prev) => ({ ...prev, revise: Math.max(0, prev.revise - used) }));
+    reviseOfferedRef.current = true;
+    setShowReviseSelectModal(false);
+    setRevisionEditMode(true);
+    const first = selectedReviseProblems[0];
+    setCurrentIndex(first);
+    setProblemSolved(false);
+    setSelectedOption(selectedOptionByProblem[first] ?? null);
+    setProblemStartTime(Date.now());
   };
 
   const cancelFinalSubmit = () => {
@@ -1575,10 +1653,11 @@ export default function BattlePage() {
 
   const finalizeSaveAndSpectate = async () => {
     if (saveModalTimerRef.current) clearTimeout(saveModalTimerRef.current);
-    if (currentIndex >= problems.length - 1) {
+    if (revisionEditMode || currentIndex >= problems.length - 1) {
       const submitted = await submitCurrentProblem({ force: true });
-      if (!submitted) return;
+      if (!submitted && hasCurrentAnswerAttempted()) return;
     }
+    setRevisionEditMode(false);
     setShowSaveModal(false);
     setSpectatorLocked(true);
     setRevealHint(null);
@@ -1625,7 +1704,7 @@ export default function BattlePage() {
   }, [showResultLeavingModal, roomId, matchId, navigate]);
 
   const updateBlankAnswer = (problemIndex: number, blankIndex: number, value: string) => {
-    if (problemSolved) return;
+    if (problemSolved && !revisionEditMode) return;
     setBlankAnswers((prev) => {
       const next = prev.map((arr) => [...arr]);
       if (!next[problemIndex]) next[problemIndex] = [];
@@ -1657,8 +1736,11 @@ export default function BattlePage() {
         setIngameScore(Number(result.score) || 0);
       } else {
         isCorrect = isCurrentAnswerCorrect();
-        if (isCorrect) {
+        const wasCorrect = problemResults[currentIndex] === true;
+        if (isCorrect && !wasCorrect) {
           setIngameScore((prev) => prev + BATTLE_CORRECT_SCORE);
+        } else if (!isCorrect && wasCorrect) {
+          setIngameScore((prev) => Math.max(0, prev - BATTLE_CORRECT_SCORE));
         }
       }
 
@@ -1667,17 +1749,16 @@ export default function BattlePage() {
         prev[currentIndex] != null ? prev : { ...prev, [currentIndex]: elapsed },
       );
 
-      if (isCorrect) {
-        setLocalSolvedProblems((prev) => {
-          const next = Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b);
-          markProblemSubmitted(sessionId, next);
-          // 모든 문제를 맞춘 뒤에만 완주 시각 기록
-          if (next.length >= totalProblems) {
-            setFinishedAtElapsedSec(battleElapsed);
-          }
-          return next;
-        });
-      }
+      setLocalSolvedProblems((prev) => {
+        const next = isCorrect
+          ? Array.from(new Set([...prev, currentIndex])).sort((a, b) => a - b)
+          : prev.filter((index) => index !== currentIndex);
+        markProblemSubmitted(sessionId, next);
+        if (isCorrect && next.length >= totalProblems) {
+          setFinishedAtElapsedSec(battleElapsed);
+        }
+        return next;
+      });
 
       setProblemSolved(true);
       return true;
@@ -1731,7 +1812,7 @@ export default function BattlePage() {
   };
 
   const selectChoice = (idx: number) => {
-    if (problemSolved) return;
+    if (problemSolved && !revisionEditMode) return;
     setSelectedOption(idx);
     setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: idx }));
   };
@@ -2074,7 +2155,8 @@ export default function BattlePage() {
     );
   };
 
-  const isLocked = demoSpectating || spectatorLocked || problemSolved;
+  const isLocked =
+    demoSpectating || spectatorLocked || (problemSolved && !revisionEditMode);
 
   const myViewProblemIndex = demoSpectating ? (spectatorMyViewProblem ?? currentIndex) : currentIndex;
   const displayedProblem = useMemo(
@@ -2123,7 +2205,41 @@ export default function BattlePage() {
   const isLastProblem = currentIndex >= problems.length - 1;
   const battleActionBar = (
     <div className="battle-action-bar">
+      {!demoSpectating && revisionEditMode && (
+        <>
+          <div className="battle-revise-tabs">
+            {selectedReviseProblems.map((idx) => (
+              <button
+                key={`revise-tab-${idx}`}
+                type="button"
+                className={`pixel-btn${idx === currentIndex ? ' pixel-btn-success' : ' pixel-btn-secondary'}`}
+                style={{ padding: '4px 8px', fontSize: '13px' }}
+                onClick={() => void goToReviseProblem(idx)}
+              >
+                {idx + 1}번
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="pixel-btn pixel-btn-primary"
+            onClick={() => void submitCurrentProblem({ force: true })}
+            style={{ padding: '4px 10px', fontSize: '14px' }}
+          >
+            제출
+          </button>
+          <button
+            type="button"
+            className="pixel-btn pixel-btn-success"
+            onClick={() => void handleFinalSubmitClick()}
+            style={{ padding: '4px 10px', fontSize: '14px' }}
+          >
+            최종제출
+          </button>
+        </>
+      )}
       {!demoSpectating &&
+        !revisionEditMode &&
         (isLastProblem ? (
           <button
             type="button"
@@ -2255,7 +2371,7 @@ export default function BattlePage() {
                     isBuilding={isBuilding}
                     logs={currentBuildLogs}
                     collapsed={buildPanelCollapsed}
-                    disabled={demoSpectating || spectatorLocked || problemSolved}
+                    disabled={activeLocked}
                     onCodeChange={handleBuildCodeChange}
                     onBuild={handleBattleBuild}
                     onToggleCollapse={() => setBuildPanelCollapsed((v) => !v)}
@@ -2393,6 +2509,65 @@ export default function BattlePage() {
           )}
         </div>
       </div>
+
+      {showReviseAskModal && (
+        <div className="game-over-overlay" style={{ zIndex: 3150 }}>
+          <div className="game-over-box" style={{ maxWidth: '520px', borderColor: 'var(--px-warning)' }}>
+            <div className="game-over-text" style={{ fontSize: '20px', color: 'var(--px-warning)', lineHeight: 1.45 }}>
+              수정 아이템이 있습니다. 사용하시겠습니까?
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '18px' }}>
+              <button type="button" className="pixel-btn pixel-btn-success" onClick={openReviseSelect}>
+                예
+              </button>
+              <button type="button" className="pixel-btn pixel-btn-secondary" onClick={skipReviseAndConfirm}>
+                아니오
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReviseSelectModal && (
+        <div className="game-over-overlay revise-select-overlay" style={{ zIndex: 3160 }}>
+          {showReviseHint && <div className="revise-select-toast">문제를 선택하세요</div>}
+          <div className="revise-select-board">
+            <div className="revise-select-title">문제를 선택하세요</div>
+            <div className="revise-select-sub">
+              보유 수정 아이템 {itemInventory.revise}개 · 선택 {selectedReviseProblems.length}개
+            </div>
+            <div className="revise-select-grid">
+              {problems.map((problem, index) => {
+                const selected = selectedReviseProblems.includes(index);
+                return (
+                  <button
+                    key={`revise-card-${index}`}
+                    type="button"
+                    className={`revise-problem-card${selected ? ' is-selected' : ''}`}
+                    onClick={() => toggleReviseProblem(index)}
+                  >
+                    <div className="revise-problem-index">{index + 1}번 문제</div>
+                    <div className="revise-problem-title">{problem.title || `문제 ${index + 1}`}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '16px' }}>
+              <button
+                type="button"
+                className="pixel-btn pixel-btn-success"
+                onClick={() => void confirmReviseSelection()}
+                disabled={selectedReviseProblems.length < 1}
+              >
+                선택 완료
+              </button>
+              <button type="button" className="pixel-btn pixel-btn-secondary" onClick={skipReviseAndConfirm}>
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSaveModal && (
         <div className="game-over-overlay" style={{ zIndex: 3100 }}>

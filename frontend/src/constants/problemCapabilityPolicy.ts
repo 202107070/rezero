@@ -10,6 +10,7 @@ const ALL_ITEM_KEYS: ItemKey[] = [
   'scribble',
   'blankBreak',
   'buildCharge',
+  'revise',
 ];
 
 const ATTACK_ITEMS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble'];

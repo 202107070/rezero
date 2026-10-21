@@ -125,6 +125,11 @@ export function buildRankingSnapshotFromRoomUsers(params: {
     }),
   );
 
+  const noSolveDraw = ranked.every((u) => {
+    const solved = Array.isArray(u.solvedProblems) ? u.solvedProblems.length : 0;
+    const correct = Array.isArray(u.problemResults) ? u.problemResults.filter(Boolean).length : 0;
+    return (Number(u.ingameScore) || 0) <= 0 && solved === 0 && correct === 0;
+  });
   const players: RankingPlayerSnapshot[] = ranked.map((u, index) => {
     const isMe = isBattleMe(u.id, u.name);
     return {
@@ -137,7 +142,7 @@ export function buildRankingSnapshotFromRoomUsers(params: {
       completionTime: u.completionTime ?? Number.POSITIVE_INFINITY,
       solvedProblems: Array.isArray(u.solvedProblems) ? u.solvedProblems : [],
       problemResults: Array.isArray(u.problemResults) ? u.problemResults : [],
-      rank: index + 1,
+      rank: noSolveDraw ? 1 : index + 1,
     };
   });
 

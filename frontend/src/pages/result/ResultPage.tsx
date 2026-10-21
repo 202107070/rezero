@@ -89,7 +89,7 @@ import { getSolution, normalizeCodeHistoryEntry, saveMatchHistoryEntry } from '.
 import type { BattleProblem } from '../../types/battle';
 import type { FinalRankingSnapshot } from '../../utils/battle/rankUtils';
 import { getLangKey } from '../../utils/battle/codeUtils';
-import { buildResultPlayers, type ResultPlayer } from '../../utils/resultUtils';
+import { buildResultPlayers, isNoSolveDraw, type ResultPlayer } from '../../utils/resultUtils';
 import { formatCorrectAnswer, formatSubmittedAnswer, getResultPlayerAnswer, hydrateBattleProblem } from '../../utils/resultAnswerUtils';
 import './result.css';
 
@@ -238,7 +238,8 @@ export default function ResultPage() {
         ? storedRewardFromList.earnedGold
         : null,
   );
-  const earnedGold = isLiveMatch ? (apiRewardGold ?? 0) : myScore;
+  const isDrawMatch = isNoSolveDraw(allPlayers);
+  const earnedGold = isLiveMatch ? (apiRewardGold ?? 0) : isDrawMatch ? 0 : myScore;
   const explicitMyRank = Number(myPlayer?.rank) || 0;
   const myRank = isLiveMatch
     ? explicitMyRank
@@ -248,7 +249,7 @@ export default function ResultPage() {
         ? allPlayers.indexOf(myPlayer) + 1
         : 0;
   const totalPlayersForRank = Math.max(1, allPlayers.length);
-  const isLastPlace = myRank > 0 && myRank === totalPlayersForRank && totalPlayersForRank > 1;
+  const isLastPlace = !isDrawMatch && myRank > 0 && myRank === totalPlayersForRank && totalPlayersForRank > 1;
   const isFirstPlace = myRank === 1;
   const rankBorderColor = isFirstPlace
     ? 'var(--px-warning)'
@@ -260,7 +261,7 @@ export default function ResultPage() {
     : isLastPlace
       ? '0 0 0 4px #000, 0 0 30px rgba(231,110,85,0.35)'
       : '0 0 0 4px #000, 0 0 30px rgba(32,156,238,0.3)';
-  const isWin = myRank > 0 && myRank <= Math.ceil(allPlayers.length / 2);
+  const isWin = !isDrawMatch && myRank > 0 && myRank <= Math.ceil(allPlayers.length / 2);
   const totalProblemCount =
     submission.problemResults?.length ||
     submission.problems?.length ||
@@ -699,7 +700,9 @@ export default function ResultPage() {
     const totalPlayers = Math.max(1, allPlayers.length);
     let mainMsg = '';
 
-    if (myRank <= 0) {
+    if (isDrawMatch) {
+      mainMsg = '무승부입니다. 전원 1등, 점수 변동은 없습니다.';
+    } else if (myRank <= 0) {
       mainMsg = '매치 결과를 집계했습니다.';
     } else if (myRank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
@@ -740,10 +743,12 @@ export default function ResultPage() {
 
     const totalPlayers = Math.max(1, allPlayers.length);
     let mainMsg = '';
-    if (rank === 1) {
+    if (isDrawMatch) {
+      mainMsg = '무승부입니다. 전원 1등, 점수 변동은 없습니다.';
+    } else if (rank === 1) {
       mainMsg = `당신은 ${totalPlayers}명 중 1등입니다.`;
     } else if (rank === totalPlayers && totalPlayers > 1) {
-      mainMsg = `당신은 ${totalPlayers}명 중 ${rank}등(꼴등)입니다.`;
+      mainMsg = `당신은 ${totalPlayers}명 중 ${rank}등입니다.`;
     } else {
       mainMsg = `당신은 ${totalPlayers}명 중 ${rank}등입니다.`;
     }
@@ -766,6 +771,7 @@ export default function ResultPage() {
     myPlayer?.rank,
     totalProblemCount,
     myCorrectCount,
+    isDrawMatch,
   ]);
 
   useEffect(() => {
@@ -1322,7 +1328,7 @@ export default function ResultPage() {
           <>
             <div className="result-win-slot">
               <ResultTeamPanel
-                variant="win"
+                variant={isDrawMatch ? 'draw' : 'win'}
                 players={winners}
                 departedUserIds={unavailableIds}
                 myUserId={myUserId}
@@ -1336,7 +1342,7 @@ export default function ResultPage() {
             </div>
             <div className="result-lose-slot">
               <ResultTeamPanel
-                variant="lose"
+                variant={isDrawMatch ? 'draw' : 'lose'}
                 players={losers}
                 departedUserIds={unavailableIds}
                 myUserId={myUserId}

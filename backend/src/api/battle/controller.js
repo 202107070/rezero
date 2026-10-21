@@ -8,6 +8,7 @@ import {
   getActiveMatchForRoom,
   getMatchPendingUsers,
   getMatchResult,
+  activateReviseItems,
   submitBattleAnswer,
   submitMatchResult,
   useBattleItem,
@@ -65,6 +66,24 @@ export async function useItem(req, res, next) {
       userId: req.user.id,
     });
 
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function activateRevise(req, res, next) {
+  try {
+    const matchId = String(req.params.matchId || "").trim();
+    const problemIndexes = Array.isArray(req.body?.problemIndexes) ? req.body.problemIndexes : [];
+    if (!matchId) {
+      throw new AppError(400, "INVALID_MATCH_ID", "경기 ID가 필요합니다.");
+    }
+    const result = await activateReviseItems({
+      matchId,
+      userId: req.user.id,
+      problemIndexes,
+    });
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);

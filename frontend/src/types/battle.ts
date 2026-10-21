@@ -53,6 +53,7 @@ export interface ItemInventory {
   scribble: number;
   blankBreak: number;
   buildCharge: number;
+  revise: number;
 }
 
 export interface RoomUser {
