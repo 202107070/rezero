@@ -264,7 +264,6 @@ export default function BattlePage() {
   const matchResultSubmittedRef = useRef(false);
   const leavingToResultRef = useRef(false);
   const resultLeavingNavRef = useRef(false);
-  const reviseOfferedRef = useRef(false);
 
   const currentProblem = useMemo(
     () => normalizeBattleProblem(problems[currentIndex] || ({} as BattleProblem)),
@@ -1574,8 +1573,7 @@ export default function BattlePage() {
     isItemMode &&
     selectedItemKeys.has('revise') &&
     itemInventory.revise > 0 &&
-    !revisionEditMode &&
-    !reviseOfferedRef.current;
+    !revisionEditMode;
 
   const handleFinalSubmitClick = async () => {
     if (demoSpectating || spectatorLocked || showSaveModal || showResultLeavingModal) return;
@@ -1605,7 +1603,6 @@ export default function BattlePage() {
   };
 
   const skipReviseAndConfirm = () => {
-    reviseOfferedRef.current = true;
     setShowReviseAskModal(false);
     setShowReviseSelectModal(false);
     setShowSaveModal(true);
@@ -1645,7 +1642,6 @@ export default function BattlePage() {
     }
     const used = selectedReviseProblems.length;
     setItemInventory((prev) => ({ ...prev, revise: Math.max(0, prev.revise - used) }));
-    reviseOfferedRef.current = true;
     setShowReviseSelectModal(false);
     setRevisionEditMode(true);
     const first = selectedReviseProblems[0];
