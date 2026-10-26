@@ -1,4 +1,4 @@
-import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from '../types/audioSettings';
+import { DEFAULT_AUDIO_SETTINGS, normalizeAudioSettings, type AudioSettings } from '../types/audioSettings';
 import type { DisplayMode } from '../types/electron';
 
 let displayMode: DisplayMode = 'window';
@@ -13,9 +13,9 @@ export function saveDisplayMode(mode: DisplayMode): void {
 }
 
 export function loadAudioSettings(): AudioSettings {
-  return { ...audioSettings };
+  return normalizeAudioSettings(audioSettings);
 }
 
 export function saveAudioSettings(settings: AudioSettings): void {
-  audioSettings = { ...settings };
+  audioSettings = normalizeAudioSettings(settings);
 }

@@ -710,7 +710,7 @@ export default function BattlePage() {
     LobbyBGM.stop();
     const settings = loadAudioSettings();
     applyAudioSettings(settings);
-    if (settings.battleMusic) {
+    if (settings.gameMusic) {
       BattleBGM.start('normal');
     }
     return () => BattleBGM.stop();
@@ -726,7 +726,7 @@ export default function BattlePage() {
   }, [roomId]);
 
   useEffect(() => {
-    if (!loadAudioSettings().battleMusic) return;
+    if (!loadAudioSettings().gameMusic) return;
     BattleBGM.setMode(remaining <= 30 && remaining > 0 ? 'urgent' : 'normal');
   }, [remaining]);
 

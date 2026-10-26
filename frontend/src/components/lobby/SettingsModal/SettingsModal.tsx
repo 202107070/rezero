@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ExitConfirmModal } from '../ExitConfirmModal/ExitConfirmModal';
 import { useModalShake } from '../../../hooks/useModalShake';
-import type { AudioSettings } from '../../../types/audioSettings';
+import { normalizeAudioSettings, type AudioSettings } from '../../../types/audioSettings';
 import type { DisplayMode } from '../../../types/electron';
 
 interface SettingsModalProps {
@@ -33,7 +33,7 @@ export function SettingsModal({
   useEffect(() => {
     if (open) {
       setDraftMode(displayMode);
-      setDraftAudio(audioSettings);
+      setDraftAudio(normalizeAudioSettings(audioSettings));
       setConfirmDelete(false);
       setConfirmLogout(false);
       setDeleting(false);
@@ -47,8 +47,8 @@ export function SettingsModal({
     onClose();
   };
 
-  const toggleAudio = (key: keyof AudioSettings) => {
-    setDraftAudio((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleAudio = () => {
+    setDraftAudio((prev) => ({ gameMusic: !prev.gameMusic }));
   };
 
   const handleDelete = async () => {
@@ -96,28 +96,15 @@ export function SettingsModal({
           <div className="settings-audio-list">
             <div className="settings-audio-item">
               <div className="settings-audio-copy">
-                <span className="settings-audio-name">🎵 로비 음악</span>
-                <span className="settings-audio-desc">로비·대기방·결과·연습·빌드에서 재생되는 BGM</span>
+                <span className="settings-audio-name">🎵 게임 음악</span>
+                <span className="settings-audio-desc">로비·대기방·대결·결과·연습·빌드 등 모든 페이지 BGM</span>
               </div>
               <button
                 type="button"
-                className={`settings-audio-toggle${draftAudio.lobbyMusic ? ' on' : ''}`}
-                onClick={() => toggleAudio('lobbyMusic')}
+                className={`settings-audio-toggle${draftAudio.gameMusic ? ' on' : ''}`}
+                onClick={toggleAudio}
               >
-                {draftAudio.lobbyMusic ? 'ON' : 'OFF'}
-              </button>
-            </div>
-            <div className="settings-audio-item">
-              <div className="settings-audio-copy">
-                <span className="settings-audio-name">⚔️ 대결 음악</span>
-                <span className="settings-audio-desc">배틀 중 긴장감 있는 BGM (잔여 30초 이하 시 변주)</span>
-              </div>
-              <button
-                type="button"
-                className={`settings-audio-toggle${draftAudio.battleMusic ? ' on' : ''}`}
-                onClick={() => toggleAudio('battleMusic')}
-              >
-                {draftAudio.battleMusic ? 'ON' : 'OFF'}
+                {draftAudio.gameMusic ? 'ON' : 'OFF'}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AudioSettings } from '../../types/audioSettings';
+import { isGameMusicEnabled } from '../../types/audioSettings';
 import { loadAudioSettings } from './audioSettings';
 
 type WaveType = OscillatorType;
@@ -94,6 +95,21 @@ const PRACTICE_LOOP: MelodyStep[] = [
   { freq: NOTE.A4, dur: 1.0, wave: 'sine', gain: 0.07 },
 ];
 
+const PAGE_TRACK_FILES: Record<Exclude<MusicKind, 'none'>, string[]> = {
+  lobby: ['/audio/lobby.mp3', '/audio/lobby.ogg', '/audio/lobby.wav'],
+  room: ['/audio/room.mp3', '/audio/room.ogg', '/audio/room.wav'],
+  battle: ['/audio/battle.mp3', '/audio/battle.ogg', '/audio/battle.wav'],
+  result: ['/audio/result.mp3', '/audio/result.ogg', '/audio/result.wav'],
+  practice: ['/audio/practice.mp3', '/audio/practice.ogg', '/audio/practice.wav'],
+  build: ['/audio/build.mp3', '/audio/build.ogg', '/audio/build.wav'],
+};
+
+const BATTLE_URGENT_FILES = [
+  '/audio/battle-urgent.mp3',
+  '/audio/battle-urgent.ogg',
+  '/audio/battle-urgent.wav',
+];
+
 const BUILD_LOOP: MelodyStep[] = [
   { freq: NOTE.C4, dur: 0.28, wave: 'triangle', gain: 0.09 },
   { freq: NOTE.G4, dur: 0.22, wave: 'sine', gain: 0.08 },
@@ -119,6 +135,8 @@ class GameAudioEngine {
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
   private loopGeneration = 0;
   private musicNodes: OscillatorNode[] = [];
+  private filePlayer: HTMLAudioElement | null = null;
+  private filePlayToken = 0;
 
   private ensureContext(): AudioContext {
     if (!this.context) {
@@ -151,8 +169,67 @@ class GameAudioEngine {
     return this.context;
   }
 
+  private disposeFilePlayer() {
+    if (!this.filePlayer) return;
+    try {
+      this.filePlayer.pause();
+      this.filePlayer.removeAttribute('src');
+      this.filePlayer.load();
+    } catch {
+      /* ignore */
+    }
+    this.filePlayer = null;
+  }
+
+  private stopFilePlayer() {
+    this.filePlayToken += 1;
+    this.disposeFilePlayer();
+  }
+
+  private trackUrls(kind: Exclude<MusicKind, 'none'>): string[] {
+    if (kind === 'battle' && this.battleMode === 'urgent') {
+      return [...BATTLE_URGENT_FILES, ...PAGE_TRACK_FILES.battle];
+    }
+    return PAGE_TRACK_FILES[kind];
+  }
+
+  private tryPlayFileTrack(kind: Exclude<MusicKind, 'none'>): Promise<boolean> {
+    const token = ++this.filePlayToken;
+    const urls = this.trackUrls(kind);
+    const tryUrl = (index: number): Promise<boolean> => {
+      if (token !== this.filePlayToken || index >= urls.length) return Promise.resolve(false);
+      return new Promise((resolve) => {
+        const audio = new Audio();
+        audio.preload = 'auto';
+        audio.loop = true;
+        audio.volume = 0.46;
+        const cleanup = () => {
+          audio.oncanplaythrough = null;
+          audio.onerror = null;
+        };
+        audio.oncanplaythrough = () => {
+          cleanup();
+          if (token !== this.filePlayToken) {
+            resolve(false);
+            return;
+          }
+          this.disposeFilePlayer();
+          this.filePlayer = audio;
+          void audio.play().then(() => resolve(true)).catch(() => resolve(false));
+        };
+        audio.onerror = () => {
+          cleanup();
+          resolve(tryUrl(index + 1));
+        };
+        audio.src = urls[index];
+      });
+    };
+    return tryUrl(0);
+  }
+
   private clearMusicPlayback() {
     this.loopGeneration += 1;
+    this.stopFilePlayer();
     if (this.loopTimer) {
       clearTimeout(this.loopTimer);
       this.loopTimer = null;
@@ -234,19 +311,22 @@ class GameAudioEngine {
   }
 
   private beginMusic(kind: Exclude<MusicKind, 'none'>) {
-    const settings = loadAudioSettings();
-    const enabled = kind === 'battle' ? settings.battleMusic : settings.lobbyMusic;
-    if (!enabled) {
+    if (!isGameMusicEnabled(loadAudioSettings())) {
       if (this.activeMusic === kind) this.stopAllMusic();
       return;
     }
 
-    if (this.activeMusic === kind) return;
+    if (this.activeMusic === kind && this.filePlayer) return;
+    if (this.activeMusic === kind && !this.filePlayer && this.loopTimer) return;
 
     this.stopAllMusic();
     this.activeMusic = kind;
     this.ensureContext();
-    this.scheduleMusicLoop(kind);
+    void this.tryPlayFileTrack(kind).then((played) => {
+      if (!played && this.activeMusic === kind && isGameMusicEnabled(loadAudioSettings())) {
+        this.scheduleMusicLoop(kind);
+      }
+    });
   }
 
   startLobbyMusic() {
@@ -282,8 +362,9 @@ class GameAudioEngine {
   setBattleMode(mode: BattleMode) {
     if (this.battleMode === mode) return;
     this.battleMode = mode;
-    if (this.activeMusic !== 'battle' || !loadAudioSettings().battleMusic) return;
-    this.scheduleMusicLoop('battle');
+    if (this.activeMusic !== 'battle' || !isGameMusicEnabled(loadAudioSettings())) return;
+    this.activeMusic = 'none';
+    this.beginMusic('battle');
   }
 
   stopBattleMusic() {
@@ -292,16 +373,7 @@ class GameAudioEngine {
   }
 
   applySettings(settings: AudioSettings) {
-    const ambient =
-      this.activeMusic === 'lobby' ||
-      this.activeMusic === 'room' ||
-      this.activeMusic === 'result' ||
-      this.activeMusic === 'practice' ||
-      this.activeMusic === 'build';
-    if (!settings.lobbyMusic && ambient) {
-      this.stopAllMusic();
-    }
-    if (!settings.battleMusic && this.activeMusic === 'battle') {
+    if (!isGameMusicEnabled(settings) && this.activeMusic !== 'none') {
       this.stopAllMusic();
     }
   }

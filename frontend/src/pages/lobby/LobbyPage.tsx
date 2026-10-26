@@ -594,13 +594,13 @@ export default function LobbyPage() {
   useEffect(() => {
     BattleBGM.stop();
     applyAudioSettings(audioSettings);
-    if (audioSettings.lobbyMusic) {
+    if (audioSettings.gameMusic) {
       LobbyBGM.start();
     } else {
       LobbyBGM.stop();
     }
     return () => LobbyBGM.stop();
-  }, [audioSettings.lobbyMusic]);
+  }, [audioSettings.gameMusic]);
 
   useEffect(() => {
     try {
@@ -1087,7 +1087,7 @@ export default function LobbyPage() {
     setAudioSettings(nextAudio);
     saveAudioSettings(nextAudio);
     applyAudioSettings(nextAudio);
-    if (nextAudio.lobbyMusic) LobbyBGM.start();
+    if (nextAudio.gameMusic) LobbyBGM.start();
     else LobbyBGM.stop();
     void applyDisplayMode(mode);
   };
