@@ -96,19 +96,24 @@ const PRACTICE_LOOP: MelodyStep[] = [
 ];
 
 function publicAudioUrl(fileName: string): string {
-  return `/audio/${fileName}`;
+  const relative = `audio/${fileName}`;
+  if (typeof window === 'undefined') return `/${relative}`;
+  if (window.location.protocol === 'file:') {
+    return new URL(relative, window.location.href.replace(/[^/]*$/, '')).href;
+  }
+  return `${window.location.origin}/${relative}`;
 }
 
 const PAGE_TRACK_FILES: Record<Exclude<MusicKind, 'none'>, string[]> = {
-  lobby: ['lobby.mp3', 'lobby.ogg', 'lobby.wav'].map(publicAudioUrl),
-  room: ['room.mp3', 'room.ogg', 'room.wav'].map(publicAudioUrl),
-  battle: ['battle.mp3', 'battle.ogg', 'battle.wav'].map(publicAudioUrl),
-  result: ['result.mp3', 'result.ogg', 'result.wav'].map(publicAudioUrl),
-  practice: ['practice.mp3', 'practice.ogg', 'practice.wav'].map(publicAudioUrl),
-  build: ['build.mp3', 'build.ogg', 'build.wav'].map(publicAudioUrl),
+  lobby: ['lobby.wav', 'lobby.ogg', 'lobby.mp3'].map(publicAudioUrl),
+  room: ['room.ogg', 'room.wav', 'room.mp3'].map(publicAudioUrl),
+  battle: ['battle.wav', 'battle.ogg', 'battle.mp3'].map(publicAudioUrl),
+  result: ['result.wav', 'result.ogg', 'result.mp3'].map(publicAudioUrl),
+  practice: ['practice.wav', 'practice.ogg', 'practice.mp3'].map(publicAudioUrl),
+  build: ['build.wav', 'build.ogg', 'build.mp3'].map(publicAudioUrl),
 };
 
-const BATTLE_URGENT_FILES = ['battle-urgent.mp3', 'battle-urgent.ogg', 'battle-urgent.wav'].map(
+const BATTLE_URGENT_FILES = ['battle-urgent.wav', 'battle-urgent.ogg', 'battle-urgent.mp3'].map(
   publicAudioUrl,
 );
 
@@ -129,6 +134,8 @@ function sniffAudioMime(bytes: Uint8Array): string | null {
   }
   return null;
 }
+
+type FilePlayStatus = 'played' | 'missing' | 'aborted';
 
 const BUILD_LOOP: MelodyStep[] = [
   { freq: NOTE.C4, dur: 0.28, wave: 'triangle', gain: 0.09 },
@@ -219,56 +226,74 @@ class GameAudioEngine {
     return PAGE_TRACK_FILES[kind];
   }
 
-  private async tryPlayFileTrack(kind: Exclude<MusicKind, 'none'>): Promise<boolean> {
+  private playFromSrc(src: string, token: number, objectUrl: string | null = null): Promise<boolean> {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.loop = true;
+      audio.volume = 0.46;
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        audio.oncanplay = null;
+        audio.onloadeddata = null;
+        audio.onerror = null;
+        resolve(ok);
+      };
+      const startPlayback = () => {
+        if (settled) return;
+        audio.oncanplay = null;
+        audio.onloadeddata = null;
+        if (token !== this.filePlayToken) {
+          finish(false);
+          return;
+        }
+        this.disposeFilePlayer();
+        this.filePlayer = audio;
+        this.fileObjectUrl = objectUrl;
+        void audio.play().then(() => finish(true)).catch(() => finish(false));
+      };
+      audio.oncanplay = startPlayback;
+      audio.onloadeddata = startPlayback;
+      audio.onerror = () => finish(false);
+      audio.src = src;
+    });
+  }
+
+  private async tryPlayFileTrack(kind: Exclude<MusicKind, 'none'>): Promise<FilePlayStatus> {
     const token = ++this.filePlayToken;
     const urls = this.trackUrls(kind);
+    let sawFile = false;
 
     for (const url of urls) {
-      if (token !== this.filePlayToken) return false;
-      let objectUrl: string | null = null;
+      if (token !== this.filePlayToken) return 'aborted';
       try {
+        const probe = await fetch(url, { method: 'HEAD' });
+        if (!probe.ok) {
+          const getProbe = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-15' } });
+          if (!getProbe.ok) continue;
+        }
+        sawFile = true;
+        if (await this.playFromSrc(url, token)) return 'played';
+        if (token !== this.filePlayToken) return 'aborted';
+
         const res = await fetch(url);
         if (!res.ok) continue;
         const buf = await res.arrayBuffer();
-        if (token !== this.filePlayToken) return false;
-        const mime = sniffAudioMime(new Uint8Array(buf)) || 'audio/mpeg';
-        objectUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
-        const audio = new Audio();
-        audio.preload = 'auto';
-        audio.loop = true;
-        audio.volume = 0.46;
-        const played = await new Promise<boolean>((resolve) => {
-          let settled = false;
-          const finish = (value: boolean) => {
-            if (settled) return;
-            settled = true;
-            audio.oncanplay = null;
-            audio.onerror = null;
-            resolve(value);
-          };
-          audio.oncanplay = () => {
-            if (token !== this.filePlayToken) {
-              finish(false);
-              return;
-            }
-            this.disposeFilePlayer();
-            this.filePlayer = audio;
-            this.fileObjectUrl = objectUrl;
-            objectUrl = null;
-            void audio.play().then(() => finish(true)).catch(() => finish(false));
-          };
-          audio.onerror = () => finish(false);
-          window.setTimeout(() => finish(false), 8000);
-          audio.src = objectUrl!;
-        });
-        if (played) return true;
+        if (token !== this.filePlayToken) return 'aborted';
+        const mime = sniffAudioMime(new Uint8Array(buf));
+        if (!mime) continue;
+        const objectUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
+        const played = await this.playFromSrc(objectUrl, token, objectUrl);
+        if (played) return 'played';
+        URL.revokeObjectURL(objectUrl);
       } catch {
         /* try next candidate */
-      } finally {
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
       }
     }
-    return false;
+    if (token !== this.filePlayToken) return 'aborted';
+    return sawFile ? 'aborted' : 'missing';
   }
 
   private clearMusicPlayback() {
@@ -360,16 +385,17 @@ class GameAudioEngine {
       return;
     }
 
-    if (this.activeMusic === kind && this.filePlayer) return;
-    if (this.activeMusic === kind && !this.filePlayer && this.loopTimer) return;
+    if (this.activeMusic === kind && this.filePlayer && !this.filePlayer.paused) return;
 
     this.stopAllMusic();
     this.activeMusic = kind;
     this.ensureContext();
-    void this.tryPlayFileTrack(kind).then((played) => {
-      if (!played && this.activeMusic === kind && isGameMusicEnabled(loadAudioSettings())) {
-        this.scheduleMusicLoop(kind);
-      }
+    const attempt = this.filePlayToken + 1;
+    void this.tryPlayFileTrack(kind).then((status) => {
+      if (status === 'played') return;
+      if (this.filePlayToken !== attempt) return;
+      if (this.activeMusic !== kind || !isGameMusicEnabled(loadAudioSettings())) return;
+      if (status === 'missing') this.scheduleMusicLoop(kind);
     });
   }
 
