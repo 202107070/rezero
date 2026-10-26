@@ -95,20 +95,40 @@ const PRACTICE_LOOP: MelodyStep[] = [
   { freq: NOTE.A4, dur: 1.0, wave: 'sine', gain: 0.07 },
 ];
 
+function publicAudioUrl(fileName: string): string {
+  return `/audio/${fileName}`;
+}
+
 const PAGE_TRACK_FILES: Record<Exclude<MusicKind, 'none'>, string[]> = {
-  lobby: ['/audio/lobby.mp3', '/audio/lobby.ogg', '/audio/lobby.wav'],
-  room: ['/audio/room.mp3', '/audio/room.ogg', '/audio/room.wav'],
-  battle: ['/audio/battle.mp3', '/audio/battle.ogg', '/audio/battle.wav'],
-  result: ['/audio/result.mp3', '/audio/result.ogg', '/audio/result.wav'],
-  practice: ['/audio/practice.mp3', '/audio/practice.ogg', '/audio/practice.wav'],
-  build: ['/audio/build.mp3', '/audio/build.ogg', '/audio/build.wav'],
+  lobby: ['lobby.mp3', 'lobby.ogg', 'lobby.wav'].map(publicAudioUrl),
+  room: ['room.mp3', 'room.ogg', 'room.wav'].map(publicAudioUrl),
+  battle: ['battle.mp3', 'battle.ogg', 'battle.wav'].map(publicAudioUrl),
+  result: ['result.mp3', 'result.ogg', 'result.wav'].map(publicAudioUrl),
+  practice: ['practice.mp3', 'practice.ogg', 'practice.wav'].map(publicAudioUrl),
+  build: ['build.mp3', 'build.ogg', 'build.wav'].map(publicAudioUrl),
 };
 
-const BATTLE_URGENT_FILES = [
-  '/audio/battle-urgent.mp3',
-  '/audio/battle-urgent.ogg',
-  '/audio/battle-urgent.wav',
-];
+const BATTLE_URGENT_FILES = ['battle-urgent.mp3', 'battle-urgent.ogg', 'battle-urgent.wav'].map(
+  publicAudioUrl,
+);
+
+function sniffAudioMime(bytes: Uint8Array): string | null {
+  if (bytes.length >= 12) {
+    const riff = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+    const wave = bytes[8] === 0x57 && bytes[9] === 0x41 && bytes[10] === 0x56 && bytes[11] === 0x45;
+    if (riff && wave) return 'audio/wav';
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) {
+    return 'audio/ogg';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+    return 'audio/mpeg';
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
+    return 'audio/mpeg';
+  }
+  return null;
+}
 
 const BUILD_LOOP: MelodyStep[] = [
   { freq: NOTE.C4, dur: 0.28, wave: 'triangle', gain: 0.09 },
@@ -136,6 +156,7 @@ class GameAudioEngine {
   private loopGeneration = 0;
   private musicNodes: OscillatorNode[] = [];
   private filePlayer: HTMLAudioElement | null = null;
+  private fileObjectUrl: string | null = null;
   private filePlayToken = 0;
 
   private ensureContext(): AudioContext {
@@ -170,15 +191,20 @@ class GameAudioEngine {
   }
 
   private disposeFilePlayer() {
-    if (!this.filePlayer) return;
-    try {
-      this.filePlayer.pause();
-      this.filePlayer.removeAttribute('src');
-      this.filePlayer.load();
-    } catch {
-      /* ignore */
+    if (this.filePlayer) {
+      try {
+        this.filePlayer.pause();
+        this.filePlayer.removeAttribute('src');
+        this.filePlayer.load();
+      } catch {
+        /* ignore */
+      }
     }
     this.filePlayer = null;
+    if (this.fileObjectUrl) {
+      URL.revokeObjectURL(this.fileObjectUrl);
+      this.fileObjectUrl = null;
+    }
   }
 
   private stopFilePlayer() {
@@ -193,38 +219,56 @@ class GameAudioEngine {
     return PAGE_TRACK_FILES[kind];
   }
 
-  private tryPlayFileTrack(kind: Exclude<MusicKind, 'none'>): Promise<boolean> {
+  private async tryPlayFileTrack(kind: Exclude<MusicKind, 'none'>): Promise<boolean> {
     const token = ++this.filePlayToken;
     const urls = this.trackUrls(kind);
-    const tryUrl = (index: number): Promise<boolean> => {
-      if (token !== this.filePlayToken || index >= urls.length) return Promise.resolve(false);
-      return new Promise((resolve) => {
+
+    for (const url of urls) {
+      if (token !== this.filePlayToken) return false;
+      let objectUrl: string | null = null;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const buf = await res.arrayBuffer();
+        if (token !== this.filePlayToken) return false;
+        const mime = sniffAudioMime(new Uint8Array(buf)) || 'audio/mpeg';
+        objectUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
         const audio = new Audio();
         audio.preload = 'auto';
         audio.loop = true;
         audio.volume = 0.46;
-        const cleanup = () => {
-          audio.oncanplaythrough = null;
-          audio.onerror = null;
-        };
-        audio.oncanplaythrough = () => {
-          cleanup();
-          if (token !== this.filePlayToken) {
-            resolve(false);
-            return;
-          }
-          this.disposeFilePlayer();
-          this.filePlayer = audio;
-          void audio.play().then(() => resolve(true)).catch(() => resolve(false));
-        };
-        audio.onerror = () => {
-          cleanup();
-          resolve(tryUrl(index + 1));
-        };
-        audio.src = urls[index];
-      });
-    };
-    return tryUrl(0);
+        const played = await new Promise<boolean>((resolve) => {
+          let settled = false;
+          const finish = (value: boolean) => {
+            if (settled) return;
+            settled = true;
+            audio.oncanplay = null;
+            audio.onerror = null;
+            resolve(value);
+          };
+          audio.oncanplay = () => {
+            if (token !== this.filePlayToken) {
+              finish(false);
+              return;
+            }
+            this.disposeFilePlayer();
+            this.filePlayer = audio;
+            this.fileObjectUrl = objectUrl;
+            objectUrl = null;
+            void audio.play().then(() => finish(true)).catch(() => finish(false));
+          };
+          audio.onerror = () => finish(false);
+          window.setTimeout(() => finish(false), 8000);
+          audio.src = objectUrl!;
+        });
+        if (played) return true;
+      } catch {
+        /* try next candidate */
+      } finally {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      }
+    }
+    return false;
   }
 
   private clearMusicPlayback() {
