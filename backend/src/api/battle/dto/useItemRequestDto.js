@@ -23,10 +23,17 @@ export function parseUseItemRequest(params = {}, body = {}) {
     throw invalidRequest("아이템 종류가 필요합니다.");
   }
 
+  const emptyBlankIndexes = Array.isArray(body.emptyBlankIndexes)
+    ? body.emptyBlankIndexes.map(Number).filter(function (index) {
+        return Number.isInteger(index) && index >= 0;
+      })
+    : undefined;
+
   return {
     matchId,
     problemIndex,
     itemKey,
     targetUserId: targetUserId || null,
+    emptyBlankIndexes,
   };
 }

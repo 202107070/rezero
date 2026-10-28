@@ -78,6 +78,27 @@ function getAnswersForLanguage(answer, language) {
   return [];
 }
 
+/** 아이템/힌트용: 지정 언어 정답이 없으면 다른 언어 정답으로 폴백 */
+export function resolveProblemAnswers(problem, language) {
+  const answer = parseJson(problem?.answer, {});
+  const preferred = getAnswersForLanguage(answer, language);
+  if (preferred.length > 0) {
+    return preferred.map(function (value) {
+      return String(value ?? "");
+    });
+  }
+
+  for (const values of Object.values(answer || {})) {
+    if (Array.isArray(values) && values.length > 0) {
+      return values.map(function (value) {
+        return String(value ?? "");
+      });
+    }
+  }
+
+  return [];
+}
+
 function normalizeProblem(problem) {
   return {
     ...problem,

@@ -1845,44 +1845,64 @@ export default function BattlePage() {
     setSelectedOptionByProblem((prev) => ({ ...prev, [currentIndex]: idx }));
   };
 
+  const getEmptyBlankIndexes = () => {
+    if (currentCaps.showShortAnswerPanel) {
+      return String(blankAnswers[currentIndex]?.[0] || '').trim() ? [] : [0];
+    }
+    const blankCount = (currentProblem.question || '').match(/_____/g)?.length || 0;
+    const blanks = blankAnswers[currentIndex] || [];
+    const empty: number[] = [];
+    for (let i = 0; i < blankCount; i += 1) {
+      if (!String(blanks[i] || '').trim()) empty.push(i);
+    }
+    return empty;
+  };
+
   const handleUseSelfItem = async (type: keyof ItemInventory) => {
     if (demoSpectating || spectatorLocked) return;
     if (!isItemMode || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
     if (!canUseItem(currentCaps, type)) return;
+    if (type === 'buildCharge' && !isCodeBlankBuildProblem(currentProblem, buildLangKey)) return;
+
     const correct = resolveProblemAnswersWithFallback(currentProblem, langKey);
+    let serverEffect: Awaited<ReturnType<typeof useMatchItem>>['effect'] | null = null;
 
     if (isLiveMatch) {
       try {
-        await useMatchItem(matchId, {
+        const result = await useMatchItem(matchId, {
           problemIndex: currentIndex,
           itemKey: type,
+          emptyBlankIndexes: type === 'blankBreak' ? getEmptyBlankIndexes() : undefined,
         });
+        serverEffect = result.effect || null;
       } catch (error) {
         setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text: getMatchErrorMessage(error), time: '' }]);
         return;
       }
     }
 
-    if (type === 'revealLength') {
-      if (correct.length === 0) {
+    if (type === 'revealLength' || type === 'revealPrev') {
+      if (serverEffect?.hint) {
+        setRevealHint(serverEffect.hint);
+      } else if (correct.length === 0) {
         setRevealHint('(정보 없음)');
         return;
+      } else {
+        const idx =
+          typeof serverEffect?.blankIndex === 'number'
+            ? serverEffect.blankIndex
+            : Math.floor(Math.random() * correct.length);
+        const value = String(correct[idx] ?? '');
+        setRevealHint(
+          type === 'revealLength' ? `[${value.length}자]` : `[앞글자: ${value[0] || '?'}]`,
+        );
       }
-      const idx = Math.floor(Math.random() * correct.length);
-      setRevealHint(correct[idx] ? `[${correct[idx].length}자]` : '(정보 없음)');
-    } else if (type === 'revealPrev') {
-      if (correct.length === 0) {
-        setRevealHint('(정보 없음)');
-        return;
-      }
-      const idx = Math.floor(Math.random() * correct.length);
-      setRevealHint(correct[idx] ? `[앞글자: ${correct[idx][0] || '?'}]` : '(정보 없음)');
     } else if (type === 'blankBreak') {
-      applyBlankBreak(correct);
+      const applied = applyBlankBreak(correct, serverEffect);
+      if (!applied) return;
       return;
     } else if (type === 'buildCharge') {
-      if (!currentCaps.canUseBuildBonus || !isCodeBlankBuildProblem(currentProblem, buildLangKey)) return;
       setBuildBonusByProblem((prev) => ({
         ...prev,
         [currentIndex]: (prev[currentIndex] || 0) + BATTLE_BUILD_ITEM_BONUS,
@@ -1894,19 +1914,30 @@ export default function BattlePage() {
     SFX.play(type);
   };
 
-  const applyBlankBreak = (correct: string[]) => {
-    if (correct.length === 0) {
-      setRevealHint('(정보 없음)');
-      return;
-    }
-    const partial = currentProblem.question || '';
+  const applyBlankBreak = (
+    correct: string[],
+    serverEffect?: Awaited<ReturnType<typeof useMatchItem>>['effect'] | null,
+  ): boolean => {
+    const answers =
+      Array.isArray(serverEffect?.answers) && serverEffect.answers.length > 0
+        ? serverEffect.answers.map((value) => String(value ?? ''))
+        : correct;
+
     if (currentCaps.showShortAnswerPanel) {
+      const value =
+        typeof serverEffect?.value === 'string'
+          ? serverEffect.value
+          : String(answers[0] ?? '');
+      if (!value && answers.length === 0) {
+        setRevealHint('(정보 없음)');
+        return false;
+      }
       setBreakingBlanks((prev) => ({ ...prev, [`${currentIndex}_0`]: true }));
       setTimeout(() => {
         setBlankAnswers((prev) => {
           const next = prev.map((a) => [...a]);
           if (!next[currentIndex]) next[currentIndex] = [];
-          next[currentIndex][0] = correct[0] || '';
+          next[currentIndex][0] = value;
           return next;
         });
         setBreakingBlanks((prev) => {
@@ -1917,23 +1948,40 @@ export default function BattlePage() {
       }, 600);
       setItemInventory((prev) => ({ ...prev, blankBreak: prev.blankBreak - 1 }));
       SFX.play('blankBreak');
-      return;
+      return true;
     }
-    const blankCount = (partial.match(/_____/g) || []).length;
-    if (blankCount === 0) return;
+
+    const blankCount = (currentProblem.question || '').match(/_____/g)?.length || 0;
+    if (blankCount === 0) {
+      setRevealHint('(정보 없음)');
+      return false;
+    }
     const blanks = blankAnswers[currentIndex] || [];
     const unsolved: number[] = [];
-    for (let i = 0; i < blankCount; i++) {
+    for (let i = 0; i < blankCount; i += 1) {
       if (!String(blanks[i] || '').trim()) unsolved.push(i);
     }
-    if (unsolved.length === 0) return;
-    const blankIdx = unsolved[Math.floor(Math.random() * unsolved.length)];
+    if (unsolved.length === 0) return false;
+
+    const blankIdx =
+      typeof serverEffect?.blankIndex === 'number' && unsolved.includes(serverEffect.blankIndex)
+        ? serverEffect.blankIndex
+        : unsolved[Math.floor(Math.random() * unsolved.length)];
+    const value =
+      typeof serverEffect?.value === 'string'
+        ? serverEffect.value
+        : String(answers[blankIdx] ?? '');
+    if (!value && answers.length === 0) {
+      setRevealHint('(정보 없음)');
+      return false;
+    }
+
     setBreakingBlanks((prev) => ({ ...prev, [`${currentIndex}_${blankIdx}`]: true }));
     setTimeout(() => {
       setBlankAnswers((prev) => {
         const next = prev.map((a) => [...a]);
         if (!next[currentIndex]) next[currentIndex] = [];
-        next[currentIndex][blankIdx] = correct[blankIdx] || '';
+        next[currentIndex][blankIdx] = value;
         return next;
       });
       setBreakingBlanks((prev) => {
@@ -1944,6 +1992,7 @@ export default function BattlePage() {
     }, 600);
     setItemInventory((prev) => ({ ...prev, blankBreak: prev.blankBreak - 1 }));
     SFX.play('blankBreak');
+    return true;
   };
 
   const canUseAttackItems = isItemMode && selectedAttackItems.length > 0 && !showGameOver;
@@ -2334,14 +2383,24 @@ export default function BattlePage() {
                     <span className="battle-self-items-label">내 아이템:</span>
                     {selectedSelfItems.map((type) => {
                       const meta = SELF_ITEM_META[type] || { icon: '?', name: type };
-                      const disabled = !canUseItem(currentCaps, type) || itemInventory[type] <= 0;
+                      const buildUnavailable =
+                        type === 'buildCharge' && !isCodeBlankBuildProblem(currentProblem, buildLangKey);
+                      const disabled =
+                        !canUseItem(currentCaps, type) ||
+                        itemInventory[type] <= 0 ||
+                        buildUnavailable;
                       return (
                         <button
                           key={type}
                           type="button"
-                          className={`battle-self-item-btn${itemInventory[type] <= 0 ? ' is-zero' : ''}`}
+                          className={`battle-self-item-btn${disabled ? ' is-zero' : ''}`}
                           onClick={() => handleUseSelfItem(type)}
                           disabled={disabled}
+                          title={
+                            buildUnavailable
+                              ? '이 문제에서는 빌드 아이템을 사용할 수 없습니다'
+                              : undefined
+                          }
                         >
                           {meta.icon} {meta.name} ({itemInventory[type]})
                         </button>

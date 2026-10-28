@@ -30,12 +30,22 @@ export interface MatchAnswerResult {
   score: number;
 }
 
+export interface MatchItemEffect {
+  type?: string;
+  unavailable?: boolean;
+  blankIndex?: number;
+  value?: string;
+  hint?: string;
+  answers?: string[];
+}
+
 export interface MatchItemResult {
   matchId: string;
   problemIndex: number;
   itemKey: string;
   targetUserId: string | null;
   success: boolean;
+  effect?: MatchItemEffect | null;
 }
 
 export interface MatchRankingPlayer {
@@ -144,6 +154,7 @@ export async function useMatchItem(
     problemIndex: number;
     itemKey: string;
     targetUserId?: string;
+    emptyBlankIndexes?: number[];
   },
 ): Promise<MatchItemResult> {
   return apiRequest<MatchItemResult>(`/matches/${encodeURIComponent(matchId)}/items/use`, {
@@ -152,6 +163,7 @@ export async function useMatchItem(
       problemIndex: params.problemIndex,
       itemKey: params.itemKey,
       targetUserId: params.targetUserId || '',
+      emptyBlankIndexes: params.emptyBlankIndexes || [],
     }),
   });
 }

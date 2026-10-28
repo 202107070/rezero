@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import * as battleModel from "./model.js";
 import * as roomModel from "../room/model.js";
-import { judgeProblemAnswer, selectProblems } from "../problem/service.js";
+import { judgeProblemAnswer, resolveProblemAnswers, selectProblems } from "../problem/service.js";
 import { AppError } from "#utils/appError.js";
 import { redisClient } from "#config/redisConfig.js";
 import { getSocket } from "#config/socketConfig.js";
@@ -677,6 +677,53 @@ export async function submitBattleAnswer(input) {
   };
 }
 
+function buildSelfItemEffect(itemKey, problem, language, emptyBlankIndexes) {
+  if (itemKey !== "revealLength" && itemKey !== "revealPrev" && itemKey !== "blankBreak") {
+    return null;
+  }
+
+  const answers = resolveProblemAnswers(problem, language);
+  if (answers.length === 0) {
+    return { type: itemKey, unavailable: true };
+  }
+
+  if (itemKey === "blankBreak") {
+    const candidates = Array.isArray(emptyBlankIndexes)
+      ? emptyBlankIndexes
+          .map(Number)
+          .filter(function (index) {
+            return Number.isInteger(index) && index >= 0 && index < answers.length;
+          })
+      : [];
+    const pool = candidates.length > 0 ? candidates : answers.map(function (_value, index) {
+      return index;
+    });
+    const blankIndex = pool[Math.floor(Math.random() * pool.length)];
+    return {
+      type: "blankBreak",
+      blankIndex,
+      value: String(answers[blankIndex] ?? ""),
+      answers,
+    };
+  }
+
+  const blankIndex = Math.floor(Math.random() * answers.length);
+  const value = String(answers[blankIndex] ?? "");
+  if (itemKey === "revealLength") {
+    return {
+      type: "revealLength",
+      blankIndex,
+      hint: `[${value.length}자]`,
+    };
+  }
+
+  return {
+    type: "revealPrev",
+    blankIndex,
+    hint: `[앞글자: ${value[0] || "?"}]`,
+  };
+}
+
 export async function useBattleItem(input) {
   if (!ITEM_KEYS.has(input.itemKey)) {
     throw new AppError(400, "INVALID_ITEM_KEY", "지원하지 않는 아이템입니다.");
@@ -692,6 +739,18 @@ export async function useBattleItem(input) {
     throw new AppError(409, "ITEM_MODE_REQUIRED", "아이템 모드에서만 사용할 수 있습니다.");
   }
 
+  const snapshot = parseProblemSnapshot(matchProblem.problemSnapshot);
+  const effect = buildSelfItemEffect(
+    input.itemKey,
+    snapshot,
+    matchProblem.language,
+    input.emptyBlankIndexes,
+  );
+
+  if (effect && effect.unavailable) {
+    throw new AppError(409, "ITEM_HINT_UNAVAILABLE", "이 문제에서는 해당 아이템 정보를 만들 수 없습니다.");
+  }
+
   const consumed = await battleModel.consumeUserItem(input.userId, input.itemKey);
   if (!consumed) {
     throw new AppError(409, "ITEM_NOT_AVAILABLE", "보유한 아이템이 없습니다.");
@@ -703,6 +762,7 @@ export async function useBattleItem(input) {
     itemKey: input.itemKey,
     targetUserId: input.targetUserId || null,
     success: true,
+    effect,
   };
 }
 

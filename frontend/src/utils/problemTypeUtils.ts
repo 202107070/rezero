@@ -72,23 +72,44 @@ export function getProblemTypeLabel(type: string): string {
 
 const ANSWER_LANG_FALLBACK_ORDER = ['JAVA', 'PYTHON', 'CPP', 'HTML', 'CSS'] as const;
 
+function normalizeAnswerMap(answer: unknown): Record<string, string[]> | undefined {
+  if (!answer) return undefined;
+  if (typeof answer === 'string') {
+    try {
+      const parsed = JSON.parse(answer) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, string[]>;
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  }
+  if (typeof answer === 'object' && !Array.isArray(answer)) {
+    return answer as Record<string, string[]>;
+  }
+  return undefined;
+}
+
 export function getProblemAnswersForLang(
-  answer: Record<string, string[]> | undefined,
+  answer: Record<string, string[]> | string | undefined,
   langKey: string,
 ): string[] {
-  if (!answer) return [];
+  const map = normalizeAnswerMap(answer);
+  if (!map) return [];
 
-  const preferred = [langKey, ...ANSWER_LANG_FALLBACK_ORDER].filter(
-    (key, index, arr) => arr.indexOf(key) === index,
+  const normalizedLang = String(langKey || '').toUpperCase() === 'C++' ? 'CPP' : String(langKey || '').toUpperCase();
+  const preferred = [normalizedLang, ...ANSWER_LANG_FALLBACK_ORDER].filter(
+    (key, index, arr) => key && arr.indexOf(key) === index,
   );
 
   for (const key of preferred) {
-    const vals = answer[key];
-    if (Array.isArray(vals) && vals.length > 0) return vals;
+    const vals = map[key] || (key === 'CPP' ? map['C++'] : undefined);
+    if (Array.isArray(vals) && vals.length > 0) return vals.map((value) => String(value ?? ''));
   }
 
-  for (const vals of Object.values(answer)) {
-    if (Array.isArray(vals) && vals.length > 0) return vals;
+  for (const vals of Object.values(map)) {
+    if (Array.isArray(vals) && vals.length > 0) return vals.map((value) => String(value ?? ''));
   }
 
   return [];
