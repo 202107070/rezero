@@ -210,6 +210,28 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .mini-code-area.paint-marked::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 90px 48px at 50% 46%, rgba(238,90,36,0.78) 0%, transparent 62%), radial-gradient(ellipse 70px 40px at 42% 40%, rgba(78,205,196,0.72) 0%, transparent 60%), radial-gradient(ellipse 80px 44px at 58% 52%, rgba(255,230,109,0.75) 0%, transparent 58%), radial-gradient(ellipse 60px 36px at 48% 58%, rgba(167,139,250,0.68) 0%, transparent 60%), radial-gradient(ellipse 74px 40px at 54% 36%, rgba(244,114,182,0.7) 0%, transparent 58%); pointer-events: none; z-index: 3; opacity: 0.9; }
 .code-card.paint-marked::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 90px 48px at 50% 46%, rgba(238,90,36,0.78) 0%, transparent 62%), radial-gradient(ellipse 70px 40px at 42% 40%, rgba(78,205,196,0.72) 0%, transparent 60%), radial-gradient(ellipse 80px 44px at 58% 52%, rgba(255,230,109,0.75) 0%, transparent 58%), radial-gradient(ellipse 60px 36px at 48% 58%, rgba(167,139,250,0.68) 0%, transparent 60%), radial-gradient(ellipse 74px 40px at 54% 36%, rgba(244,114,182,0.7) 0%, transparent 58%); pointer-events: none; z-index: 3; opacity: 0.9; }
 
+@keyframes lockPulse { 0%,100% { opacity: 0.82; } 50% { opacity: 1; } }
+.mini-code-area.lock-marked::after,
+.code-card.lock-marked::after {
+  content: '🔒';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 54px;
+  background: rgba(10, 16, 28, 0.55);
+  color: #dfe6e9;
+  text-shadow: 0 0 12px rgba(116, 185, 255, 0.85), 2px 2px 0 #000;
+  pointer-events: none;
+  z-index: 18;
+  animation: lockPulse 7s ease-out forwards;
+}
+.code-card.lock-marked .blank-input,
+.mini-code-area.lock-marked .blank-input {
+  opacity: 0.55;
+}
+
 .panel-editor { flex:1; background: #1a1e21; box-shadow: var(--px-inset-light); position:relative; min-height:0; }
 .panel-actions { padding:4px 8px; background: #222; border-top:3px solid var(--px-border); display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
 .summary-top { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px; align-items:start; }

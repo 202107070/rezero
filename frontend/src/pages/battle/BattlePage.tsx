@@ -224,7 +224,7 @@ export default function BattlePage() {
   const [itemCastState, setItemCastState] = useState<{ type: string; ts: number } | null>(null);
   const [panelHit, setPanelHit] = useState<Record<string, boolean>>({});
   const [selfPanelEffect, setSelfPanelEffect] = useState<{
-    type: 'paint' | 'lightning' | 'scribble';
+    type: 'paint' | 'lightning' | 'scribble' | 'lock';
     expiresAt: number;
   } | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
@@ -973,10 +973,11 @@ export default function BattlePage() {
               isTargetMe &&
               (payload.itemType === 'paint' ||
                 payload.itemType === 'lightning' ||
-                payload.itemType === 'scribble')
+                payload.itemType === 'scribble' ||
+                payload.itemType === 'lock')
             ) {
               SFX.play(payload.itemType);
-              const effectType = payload.itemType;
+              const effectType = payload.itemType as 'paint' | 'lightning' | 'scribble' | 'lock';
               setSelfPanelEffect({
                 type: effectType,
                 expiresAt: Date.now() + ITEM_PANEL_EFFECT_MS,
@@ -1018,11 +1019,15 @@ export default function BattlePage() {
                 targetBot &&
                 (payload.itemType === 'paint' ||
                   payload.itemType === 'lightning' ||
-                  payload.itemType === 'scribble')
+                  payload.itemType === 'scribble' ||
+                  payload.itemType === 'lock')
               ) {
                 queueMicrotask(() => {
                   SFX.play(payload.itemType);
-                  applyAttackPanelEffect(targetBot.id, payload.itemType as 'paint' | 'lightning' | 'scribble');
+                  applyAttackPanelEffect(
+                    targetBot.id,
+                    payload.itemType as 'paint' | 'lightning' | 'scribble' | 'lock',
+                  );
                   if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
                     setExpandedOpponentId(targetBot.id);
                     runPanelCanvasEffect(
@@ -1706,6 +1711,7 @@ export default function BattlePage() {
 
   const updateBlankAnswer = (problemIndex: number, blankIndex: number, value: string) => {
     if (problemSolved && !revisionEditMode) return;
+    if (selfPanelEffect?.type === 'lock' && Date.now() < selfPanelEffect.expiresAt) return;
     setBlankAnswers((prev) => {
       const next = prev.map((arr) => [...arr]);
       if (!next[problemIndex]) next[problemIndex] = [];
@@ -1942,7 +1948,7 @@ export default function BattlePage() {
 
   const canUseAttackItems = isItemMode && selectedAttackItems.length > 0 && !showGameOver;
 
-  const applyAttackPanelEffect = (botId: string, type: 'paint' | 'lightning' | 'scribble') => {
+  const applyAttackPanelEffect = (botId: string, type: 'paint' | 'lightning' | 'scribble' | 'lock') => {
     setOpponentEffects((prev) => ({
       ...prev,
       [botId]: {
@@ -2039,7 +2045,7 @@ export default function BattlePage() {
     setItemCastState({ type, ts: Date.now() });
     setTimeout(() => setItemCastState(null), 1500);
 
-    if (type === 'paint' || type === 'lightning' || type === 'scribble') {
+    if (type === 'paint' || type === 'lightning' || type === 'scribble' || type === 'lock') {
       setPanelHit((p) => ({ ...p, [botId]: true }));
       setTimeout(() => setPanelHit((p) => {
         const n = { ...p };
@@ -2072,6 +2078,9 @@ export default function BattlePage() {
         },
       });
       setItemInventory((prev) => ({ ...prev, scribble: prev.scribble - 1 }));
+    } else if (type === 'lock') {
+      applyAttackPanelEffect(botId, 'lock');
+      setItemInventory((prev) => ({ ...prev, lock: prev.lock - 1 }));
     }
 
     itemTargetBotIdRef.current = null;
@@ -2177,8 +2186,13 @@ export default function BattlePage() {
     );
   };
 
+  const blanksLockedByItem =
+    Boolean(selfPanelEffect) &&
+    selfPanelEffect!.type === 'lock' &&
+    Date.now() < selfPanelEffect!.expiresAt;
+
   const isLocked =
-    demoSpectating || spectatorLocked || (problemSolved && !revisionEditMode);
+    demoSpectating || spectatorLocked || (problemSolved && !revisionEditMode) || blanksLockedByItem;
 
   const myViewProblemIndex = demoSpectating ? (spectatorMyViewProblem ?? currentIndex) : currentIndex;
   const displayedProblem = useMemo(
@@ -2297,6 +2311,7 @@ export default function BattlePage() {
           selfPanelEffect?.type === 'paint' ? ' paint-marked' : ''
         }${selfPanelEffect?.type === 'lightning' ? ' lightning-struck' : ''}${
           selfPanelEffect?.type === 'scribble' ? ' scribble-marked' : ''
+        }${selfPanelEffect?.type === 'lock' ? ' lock-marked' : ''}
         }`}
         style={{ position: 'relative' }}
       >

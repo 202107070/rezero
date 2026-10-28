@@ -10,6 +10,7 @@ type SfxType =
   | 'lightning'
   | 'paint'
   | 'scribble'
+  | 'lock'
   | 'blankBreak'
   | 'timeReduce'
   | 'revealLength'
@@ -493,6 +494,12 @@ class GameAudioEngine {
             tone(700 + Math.random() * 1800, 'square', 0.05, 0.03, i * 0.035);
           }
           noiseBurst(0.18, 0.12, 0.015, 0.02);
+          break;
+        case 'lock':
+          tone(280, 'square', 0.14, 0.08);
+          tone(180, 'triangle', 0.16, 0.12, 0.06);
+          tone(120, 'sine', 0.12, 0.18, 0.12);
+          noiseBurst(0.08, 0.1, 0.04, 0.04);
           break;
         case 'blankBreak':
           tone(220, 'square', 0.2, 0.06);

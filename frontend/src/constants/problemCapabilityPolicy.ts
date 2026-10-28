@@ -8,12 +8,13 @@ const ALL_ITEM_KEYS: ItemKey[] = [
   'lightning',
   'timeReduce',
   'scribble',
+  'lock',
   'blankBreak',
   'buildCharge',
   'revise',
 ];
 
-const ATTACK_ITEMS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble'];
+const ATTACK_ITEMS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble', 'lock'];
 
 function createItemPolicy(selfItems: Partial<Record<ItemKey, boolean>>): Record<ItemKey, boolean> {
   const policy = Object.fromEntries(ALL_ITEM_KEYS.map((key) => [key, false])) as Record<ItemKey, boolean>;

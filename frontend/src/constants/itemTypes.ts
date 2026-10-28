@@ -8,6 +8,7 @@ export interface ItemInventory {
   lightning: number;
   timeReduce: number;
   scribble: number;
+  lock: number;
   blankBreak: number;
   buildCharge: number;
   revise: number;
@@ -20,6 +21,7 @@ export const DEFAULT_ITEM_INVENTORY: ItemInventory = {
   lightning: 0,
   timeReduce: 0,
   scribble: 0,
+  lock: 0,
   blankBreak: 0,
   buildCharge: 0,
   revise: 0,
@@ -43,6 +45,7 @@ export const ROULETTE_ITEMS: RouletteItem[] = [
   { type: 'revealPrev', icon: '🔍', name: '앞글자', rare: false },
   { type: 'miss', icon: '💀', name: '꽝', rare: false },
   { type: 'scribble', icon: '✏️', name: '낙서', rare: true },
+  { type: 'lock', icon: '🔒', name: '잠금', rare: true },
   { type: 'blankBreak', icon: '🔨', name: '빈칸깨기', rare: true },
   { type: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
   { type: 'revise', icon: '📝', name: '수정', rare: true },
@@ -57,6 +60,7 @@ export const ROULETTE_SEG_COLORS = [
   '#1a3d3d', // revealPrev
   '#3d2d1a', // miss
   '#2d1a3d', // scribble
+  '#1f2a3d', // lock
   '#6b2a1a', // blankBreak (warm brick)
   '#174a6b', // buildCharge (cool blue)
   '#3d3a14', // revise
@@ -71,12 +75,13 @@ export const BATTLE_ITEM_DEFS: Array<{ key: ItemKey; icon: string; name: string;
   { key: 'revealLength', icon: '📏', name: '글자수' },
   { key: 'revealPrev', icon: '🔍', name: '앞글자' },
   { key: 'scribble', icon: '✏️', name: '낙서', rare: true },
+  { key: 'lock', icon: '🔒', name: '잠금', rare: true },
   { key: 'blankBreak', icon: '🔨', name: '빈칸깨기', rare: true },
   { key: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
   { key: 'revise', icon: '📝', name: '수정', rare: true },
 ];
 
-export const ATTACK_ITEM_KEYS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble'];
+export const ATTACK_ITEM_KEYS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble', 'lock'];
 export const ITEM_PANEL_EFFECT_MS = 7000;
 export const SELF_ITEM_KEYS: ItemKey[] = ['revealLength', 'revealPrev', 'blankBreak', 'buildCharge'];
 

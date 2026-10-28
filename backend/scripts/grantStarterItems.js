@@ -19,6 +19,7 @@ const STARTER_ITEM_KEYS = [
   "lightning",
   "timeReduce",
   "scribble",
+  "lock",
   "blankBreak",
   "buildCharge",
   "revise",

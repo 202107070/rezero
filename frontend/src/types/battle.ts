@@ -51,6 +51,7 @@ export interface ItemInventory {
   lightning: number;
   timeReduce: number;
   scribble: number;
+  lock: number;
   blankBreak: number;
   buildCharge: number;
   revise: number;

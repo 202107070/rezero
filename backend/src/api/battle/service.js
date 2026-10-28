@@ -19,6 +19,7 @@ const ITEM_KEYS = new Set([
   "lightning",
   "timeReduce",
   "scribble",
+  "lock",
   "blankBreak",
   "buildCharge",
   "revise",

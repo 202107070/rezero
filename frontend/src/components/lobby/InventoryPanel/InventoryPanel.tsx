@@ -14,6 +14,7 @@ const ITEM_ROWS: Array<{ key: keyof ItemInventory; icon: string; name: string; r
   { key: 'revealLength', icon: '📏', name: '글자수' },
   { key: 'revealPrev', icon: '🔍', name: '앞글자' },
   { key: 'scribble', icon: '✏️', name: '낙서', rare: true },
+  { key: 'lock', icon: '🔒', name: '잠금', rare: true },
   { key: 'blankBreak', icon: '🔨', name: '빈칸깨기', rare: true },
   { key: 'buildCharge', icon: '🔧', name: '빌드+', rare: true },
   { key: 'revise', icon: '📝', name: '수정', rare: true },

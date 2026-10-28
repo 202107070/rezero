@@ -115,6 +115,7 @@ function inventoryFromItems(items: unknown): ItemInventory {
     lightning: 0,
     timeReduce: 0,
     scribble: 0,
+    lock: 0,
     blankBreak: 0,
     buildCharge: 0,
     revise: 0,

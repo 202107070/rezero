@@ -164,6 +164,7 @@ const ROULETTE_POOL = [
   "revealPrev",
   "miss",
   "scribble",
+  "lock",
   "blankBreak",
   "buildCharge",
   "revise",

@@ -55,6 +55,7 @@ function effectIcons(
   if (panelEff?.type === 'paint' && now < panelEff.expiresAt) icons += '🎨';
   if (panelEff?.type === 'lightning' && now < panelEff.expiresAt) icons += '⚡';
   if (panelEff?.type === 'scribble' && now < panelEff.expiresAt) icons += '✏️';
+  if (panelEff?.type === 'lock' && now < panelEff.expiresAt) icons += '🔒';
   return icons;
 }
 
@@ -207,6 +208,7 @@ export default function OpponentPanels({
     const hasPaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
     const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
     const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
+    const hasLock = panelEff?.type === 'lock' && now < panelEff.expiresAt;
     const effIcon = effectIcons(panelEff, now);
     const botProb = problems[viewProblemIndex] || currentProblem;
     const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
@@ -244,7 +246,7 @@ export default function OpponentPanels({
         </div>
         {renderMiniStatus(bot)}
         <div
-          className={`mini-code-area${hasPaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}`}
+          className={`mini-code-area${hasPaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}${hasLock ? ' lock-marked' : ''}`}
           style={{ position: 'relative' }}
           data-opponent-canvas={bot.id}
         >
@@ -273,6 +275,7 @@ export default function OpponentPanels({
     const hasActivePaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
     const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
     const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
+    const hasLock = panelEff?.type === 'lock' && now < panelEff.expiresAt;
     const isRevealed = demoSpectating;
     const botProb = problems[viewProblemIndex] || currentProblem;
     const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
@@ -321,7 +324,7 @@ export default function OpponentPanels({
         </div>
         {renderMiniStatus(bot)}
         <div
-          className={`mini-code-area${hasActivePaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}`}
+          className={`mini-code-area${hasActivePaint ? ' paint-marked' : ''}${hasLightning ? ' lightning-struck' : ''}${hasScribble ? ' scribble-marked' : ''}${hasLock ? ' lock-marked' : ''}`}
           style={{ position: 'relative' }}
           data-opponent-canvas={bot.id}
         >

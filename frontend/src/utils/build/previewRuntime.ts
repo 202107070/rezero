@@ -11,6 +11,7 @@ type Stmt =
   | { kind: 'while'; cond: Expr; body: Stmt[] }
   | { kind: 'if'; cond: Expr; yes: Stmt[]; no: Stmt[] }
   | { kind: 'print'; args: Expr[]; newline: boolean }
+  | { kind: 'printf'; args: Expr[] }
   | { kind: 'assign'; name: string; expr: Expr }
   | { kind: 'step'; name: string; delta: number };
 
@@ -110,6 +111,12 @@ class Parser {
     }
     if (this.source.startsWith('System.out.print', this.index)) {
       return this.parseJavaPrint();
+    }
+    if (
+      this.source.startsWith('std::printf', this.index) ||
+      (this.source.startsWith('printf', this.index) && /[\s(]/.test(this.source[this.index + 6] || ''))
+    ) {
+      return this.parsePrintf();
     }
     if (this.source.startsWith('print', this.index) && /\s|\(/.test(this.source[this.index + 5] || '')) {
       return this.parsePythonPrint();
@@ -270,6 +277,17 @@ class Parser {
     this.expect(')');
     this.consumeSemi();
     return { kind: 'print', args, newline };
+  }
+
+  private parsePrintf(): Stmt {
+    if (this.source.startsWith('std::printf', this.index)) this.index += 'std::printf'.length;
+    else this.index += 'printf'.length;
+    this.skip();
+    this.expect('(');
+    const args = this.peek() === ')' ? [] : this.parseArgList();
+    this.expect(')');
+    this.consumeSemi();
+    return { kind: 'printf', args };
   }
 
   private parsePythonPrint(): Stmt {
@@ -541,6 +559,26 @@ function asNumber(value: string | number) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatPrintf(args: Array<string | number>): string {
+  if (args.length === 0) return '';
+  const fmt = String(args[0]);
+  let argIndex = 1;
+  return fmt.replace(/%%|%(?:[-+0 #]*\d*(?:\.\d+)?)?[sdicxfFeEgG]/g, (token) => {
+    if (token === '%%') return '%';
+    const value = args[argIndex] ?? '';
+    argIndex += 1;
+    const spec = token[token.length - 1];
+    if (spec === 's' || spec === 'c') return String(value);
+    if (spec === 'd' || spec === 'i') return String(Math.trunc(asNumber(value)));
+    if (spec === 'x') return (Math.trunc(asNumber(value)) >>> 0).toString(16);
+    if (spec === 'X') return (Math.trunc(asNumber(value)) >>> 0).toString(16).toUpperCase();
+    if (spec === 'f' || spec === 'F' || spec === 'e' || spec === 'E' || spec === 'g' || spec === 'G') {
+      return String(asNumber(value));
+    }
+    return String(value);
+  });
+}
+
 function evalExpr(expr: Expr, env: Map<string, string | number>): string | number {
   if (expr.kind === 'num' || expr.kind === 'str') return expr.value;
   if (expr.kind === 'name') {
@@ -605,6 +643,13 @@ function execStmts(stmts: Stmt[], env: Map<string, string | number>, lines: stri
       } else if (stmt.kind === 'print') {
         const text = stmt.args.map((arg) => String(evalExpr(arg, env))).join('');
         write(text, stmt.newline);
+      } else if (stmt.kind === 'printf') {
+        const values = stmt.args.map((arg) => evalExpr(arg, env));
+        const text = formatPrintf(values);
+        const chunks = text.split('\n');
+        chunks.forEach((chunk, index) => {
+          write(chunk, index < chunks.length - 1);
+        });
       } else if (stmt.kind === 'if') {
         walk(truthy(evalExpr(stmt.cond, env)) ? stmt.yes : stmt.no);
       } else if (stmt.kind === 'while') {
@@ -809,6 +854,9 @@ function emitBlock(stmts: Stmt[], lang: string, indent: string): string[] {
   for (const stmt of stmts) {
     if (stmt.kind === 'print') {
       lines.push(indent + emitPrint(stmt, lang));
+    } else if (stmt.kind === 'printf') {
+      const args = stmt.args.map((arg) => emitExpr(arg, lang)).join(', ');
+      lines.push(`${indent}printf(${args});`);
     } else if (stmt.kind === 'assign') {
       const text = `${stmt.name} = ${emitExpr(stmt.expr, lang)}`;
       lines.push(indent + (lang === 'PYTHON' ? text : `int ${text};`));

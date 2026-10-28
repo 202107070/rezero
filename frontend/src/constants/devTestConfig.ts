@@ -12,6 +12,7 @@ export const DEV_TEST_USER_LOADOUT = {
     lightning: 10,
     timeReduce: 10,
     scribble: 10,
+    lock: 10,
     blankBreak: 10,
     buildCharge: 10,
     revise: 10,
