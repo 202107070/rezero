@@ -330,36 +330,56 @@ function typeLabel(type, blankCount) {
   return "단답";
 }
 
+function resolveExpectedAnswers(answerMap, lang) {
+  if (!answerMap || typeof answerMap !== "object") return [];
+  const upper = String(lang || "").toUpperCase();
+  const aliases = [upper];
+  if (upper === "CPP" || upper === "C++") aliases.push("CPP", "C++");
+  if (upper === "PYTHON") aliases.push("PYTHON", "PY");
+  if (upper === "JAVA") aliases.push("JAVA");
+  for (let i = 0; i < aliases.length; i++) {
+    if (Array.isArray(answerMap[aliases[i]]) && answerMap[aliases[i]].length > 0) {
+      return answerMap[aliases[i]];
+    }
+  }
+  const keys = Object.keys(answerMap);
+  for (let i = 0; i < keys.length; i++) {
+    if (Array.isArray(answerMap[keys[i]]) && answerMap[keys[i]].length > 0) {
+      return answerMap[keys[i]];
+    }
+  }
+  return [];
+}
+
 function scoreEntryProblems(entry) {
   const lang = String(entry?.lang || "UNKNOWN").toUpperCase();
   const problems = Array.isArray(entry?.problems) ? entry.problems : [];
   const times = parseMaybeArray(entry?.solveTimes).map(Number);
+  const resultFlags = Array.isArray(entry?.problemResults) ? entry.problemResults : null;
   const scored = [];
 
   for (let i = 0; i < problems.length; i++) {
     const problem = problems[i] || {};
     const type = String(problem.type || "");
     const blanks = Array.isArray(problem.userBlanks) ? problem.userBlanks : [];
+    const codes = Array.isArray(entry?.codes) ? entry.codes : [];
     const answerMap = problem.answer && typeof problem.answer === "object" ? problem.answer : {};
-    const expected = Array.isArray(answerMap[lang])
-      ? answerMap[lang]
-      : Array.isArray(answerMap.HTML)
-        ? answerMap.HTML
-        : Array.isArray(answerMap.CSS)
-          ? answerMap.CSS
-          : Array.isArray(answerMap.JAVA)
-            ? answerMap.JAVA
-            : [];
+    const expected = resolveExpectedAnswers(answerMap, lang);
     const wrote =
       blanks.some(function (blank) {
         return isFilledText(blank);
       }) ||
       (problem.selectedOption != null && Number(problem.selectedOption) >= 0) ||
-      isFilledText(problem.userAnswer);
+      isFilledText(problem.userAnswer) ||
+      isFilledText(codes[i]);
     const blankCount = (String(problem.question || "").match(/_____/g) || []).length;
     const kind = typeLabel(type, blankCount);
     let ok = false;
-    if (kind === "객관식") {
+    if (typeof problem.isCorrect === "boolean") {
+      ok = problem.isCorrect;
+    } else if (resultFlags && typeof resultFlags[i] === "boolean") {
+      ok = resultFlags[i];
+    } else if (kind === "객관식") {
       ok = Number(problem.selectedOption) === Number(problem.correctIndex);
     } else if (kind === "빈칸") {
       ok =
@@ -368,7 +388,11 @@ function scoreEntryProblems(entry) {
           return looseAnswer(blanks[index]) !== "" && looseAnswer(blanks[index]) === looseAnswer(answer);
         });
     } else {
-      const user = isFilledText(blanks[0]) ? blanks[0] : problem.userAnswer;
+      const user = isFilledText(blanks[0])
+        ? blanks[0]
+        : isFilledText(problem.userAnswer)
+          ? problem.userAnswer
+          : codes[i];
       ok = expected.length > 0 && looseAnswer(user) !== "" && looseAnswer(user) === looseAnswer(expected[0]);
     }
     scored.push({

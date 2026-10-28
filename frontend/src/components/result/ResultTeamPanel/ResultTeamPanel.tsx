@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react';
 import type { ResultPlayer } from '../../../utils/resultUtils';
+import { isDepartedPlayer } from '../../../utils/result/departedUtils';
 import { ResultPlayerRow } from '../ResultPlayerRow/ResultPlayerRow';
 
 interface ResultTeamPanelProps {
@@ -44,7 +45,7 @@ export function ResultTeamPanel({
           <ResultPlayerRow
             key={p.id}
             player={p}
-            departed={departedUserIds?.has(p.id) ?? false}
+            departed={isDepartedPlayer(p.id, departedUserIds)}
             reviewSelectMode={reviewSelectMode}
             reviewPulse={reviewPulse}
             selectedReviewProblems={selectedReviewProblems}

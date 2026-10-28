@@ -55,10 +55,12 @@ export interface CodeHistoryEntry {
     userBlanks?: string[];
     selectedOption?: number | null;
     solution?: string;
+    isCorrect?: boolean;
   }>;
   codes: string[];
   code: string;
   mode?: string;
+  problemResults?: boolean[];
 }
 
 export interface ChatMessage {

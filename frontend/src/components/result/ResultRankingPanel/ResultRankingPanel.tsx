@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react';
 import type { ResultPlayer } from '../../../utils/resultUtils';
+import { isDepartedPlayer } from '../../../utils/result/departedUtils';
 import { ResultPlayerRow } from '../ResultPlayerRow/ResultPlayerRow';
 import { ResultReviewFooter } from '../ResultReviewFooter/ResultReviewFooter';
 
@@ -48,7 +49,7 @@ export function ResultRankingPanel({
             player={p}
             showRank
             panelClass={`rank-${p.rank <= 3 ? p.rank : ''}`}
-            departed={departedUserIds?.has(p.id) ?? false}
+            departed={isDepartedPlayer(p.id, departedUserIds)}
             reviewSelectMode={reviewSelectMode}
             reviewPulse={reviewPulse}
             selectedReviewProblems={selectedReviewProblems}

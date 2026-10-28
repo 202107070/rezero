@@ -89,6 +89,7 @@ import type { BattleProblem } from '../../types/battle';
 import type { FinalRankingSnapshot } from '../../utils/battle/rankUtils';
 import { getLangKey } from '../../utils/battle/codeUtils';
 import { buildResultPlayers, isNoSolveDraw, type ResultPlayer } from '../../utils/resultUtils';
+import { collectDepartedIdVariants, isDepartedPlayer } from '../../utils/result/departedUtils';
 import { formatCorrectAnswer, formatSubmittedAnswer, getResultPlayerAnswer, hydrateBattleProblem } from '../../utils/resultAnswerUtils';
 import './result.css';
 
@@ -294,6 +295,16 @@ export default function ResultPage() {
   const seenLocationRef = useRef(new Map<string, string>());
   const awayStayRef = useRef(new Set<string>());
   allPlayersRef.current = allPlayers;
+  // 결과 화면에 있는 동안 상대의 기본 위치를 result로 시드 (이탈 감지용)
+  useEffect(() => {
+    for (const player of allPlayers) {
+      if (!player?.id || String(player.id) === String(myUserId)) continue;
+      const pid = String(player.id).replace(/^player-/, '');
+      if (!seenLocationRef.current.has(pid)) {
+        seenLocationRef.current.set(pid, 'result');
+      }
+    }
+  }, [allPlayers, myUserId]);
 
   const [reviewPhase, setReviewPhase] = useState<ReviewPhase>('idle');
   const [selectedReviewProblems, setSelectedReviewProblems] = useState<Set<number>>(() => new Set());
@@ -433,29 +444,54 @@ export default function ResultPage() {
             const notices: string[] = [];
             const away = new Set<string>();
             const myRoom = String(roomId || '');
+            const presentIds = new Set(
+              (payload.users || []).map((user) => String(user.userId || '').replace(/^player-/, '')),
+            );
             for (const player of allPlayersRef.current) {
               if (!player?.id || String(player.id) === String(myUserId) || shouldAutoAcceptReviewInvite(player.id)) {
                 continue;
               }
               const pid = String(player.id).replace(/^player-/, '');
+              const name = player.name || '상대';
+              const prev = seenLocationRef.current.get(pid);
               const remote = (payload.users || []).find(
                 (user) => String(user.userId || '').replace(/^player-/, '') === pid,
               );
-              if (!remote) continue;
+
+              // 오프라인/목록 제외: 결과·배틀에 있던 상대가 presence에서 사라짐
+              if (!remote) {
+                if (prev === 'result' || prev === 'battle') {
+                  if (!awayStayRef.current.has(pid)) {
+                    notices.push(`${name} 유저가 로비로 이동하였습니다.`);
+                  }
+                  awayStayRef.current.add(pid);
+                  seenLocationRef.current.set(pid, 'offline');
+                }
+                if (awayStayRef.current.has(pid)) {
+                  collectDepartedIdVariants(player.id).forEach((id) => away.add(id));
+                }
+                continue;
+              }
+
               const loc = String(remote.location || '');
               const remoteRoom = String(remote.roomId || '');
-              const prev = seenLocationRef.current.get(pid);
-              const name = player.name || remote.displayName || '상대';
               const wasInMatch = prev === 'result' || prev === 'battle';
-              // 결과 소켓 입장 직후 잠깐 room으로 찍히는 오탐 방지:
-              // 같은 매치 roomId로 lobby/room 전환이 확인될 때만 이탈 처리
-              const leftToLobby = loc === 'lobby';
-              const leftToSameRoom = loc === 'room' && (!myRoom || !remoteRoom || remoteRoom === myRoom);
-              if (prev && prev !== loc && wasInMatch && (leftToLobby || leftToSameRoom)) {
-                // 첫 관측은 보류 표시만 하고, 연속 관측에서 확정
-                const pendingKey = `${pid}:${loc}`;
-                const pending = seenLocationRef.current.get(`pending:${pid}`);
-                if (pending === pendingKey) {
+              const leftToLobby = loc === 'lobby' || loc === 'offline';
+              const leftToSameRoom =
+                loc === 'room' && (!myRoom || !remoteRoom || remoteRoom === myRoom);
+              // room 깜빡임만 1틱 보류, lobby/offline은 즉시 반영
+              if (prev && wasInMatch && prev !== loc && (leftToLobby || leftToSameRoom)) {
+                if (leftToSameRoom && prev) {
+                  const pendingKey = `${pid}:${loc}`;
+                  const pending = seenLocationRef.current.get(`pending:${pid}`);
+                  if (pending === pendingKey) {
+                    notices.push(`${name} 유저가 대기방으로 이동하였습니다.`);
+                    awayStayRef.current.add(pid);
+                    seenLocationRef.current.delete(`pending:${pid}`);
+                  } else {
+                    seenLocationRef.current.set(`pending:${pid}`, pendingKey);
+                  }
+                } else {
                   notices.push(
                     leftToLobby
                       ? `${name} 유저가 로비로 이동하였습니다.`
@@ -463,20 +499,19 @@ export default function ResultPage() {
                   );
                   awayStayRef.current.add(pid);
                   seenLocationRef.current.delete(`pending:${pid}`);
-                } else {
-                  seenLocationRef.current.set(`pending:${pid}`, pendingKey);
                 }
-              } else {
+              } else if (loc === 'result' || loc === 'battle') {
                 seenLocationRef.current.delete(`pending:${pid}`);
               }
+
               if (loc === 'result' || loc === 'battle') awayStayRef.current.delete(pid);
               seenLocationRef.current.set(pid, loc);
               if (awayStayRef.current.has(pid)) {
-                away.add(player.id);
-                away.add(pid);
-                away.add(`player-${pid}`);
+                collectDepartedIdVariants(player.id).forEach((id) => away.add(id));
               }
             }
+            // presentIds unused warning silence via void
+            void presentIds;
             setAwayUserIds(away);
             if (notices.length === 0) return;
             setChatMessages((prev) => [
@@ -484,6 +519,42 @@ export default function ResultPage() {
               ...notices.map((text) => ({ sender: 'SYSTEM', text, type: 'sys' as const })),
             ]);
           }),
+        );
+
+        unsubs.push(
+          onRoomEvent(
+            ROOM_SOCKET_EVENTS.USER_LEFT,
+            (payload?: { userId?: string; roomClosed?: boolean }) => {
+              const leftId = String(payload?.userId || '').replace(/^player-/, '');
+              if (!leftId || leftId === String(myUserId).replace(/^player-/, '')) return;
+              const player = allPlayersRef.current.find(
+                (entry) => String(entry.id).replace(/^player-/, '') === leftId,
+              );
+              if (!player || shouldAutoAcceptReviewInvite(player.id)) return;
+              if (awayStayRef.current.has(leftId)) return;
+              awayStayRef.current.add(leftId);
+              seenLocationRef.current.set(leftId, 'offline');
+              const variants = collectDepartedIdVariants(player.id);
+              setAwayUserIds((prev) => {
+                const next = new Set(prev);
+                variants.forEach((id) => next.add(id));
+                return next;
+              });
+              setDepartedUserIds((prev) => {
+                const next = new Set(prev);
+                variants.forEach((id) => next.add(id));
+                return next;
+              });
+              setChatMessages((prev) => [
+                ...prev,
+                {
+                  sender: 'SYSTEM',
+                  text: `${player.name || '상대'} 유저가 로비로 이동하였습니다.`,
+                  type: 'sys',
+                },
+              ]);
+            },
+          ),
         );
 
         unsubs.push(
@@ -799,6 +870,13 @@ export default function ResultPage() {
           assembledCode: mySubmissionCodes[index],
         }),
       );
+      const authoritativeResults =
+        (Array.isArray(myPlayer?.problemResults) && myPlayer.problemResults.length > 0
+          ? myPlayer.problemResults
+          : null) ||
+        (Array.isArray(submission.problemResults) && submission.problemResults.length > 0
+          ? submission.problemResults
+          : null);
       const entry = normalizeCodeHistoryEntry({
         historyId: submission.historyId || `${submission.roomId || roomId || 'solo'}::${submission.submittedAt}`,
         roomId: submission.roomId || roomId || '',
@@ -821,8 +899,13 @@ export default function ResultPage() {
             userBlanks: blanks,
             selectedOption: selected,
             solution: formatCorrectAnswer(problem as BattleProblem, langKey) || '',
+            isCorrect:
+              authoritativeResults && typeof authoritativeResults[index] === 'boolean'
+                ? authoritativeResults[index]
+                : undefined,
           };
         }),
+        problemResults: authoritativeResults || undefined,
         codes: mySubmissionCodes.map((code, index) => {
           const raw = String(code || '').trim();
           const question = String((problems[index] as BattleProblem | undefined)?.question || '').trim();
@@ -838,7 +921,7 @@ export default function ResultPage() {
     } catch (e) {
       console.error('코드 히스토리 저장 실패:', e);
     }
-  }, [roomId, submission, mySubmissionCodes, myBlankAnswers, mySelectedOptions, langKey]);
+  }, [roomId, submission, mySubmissionCodes, myBlankAnswers, mySelectedOptions, langKey, myPlayer?.problemResults]);
 
   useEffect(() => {
     void emitUpdateLocation({
@@ -894,10 +977,7 @@ export default function ResultPage() {
       (player) => player.id !== myUserId && !shouldAutoAcceptReviewInvite(player.id),
     );
     if (humans.length === 0) return false;
-    return humans.every((player) => {
-      const pid = String(player.id).replace(/^player-/, '');
-      return unavailableIds.has(player.id) || unavailableIds.has(pid) || unavailableIds.has(`player-${pid}`);
-    });
+    return humans.every((player) => isDepartedPlayer(player.id, unavailableIds));
   }, [allPlayers, myUserId, unavailableIds]);
 
   const handleStartReview = () => {
@@ -1262,6 +1342,11 @@ export default function ResultPage() {
       return;
     }
     try {
+      await emitUpdateLocation({
+        location: 'room',
+        roomId: String(roomId),
+        ratingScore: getRatingScore(),
+      }).catch(() => undefined);
       allowExplicitRejoin(roomId);
       setActiveRoomId(roomId);
       await joinRoomSocket(roomId);
@@ -1275,6 +1360,15 @@ export default function ResultPage() {
   const clearSessionAndNavigateLobby = async () => {
     clearBattleAndLeave(sessionId, roomId);
     removeMyPresence(myUserId);
+    try {
+      await emitUpdateLocation({
+        location: 'lobby',
+        roomId: '',
+        ratingScore: getRatingScore(),
+      });
+    } catch {
+      // ignore
+    }
     const activeId = roomId || getActiveRoomId();
     const numericRoomId = activeId ? Number(activeId) : NaN;
     if (Number.isInteger(numericRoomId) && numericRoomId > 0) {

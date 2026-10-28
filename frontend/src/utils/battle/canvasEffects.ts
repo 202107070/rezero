@@ -332,7 +332,21 @@ function ensureScribbleCanvas(
 }
 
 export function applyScribbleStroke(botId: string, stroke: ScribbleStroke): void {
-  const entry = scribbleRefs[botId];
+  let entry = scribbleRefs[botId];
+  if (!entry) {
+    const panelEl =
+      document.querySelector(
+        `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
+      ) ||
+      document.querySelector(`[data-opponent-canvas="${botId}"]`) ||
+      (botId === 'self'
+        ? document.querySelector('.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card')
+        : null);
+    if (panelEl) {
+      startScribbleCanvas(panelEl as HTMLElement, botId, 7000, { interactive: false });
+      entry = scribbleRefs[botId];
+    }
+  }
   if (!entry) return;
   const { ctx, canvas } = entry;
   const w = canvas.width;

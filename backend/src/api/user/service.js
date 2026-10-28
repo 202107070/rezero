@@ -227,6 +227,16 @@ function buildHistoryId(userId, input) {
 export async function saveMyMatchHistory(userId, input) {
   const upsertMatchCodeHistory = getModelFunction("upsertMatchCodeHistory");
   const historyId = buildHistoryId(userId, input);
+  const problems = Array.isArray(input.problems) ? input.problems : [];
+  const problemResults = Array.isArray(input.problemResults) ? input.problemResults : null;
+  const problemsWithFlags = problems.map(function (problem, index) {
+    if (!problem || typeof problem !== "object") return problem;
+    if (typeof problem.isCorrect === "boolean") return problem;
+    if (problemResults && typeof problemResults[index] === "boolean") {
+      return { ...problem, isCorrect: problemResults[index] };
+    }
+    return problem;
+  });
   await upsertMatchCodeHistory({
     historyId,
     userId,
@@ -236,7 +246,8 @@ export async function saveMyMatchHistory(userId, input) {
     mode: input.mode || null,
     code: input.code || "",
     codes: Array.isArray(input.codes) ? input.codes : [],
-    problems: Array.isArray(input.problems) ? input.problems : [],
+    problems: problemsWithFlags,
+    problemResults,
   });
   return { historyId };
 }
@@ -397,7 +408,18 @@ export async function analyzeMatchHistory(userId, historyId) {
     return String(item.historyId) !== String(entry.historyId);
   });
   const chartSummary = buildRoomChart(entry, previousEntries);
-  if (entry.aiAnalysis) {
+  const hasAuthoritativeResults = (Array.isArray(entry.problems) ? entry.problems : []).some(
+    function (problem) {
+      return problem && typeof problem.isCorrect === "boolean";
+    },
+  );
+  // 예전 0% 오분석 캐시가 남아 있으면 차트와 불일치하므로 재생성
+  const cachedLooksStale =
+    Boolean(entry.aiAnalysis) &&
+    hasAuthoritativeResults &&
+    chartSummary.solveRate > 0 &&
+    /정답률\s*0%|맞은 문제가 없|정답이 없/.test(String(entry.aiAnalysis));
+  if (entry.aiAnalysis && !cachedLooksStale) {
     return {
       userId,
       displayName: career.displayName || user.displayName || user.username || userId,
@@ -418,13 +440,16 @@ export async function analyzeMatchHistory(userId, historyId) {
     winrate: career.winrate,
     totalWins: career.totalWins,
     losses: career.losses,
-    solveRate: career.solveRate,
+    solveRate: chartSummary.solveRate != null ? chartSummary.solveRate : career.solveRate,
+    matchSolveRate: chartSummary.solveRate,
+    matchCorrectCount: chartSummary.totalWins,
+    matchProblemCount: chartSummary.problemCount || problems.length || codes.length || 0,
     strongestWinLang: career.strongestWinLang,
     fastestLang: career.fastestLang,
     slowestLang: career.slowestLang,
     avgSolveTimeSec: career.avgSolveTimeSec,
     lang: entry.lang || "UNKNOWN",
-    problemCount: problems.length || codes.length || 0,
+    problemCount: chartSummary.problemCount || problems.length || codes.length || 0,
     chart: chartSummary,
     previousMatchCount: previousEntries.length,
     userSubmissions: (codes.length > 0 ? codes : [entry.code || ""]).slice(0, 8).map(function (code, index) {

@@ -1033,13 +1033,8 @@ export default function BattlePage() {
             ) {
               SFX.play(payload.itemType);
               const effectType = payload.itemType as AttackPanelType;
-              let started = false;
-              setSelfPanelEffects((prev) => {
-                const result = enqueuePanelEffect(prev, effectType);
-                started = result.started;
-                return result.next;
-              });
-              if (started && (effectType === 'paint' || effectType === 'scribble')) {
+              setSelfPanelEffects((prev) => enqueuePanelEffect(prev, effectType).next);
+              if (effectType === 'paint' || effectType === 'scribble') {
                 const tryRun = (attempts = 0) => {
                   const panelEl = document.querySelector(
                     '.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card',
@@ -1081,14 +1076,11 @@ export default function BattlePage() {
               ) {
                 queueMicrotask(() => {
                   SFX.play(payload.itemType);
-                  const started = applyAttackPanelEffect(
+                  applyAttackPanelEffect(
                     targetBot.id,
                     payload.itemType as AttackPanelType,
                   );
-                  if (
-                    started &&
-                    (payload.itemType === 'paint' || payload.itemType === 'scribble')
-                  ) {
+                  if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
                     setExpandedOpponentId(targetBot.id);
                     runPanelCanvasEffect(
                       targetBot.id,
@@ -2165,7 +2157,9 @@ export default function BattlePage() {
     }
 
     if (type === 'paint') {
-      if (applyAttackPanelEffect(botId, 'paint')) runPanelCanvasEffect(botId, 'paint');
+      applyAttackPanelEffect(botId, 'paint');
+      // started 여부와 무관하게 캔버스 시작 (Strict Mode setState 이중호출 대비)
+      runPanelCanvasEffect(botId, 'paint');
       setItemInventory((prev) => ({ ...prev, paint: prev.paint - 1 }));
     } else if (type === 'lightning') {
       applyAttackPanelEffect(botId, 'lightning');
@@ -2174,19 +2168,18 @@ export default function BattlePage() {
       // 상대 시간 감소는 상대 클라이언트에서 적용 (로컬 남은 시간은 건드리지 않음)
       setItemInventory((prev) => ({ ...prev, timeReduce: prev.timeReduce - 1 }));
     } else if (type === 'scribble') {
-      if (applyAttackPanelEffect(botId, 'scribble')) {
-        runPanelCanvasEffect(botId, 'scribble', {
-          interactive: true,
-          onStroke: (stroke) => {
-            if (!isLiveMatch || !roomId || !targetUserId) return;
-            void emitBattleItemUsed(roomId, {
-              itemType: 'scribble',
-              targetUserId,
-              scribbleStroke: stroke,
-            });
-          },
-        });
-      }
+      applyAttackPanelEffect(botId, 'scribble');
+      runPanelCanvasEffect(botId, 'scribble', {
+        interactive: true,
+        onStroke: (stroke) => {
+          if (!isLiveMatch || !roomId || !targetUserId) return;
+          void emitBattleItemUsed(roomId, {
+            itemType: 'scribble',
+            targetUserId,
+            scribbleStroke: stroke,
+          });
+        },
+      });
       setItemInventory((prev) => ({ ...prev, scribble: prev.scribble - 1 }));
     } else if (type === 'lock') {
       applyAttackPanelEffect(botId, 'lock');
