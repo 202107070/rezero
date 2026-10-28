@@ -99,6 +99,12 @@ export default function LoginPage() {
         navigate(ROUTES.LOBBY, { replace: true });
       } else if (result.code === 'ALREADY_ONLINE') {
         setAlreadyOnlineOpen(true);
+      } else if (result.code === 'DISPLAY_NAME_ALREADY_EXISTS') {
+        setFieldErrors({ displayName: result.error || '이미 사용 중인 닉네임입니다.' });
+        focusField('displayName');
+      } else if (result.code === 'USERNAME_ALREADY_EXISTS') {
+        setFieldErrors({ username: result.error || '이미 사용 중인 아이디입니다.' });
+        focusField('username');
       } else {
         setError(result.error);
       }

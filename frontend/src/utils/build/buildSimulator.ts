@@ -11,8 +11,6 @@ const LANG_LABEL: Record<string, string> = {
   JAVA: 'Java',
   PYTHON: 'Python',
   CPP: 'C++',
-  HTML: 'HTML',
-  CSS: 'CSS',
 };
 
 function extractProgramOutput(code: string, lang: string): string[] {
@@ -53,17 +51,6 @@ function detectIssues(code: string, lang: string): string[] {
     }
   }
 
-  if (lang === 'HTML') {
-    if (!/<html[\s>]/i.test(code)) issues.push('<html> 태그가 없습니다.');
-    if (!/<\/html>/i.test(code)) issues.push('</html> 닫는 태그가 없습니다.');
-  }
-
-  if (lang === 'CSS') {
-    const open = countChar(code, '{');
-    const close = countChar(code, '}');
-    if (open !== close) issues.push(`중괄호 불일치: '{' ${open}개, '}' ${close}개`);
-  }
-
   return issues;
 }
 
@@ -99,13 +86,6 @@ export async function runBuildSimulation(
   }
 
   await emit({ level: 'info', text: '[build] 구문 검사 통과' });
-
-  if (lang === 'HTML' || lang === 'CSS') {
-    await emit({ level: 'info', text: `[build] ${label} 마크업/스타일 검사 완료` });
-    const elapsed = ((Date.now() - startedAt) / 1000).toFixed(2);
-    await emit({ level: 'success', text: `[build] SUCCESS (${elapsed}s)` }, 30);
-    return 'success';
-  }
 
   await emit({ level: 'stdout', text: '--- program output (preview) ---' }, 30);
 

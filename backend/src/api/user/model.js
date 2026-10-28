@@ -19,6 +19,15 @@ export async function isUsernameTaken(username) {
   return Number(rows[0].count) > 0;
 }
 
+export async function isDisplayNameTaken(displayName) {
+  const rows = await pool.query(
+    "SELECT COUNT(*) AS count FROM users WHERE LOWER(display_name) = LOWER(?)",
+    [displayName],
+  );
+
+  return Number(rows[0].count) > 0;
+}
+
 export async function findUserByUsername(username) {
   const rows = await pool.query(
     `SELECT

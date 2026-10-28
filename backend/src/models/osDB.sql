@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(32) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     display_name VARCHAR(20) NOT NULL,
+    UNIQUE KEY uq_users_display_name (display_name),
     gold INT UNSIGNED NOT NULL DEFAULT 0,
     rating_score INT NOT NULL DEFAULT 1000,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

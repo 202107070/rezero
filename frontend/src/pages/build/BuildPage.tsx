@@ -9,7 +9,7 @@ import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSi
 import { BuildCodeEditor } from '../../components/build/BuildCodeEditor';
 import './build.css';
 
-const BUILD_LANGS = ['JAVA', 'PYTHON', 'CPP', 'HTML', 'CSS'] as const;
+const BUILD_LANGS = ['JAVA', 'PYTHON', 'CPP'] as const;
 
 type BuildStatus = 'idle' | 'building' | 'success' | 'error';
 

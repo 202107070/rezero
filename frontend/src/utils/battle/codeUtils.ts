@@ -46,8 +46,6 @@ export const DEFAULT_TEMPLATE: Record<string, string> = {
   JAVA: "public class Main {\n    public static void main(String[] args) {\n        // 내 코드 작성\n    }\n}",
   PYTHON: "def solution():\n    # 내 코드 작성\n    pass\n\nif __name__ == '__main__':\n    solution()",
   CPP: "#include <iostream>\nusing namespace std;\n\nint main() {\n    // 내 코드 작성\n    return 0;\n}",
-  HTML: "<!DOCTYPE html>\n<html>\n<head>\n  <title>Document</title>\n</head>\n<body>\n  <!-- 내 마크업 작성 -->\n</body>\n</html>",
-  CSS: "/* 내 스타일 작성 */\n.container {\n  \n}",
 };
 
 export const DIFFICULTY_MAP: Record<string, string> = {

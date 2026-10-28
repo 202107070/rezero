@@ -3,8 +3,6 @@ import CodeMirror from '@uiw/react-codemirror';
 import { java } from '@codemirror/lang-java';
 import { python } from '@codemirror/lang-python';
 import { cpp } from '@codemirror/lang-cpp';
-import { html } from '@codemirror/lang-html';
-import { css } from '@codemirror/lang-css';
 import {
   defaultKeymap,
   history,
@@ -103,10 +101,6 @@ function getLanguageExtension(lang: string): Extension {
       return python();
     case 'CPP':
       return cpp();
-    case 'HTML':
-      return html();
-    case 'CSS':
-      return css();
     default:
       return [];
   }

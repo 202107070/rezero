@@ -65,6 +65,7 @@ async function getUserProfile(user) {
 
 export async function signupUser(input) {
   const isUsernameTaken = getModelFunction("isUsernameTaken");
+  const isDisplayNameTaken = getModelFunction("isDisplayNameTaken");
   const createUser = getModelFunction("createUser");
 
   if (await isUsernameTaken(input.username)) {
@@ -72,6 +73,14 @@ export async function signupUser(input) {
       409,
       ERROR_CODE.USERNAME_ALREADY_EXISTS,
       "이미 사용 중인 아이디입니다.",
+    );
+  }
+
+  if (await isDisplayNameTaken(input.displayName)) {
+    throw new AppError(
+      409,
+      ERROR_CODE.DISPLAY_NAME_ALREADY_EXISTS,
+      "이미 사용 중인 닉네임입니다.",
     );
   }
 
