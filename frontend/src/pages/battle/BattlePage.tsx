@@ -301,18 +301,6 @@ export default function BattlePage() {
     setProblemSolved(true);
   }, []);
 
-  const isCurrentAnswerCorrect = useCallback(
-    () =>
-      isProblemAnswerCorrect({
-        problem: currentProblem,
-        problemIndex: currentIndex,
-        langKey,
-        blankAnswers,
-        selectedOption,
-      }),
-    [currentProblem, currentIndex, langKey, blankAnswers, selectedOption],
-  );
-
   const hasCurrentAnswerAttempted = useCallback(
     () =>
       hasProblemAnswerAttempted({

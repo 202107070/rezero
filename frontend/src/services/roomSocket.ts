@@ -229,7 +229,8 @@ export interface UserReconnectedPayload {
   problemId?: string;
 }
 
-type AnyHandler = (...args: never[]) => void;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyHandler = (...args: any[]) => void;
 
 let socket: Socket | null = null;
 let intentionalDisconnect = false;

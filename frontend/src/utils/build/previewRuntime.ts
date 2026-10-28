@@ -89,6 +89,10 @@ class Parser {
         while (!this.done() && this.peek() !== '\n') this.index += 1;
         continue;
       }
+      if (ch === '#') {
+        while (!this.done() && this.peek() !== '\n') this.index += 1;
+        continue;
+      }
       break;
     }
   }
@@ -112,6 +116,12 @@ class Parser {
     }
     if (this.source.startsWith('cout', this.index) && /\s|<</.test(this.source.slice(this.index + 4, this.index + 6))) {
       return this.parseCout();
+    }
+    if (this.source.startsWith('return', this.index) && /\s|;|$/.test(this.source[this.index + 6] || '')) {
+      this.index += 6;
+      while (!this.done() && this.peek() !== ';' && this.peek() !== '\n' && this.peek() !== '}') this.index += 1;
+      this.consumeSemi();
+      return { kind: 'assign', name: '__noop', expr: { kind: 'num', value: 0 } };
     }
     const assign = this.source.slice(this.index).match(/^(?:int\s+)?([A-Za-z_]\w*)\s*(\+\+|--|\+=|-=|=)/);
     if (assign) {
@@ -305,8 +315,11 @@ class Parser {
       if (!this.source.startsWith('<<', this.index)) break;
       this.index += 2;
       this.skip();
-      if (this.source.startsWith('endl', this.index) && !/[A-Za-z0-9_]/.test(this.source[this.index + 4] || '')) {
-        this.index += 4;
+      if (
+        (this.source.startsWith('endl', this.index) || this.source.startsWith('std::endl', this.index)) &&
+        !/[A-Za-z0-9_]/.test(this.source[this.index + (this.source.startsWith('std::endl', this.index) ? 9 : 4)] || '')
+      ) {
+        this.index += this.source.startsWith('std::endl', this.index) ? 9 : 4;
         newline = true;
         continue;
       }
@@ -384,6 +397,8 @@ class Parser {
     let left = this.parseAdd();
     while (true) {
       this.skip();
+      // cout 의 << / >> 와 비교 연산자가 겹치지 않게 한다
+      if (this.source.startsWith('<<', this.index) || this.source.startsWith('>>', this.index)) break;
       const op = this.source.startsWith('<=', this.index)
         ? '<='
         : this.source.startsWith('>=', this.index)
@@ -631,13 +646,135 @@ function execStmts(stmts: Stmt[], env: Map<string, string | number>, lines: stri
   if (row) flush();
 }
 
-export function parsePreview(code: string): Stmt[] {
-  const normalized = indentToBraces(code);
+function extractBalancedBlock(source: string, openBraceIndex: number): string {
+  let depth = 0;
+  for (let i = openBraceIndex; i < source.length; i += 1) {
+    const ch = source[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(openBraceIndex + 1, i);
+    }
+  }
+  return source.slice(openBraceIndex + 1);
+}
+
+function stripDirectiveLines(code: string): string {
+  return code
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      if (trimmed.startsWith('#include')) return false;
+      if (/^using\s+namespace\b/.test(trimmed)) return false;
+      if (/^import\b/.test(trimmed)) return false;
+      if (/^package\b/.test(trimmed)) return false;
+      return true;
+    })
+    .join('\n');
+}
+
+function extractMainOrClassBody(code: string): string {
+  const main = /(?:public\s+)?(?:static\s+)?(?:void|int)\s+main\s*\([^)]*\)\s*\{/.exec(code);
+  if (main && main.index != null) {
+    return extractBalancedBlock(code, main.index + main[0].length - 1);
+  }
+  const classDecl = /(?:public\s+)?class\s+\w+[^{]*\{/.exec(code);
+  if (classDecl && classDecl.index != null) {
+    return extractBalancedBlock(code, classDecl.index + classDecl[0].length - 1);
+  }
+  return code;
+}
+
+function flattenPythonScaffold(code: string): string {
+  const lines = code.replace(/\t/g, '    ').split('\n');
+  const out: string[] = [];
+  let mainGuardIndent: number | null = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const indent = raw.match(/^ */)?.[0].length ?? 0;
+    const trimmed = raw.trim();
+
+    if (mainGuardIndent != null) {
+      if (trimmed && indent <= mainGuardIndent) {
+        mainGuardIndent = null;
+      } else {
+        if (/^[A-Za-z_]\w*\(\)\s*$/.test(trimmed)) continue;
+        out.push(trimmed ? raw.slice(Math.min(raw.length, mainGuardIndent + 4)) : '');
+        continue;
+      }
+    }
+
+    if (/^def\s+[A-Za-z_]\w*\s*\(.*\)\s*:/.test(trimmed)) {
+      const defIndent = indent;
+      i += 1;
+      while (i < lines.length) {
+        const body = lines[i];
+        const bodyIndent = body.match(/^ */)?.[0].length ?? 0;
+        const bodyTrim = body.trim();
+        if (bodyTrim && bodyIndent <= defIndent) {
+          i -= 1;
+          break;
+        }
+        if (bodyTrim && bodyTrim !== 'pass') {
+          out.push(body.slice(Math.min(body.length, defIndent + 4)));
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    if (/^if\s+__name__\s*==\s*['"]__main__['"]\s*:/.test(trimmed)) {
+      mainGuardIndent = indent;
+      continue;
+    }
+
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (trimmed === 'pass') continue;
+    out.push(raw);
+  }
+
+  return out.join('\n');
+}
+
+/** 템플릿·클래스 래퍼를 걷어내 미리보기 실행 가능한 본문만 남긴다. */
+export function prepareExecutableSource(code: string, lang?: string): string {
+  const key = String(lang || '').toUpperCase();
+  if (key === 'HTML' || key === 'CSS') return '';
+
+  let src = stripDirectiveLines(code);
+  if (key === 'PYTHON' || /:\s*(#.*)?$/m.test(src) || /\bdef\s+\w+\s*\(/.test(src)) {
+    src = flattenPythonScaffold(src);
+  } else {
+    src = extractMainOrClassBody(src);
+  }
+
+  src = src
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return false;
+      if (trimmed.startsWith('#') || trimmed.startsWith('//')) return false;
+      if (/^return\b/.test(trimmed)) return false;
+      if (trimmed === 'pass') return false;
+      return true;
+    })
+    .join('\n');
+
+  return src.trim();
+}
+
+export function parsePreview(code: string, lang?: string): Stmt[] {
+  const prepared = prepareExecutableSource(code, lang);
+  if (!prepared) return [];
+  const normalized = indentToBraces(prepared);
   return new Parser(normalized).parseProgram();
 }
 
-export function runPreviewProgram(code: string): string[] {
-  const stmts = parsePreview(code);
+export function runPreviewProgram(code: string, lang?: string): string[] {
+  const stmts = parsePreview(code, lang);
+  if (stmts.length === 0) return [];
   const lines: string[] = [];
   execStmts(stmts, new Map(), lines, { left: MAX_STEPS });
   return lines;
@@ -751,7 +888,7 @@ function emitLoop(stmt: Extract<Stmt, { kind: 'for' | 'pyfor' }>, lang: string, 
 export function renderForRoom(code: string, lang: string): string {
   const key = String(lang || 'JAVA').toUpperCase();
   try {
-    const stmts = parsePreview(code);
+    const stmts = parsePreview(code, key);
     if (stmts.length === 0) return code;
     return emitBlock(stmts, key === 'C++' ? 'CPP' : key, '').join('\n');
   } catch {

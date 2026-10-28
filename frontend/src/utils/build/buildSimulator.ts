@@ -15,8 +15,8 @@ const LANG_LABEL: Record<string, string> = {
   CSS: 'CSS',
 };
 
-function extractProgramOutput(code: string): string[] {
-  return runPreviewProgram(code);
+function extractProgramOutput(code: string, lang: string): string[] {
+  return runPreviewProgram(code, lang);
 }
 
 function sleep(ms: number) {
@@ -99,17 +99,26 @@ export async function runBuildSimulation(
   }
 
   await emit({ level: 'info', text: '[build] 구문 검사 통과' });
+
+  if (lang === 'HTML' || lang === 'CSS') {
+    await emit({ level: 'info', text: `[build] ${label} 마크업/스타일 검사 완료` });
+    const elapsed = ((Date.now() - startedAt) / 1000).toFixed(2);
+    await emit({ level: 'success', text: `[build] SUCCESS (${elapsed}s)` }, 30);
+    return 'success';
+  }
+
   await emit({ level: 'stdout', text: '--- program output (preview) ---' }, 30);
 
   let outputs: string[] = [];
   let previewError = '';
   try {
-    outputs = extractProgramOutput(code);
+    outputs = extractProgramOutput(code, lang);
   } catch (error) {
     previewError = error instanceof Error ? error.message : '출력 미리보기에 실패했습니다.';
   }
   if (previewError) {
-    await emit({ level: 'error', text: `[error] ${previewError}` }, 40);
+    await emit({ level: 'warn', text: `[warn] 미리보기: ${previewError}` }, 40);
+    await emit({ level: 'stdout', text: '(미리보기 생략 — 구문 검사는 통과)' }, 30);
   } else if (outputs.length === 0) {
     await emit({ level: 'stdout', text: '(실행 출력 없음)' }, 40);
   } else {
