@@ -97,10 +97,8 @@ import {
   getMissingRoomCreateFields,
   type RoomCreateFieldKey,
 } from '../../utils/roomCreateValidation';
-import type { AudioSettings } from '../../types/audioSettings';
 import type { DisplayMode } from '../../types/electron';
-import { loadAudioSettings, saveAudioSettings } from '../../utils/audio/audioSettings';
-import { applyAudioSettings, BattleBGM, LobbyBGM } from '../../utils/audio/gameAudio';
+import { BattleBGM, LobbyBGM } from '../../utils/audio/gameAudio';
 import { applyDisplayMode, loadDisplayMode, quitApp } from '../../utils/windowBridge';
 import { getTierByRating } from '../../utils/tierUtils';
 import './lobby.css';
@@ -527,7 +525,6 @@ export default function LobbyPage() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [kickNotice, setKickNotice] = useState('');
   const [displayMode, setDisplayMode] = useState<DisplayMode>(loadDisplayMode);
-  const [audioSettings, setAudioSettings] = useState<AudioSettings>(loadAudioSettings);
   const [rouletteSpinning, setRouletteSpinning] = useState(false);
   const [rouletteResult, setRouletteResult] = useState<string | null>(null);
   const [wheelDeg, setWheelDeg] = useState(0);
@@ -594,14 +591,9 @@ export default function LobbyPage() {
 
   useEffect(() => {
     BattleBGM.stop();
-    applyAudioSettings(audioSettings);
-    if (audioSettings.gameMusic) {
-      LobbyBGM.start();
-    } else {
-      LobbyBGM.stop();
-    }
+    LobbyBGM.stop();
     return () => LobbyBGM.stop();
-  }, [audioSettings.gameMusic]);
+  }, []);
 
   useEffect(() => {
     try {
@@ -1083,13 +1075,8 @@ export default function LobbyPage() {
     setSelectedHistoryIds(codeHistory.map((entry) => entry.historyId));
   };
 
-  const handleSettingsConfirm = (mode: DisplayMode, nextAudio: AudioSettings) => {
+  const handleSettingsConfirm = (mode: DisplayMode) => {
     setDisplayMode(mode);
-    setAudioSettings(nextAudio);
-    saveAudioSettings(nextAudio);
-    applyAudioSettings(nextAudio);
-    if (nextAudio.gameMusic) LobbyBGM.start();
-    else LobbyBGM.stop();
     void applyDisplayMode(mode);
   };
 
@@ -1378,7 +1365,6 @@ export default function LobbyPage() {
       <SettingsModal
         open={showSettingsModal}
         displayMode={displayMode}
-        audioSettings={audioSettings}
         onClose={() => setShowSettingsModal(false)}
         onConfirm={handleSettingsConfirm}
         onLogout={handleLogout}

@@ -101,8 +101,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 1px;
-  padding: 4px 4px 4px;
+  gap: 6px;
+  padding: 8px 6px 6px;
   position: relative;
   transition: 0.08s;
   text-align: center;
@@ -138,10 +138,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 18px 12px 20px;
+  gap: 10px;
+  padding: 16px 12px 18px;
   text-align: center;
   transition: border-color 0.1s, background 0.1s, transform 0.08s, box-shadow 0.08s;
+  overflow: hidden;
 }
 
 .duel-side.occupied {
@@ -198,16 +199,16 @@
 }
 
 .duel-avatar {
-  font-size: clamp(7.5rem, 18vh, 11rem);
+  font-size: clamp(5.5rem, 12vh, 8.5rem);
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: clamp(7.5rem, 18vh, 11rem);
-  max-height: none;
-  flex: 0 0 auto;
-  margin-top: 8px;
-  margin-bottom: 4px;
+  height: clamp(5.5rem, 12vh, 8.5rem);
+  max-height: 42%;
+  flex: 0 1 auto;
+  margin-top: 4px;
+  margin-bottom: 2px;
 }
 
 .duel-empty-mark {
@@ -230,7 +231,7 @@
 }
 
 .duel-name {
-  font-size: clamp(20px, 2.8vh, 26px);
+  font-size: clamp(18px, 2.4vh, 24px);
   color: #ddd;
   width: 100%;
   line-height: 1.25;
@@ -240,9 +241,11 @@
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  margin-top: 8px;
-  margin-bottom: 6px;
-  flex-shrink: 0;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  flex: 0 0 auto;
+  z-index: 1;
+  position: relative;
 }
 
 .duel-rank {
@@ -303,23 +306,24 @@
 }
 
 .slot-avatar {
-  font-size: 5.5rem;
+  font-size: clamp(3.2rem, 8vh, 4.6rem);
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 5.7rem;
-  flex-shrink: 0;
-  margin-top: 4px;
-  margin-bottom: 2px;
+  height: clamp(3.4rem, 8.2vh, 4.8rem);
+  max-height: 46%;
+  flex: 0 1 auto;
+  margin-top: 2px;
+  margin-bottom: 0;
 }
 
 .slot-name {
-  font-size: 17px;
+  font-size: 16px;
   color: #ddd;
   width: 100%;
   padding: 0 2px;
-  line-height: 1.15;
+  line-height: 1.2;
   white-space: normal;
   word-break: keep-all;
   overflow: hidden;
@@ -329,8 +333,10 @@
   min-height: 2.2em;
   flex: 0 0 auto;
   min-width: 0;
-  margin-top: 4px;
+  margin-top: 2px;
   margin-bottom: 0;
+  z-index: 1;
+  position: relative;
 }
 
 .slot-rank {

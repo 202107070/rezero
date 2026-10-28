@@ -12,8 +12,12 @@ const ATTACK_ITEMS = BATTLE_ITEM_DEFS.filter((item) => ATTACK_ITEM_KEYS.includes
       : item.key === 'lightning'
         ? '번개로 상대 화면 방해'
         : item.key === 'timeReduce'
-          ? '상대 제한시간 15초 감소'
-          : '상대 코드에 직접 낙서',
+          ? '상대 제한시간 1분 감소'
+          : item.key === 'lock'
+            ? '상대 빈칸 입력을 잠시 잠금'
+            : item.key === 'scribble'
+              ? '상대 코드에 직접 낙서'
+              : '',
   rare: item.rare,
 }));
 

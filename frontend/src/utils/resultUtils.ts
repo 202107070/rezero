@@ -74,9 +74,17 @@ function readBattleRoundSeconds(problemCount: number, demoState: DemoStateLike |
   }
 }
 
-function computeRatingDelta(ingameScore: number, isWinner: boolean): number {
-  const magnitude = Math.max(10, Math.floor(ingameScore / 10));
-  return isWinner ? magnitude : -magnitude;
+function computeRatingDelta(
+  ingameScore: number,
+  isWinner: boolean,
+  rank: number,
+  totalPlayers: number,
+): number {
+  const base = Math.max(10, Math.floor(ingameScore / 10));
+  const placeBonus = Math.max(0, (totalPlayers - rank) * 5);
+  if (isWinner) return base + placeBonus;
+  const placePenalty = Math.max(0, (rank - 1) * 3);
+  return -(base + placePenalty);
 }
 
 export function isNoSolveDraw(
@@ -106,9 +114,10 @@ export function applyRatingDeltas(players: ResultPlayer[]): void {
     return;
   }
   const winCount = Math.max(1, Math.ceil(players.length / 2));
+  const totalPlayers = players.length;
   players.forEach((player) => {
     const isWinner = player.rank <= winCount;
-    player.delta = computeRatingDelta(player.ingameScore, isWinner);
+    player.delta = computeRatingDelta(player.ingameScore, isWinner, player.rank, totalPlayers);
   });
 }
 

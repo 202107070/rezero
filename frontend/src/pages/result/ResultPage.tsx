@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useServerDownChat } from '../../hooks/useServerDownChat';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AiReviewerPanel, type AiMessage } from '../../components/result/AiReviewerPanel/AiReviewerPanel';
 import { ResultActionBar } from '../../components/result/ResultActionBar/ResultActionBar';
 import { ResultChatPanel, type ResultChatMessage } from '../../components/result/ResultChatPanel/ResultChatPanel';
 import { ResultPopup } from '../../components/result/ResultPopup/ResultPopup';
@@ -209,7 +208,7 @@ export default function ResultPage() {
 
   useEffect(() => {
     BattleBGM.stop();
-    ResultBGM.start();
+    ResultBGM.stop();
     return () => ResultBGM.stop();
   }, []);
 
@@ -279,8 +278,6 @@ export default function ResultPage() {
   }>({ show: false, mainMsg: '', detailLines: [], newTitles: [] });
   const rankPopupLockedRef = useRef(false);
 
-  const [isAiOpen, setIsAiOpen] = useState(false);
-
   const [chatMessages, setChatMessages] = useState<ResultChatMessage[]>([
     { sender: 'SYSTEM', text: '매치가 종료되었습니다.', type: 'sys' },
   ]);
@@ -291,13 +288,6 @@ export default function ResultPage() {
   const [chatMode, setChatMode] = useState('ALL');
   const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
 
-  const [aiMessages, setAiMessages] = useState<AiMessage[]>([
-    {
-      type: 'system',
-      text: '안녕하세요! 이번 대결에 대한 피드백이 필요하신가요? 작성하신 코드의 시간 복잡도나 개선점을 분석해 드릴 수 있습니다.',
-    },
-  ]);
-  const [aiInput, setAiInput] = useState('');
   const [departedUserIds, setDepartedUserIds] = useState<Set<string>>(() => new Set());
   const [awayUserIds, setAwayUserIds] = useState<Set<string>>(() => new Set());
   const allPlayersRef = useRef(allPlayers);
@@ -347,6 +337,12 @@ export default function ResultPage() {
 
     void (async () => {
       try {
+        // join 전에 result 위치를 먼저 올려 room 오탐을 막음
+        await emitUpdateLocation({
+          location: 'result',
+          roomId: String(roomId || ''),
+          ratingScore: getRatingScore(),
+        }).catch(() => undefined);
         await joinRoomSocket(roomId);
         if (cancelled) return;
 
@@ -436,6 +432,7 @@ export default function ResultPage() {
           onRoomEvent(ROOM_SOCKET_EVENTS.LOBBY_PRESENCE, (payload: LobbyPresencePayload) => {
             const notices: string[] = [];
             const away = new Set<string>();
+            const myRoom = String(roomId || '');
             for (const player of allPlayersRef.current) {
               if (!player?.id || String(player.id) === String(myUserId) || shouldAutoAcceptReviewInvite(player.id)) {
                 continue;
@@ -446,16 +443,31 @@ export default function ResultPage() {
               );
               if (!remote) continue;
               const loc = String(remote.location || '');
+              const remoteRoom = String(remote.roomId || '');
               const prev = seenLocationRef.current.get(pid);
               const name = player.name || remote.displayName || '상대';
               const wasInMatch = prev === 'result' || prev === 'battle';
-              if (prev && prev !== loc && wasInMatch && (loc === 'lobby' || loc === 'room')) {
-                notices.push(
-                  loc === 'lobby'
-                    ? `${name} 유저가 로비로 이동하였습니다.`
-                    : `${name} 유저가 대기방으로 이동하였습니다.`,
-                );
-                awayStayRef.current.add(pid);
+              // 결과 소켓 입장 직후 잠깐 room으로 찍히는 오탐 방지:
+              // 같은 매치 roomId로 lobby/room 전환이 확인될 때만 이탈 처리
+              const leftToLobby = loc === 'lobby';
+              const leftToSameRoom = loc === 'room' && (!myRoom || !remoteRoom || remoteRoom === myRoom);
+              if (prev && prev !== loc && wasInMatch && (leftToLobby || leftToSameRoom)) {
+                // 첫 관측은 보류 표시만 하고, 연속 관측에서 확정
+                const pendingKey = `${pid}:${loc}`;
+                const pending = seenLocationRef.current.get(`pending:${pid}`);
+                if (pending === pendingKey) {
+                  notices.push(
+                    leftToLobby
+                      ? `${name} 유저가 로비로 이동하였습니다.`
+                      : `${name} 유저가 대기방으로 이동하였습니다.`,
+                  );
+                  awayStayRef.current.add(pid);
+                  seenLocationRef.current.delete(`pending:${pid}`);
+                } else {
+                  seenLocationRef.current.set(`pending:${pid}`, pendingKey);
+                }
+              } else {
+                seenLocationRef.current.delete(`pending:${pid}`);
               }
               if (loc === 'result' || loc === 'battle') awayStayRef.current.delete(pid);
               seenLocationRef.current.set(pid, loc);
@@ -1242,12 +1254,6 @@ export default function ResultPage() {
     }
   };
 
-  const handleSendAiChat = () => {
-    if (!aiInput.trim()) return;
-    setAiMessages((prev) => [...prev, { type: 'user', text: aiInput }]);
-    setAiInput('');
-  };
-
   const replayToRoom = async () => {
     removeMyPresence(myUserId);
     if (!roomId) {
@@ -1388,16 +1394,6 @@ export default function ResultPage() {
           <ResultActionBar onReplay={replayToRoom} onExit={() => setShowLobbyConfirm(true)} />
         </div>
       </div>
-
-      <AiReviewerPanel
-        isOpen={isAiOpen}
-        messages={aiMessages}
-        aiInput={aiInput}
-        onOpen={() => setIsAiOpen(true)}
-        onClose={() => setIsAiOpen(false)}
-        onAiInputChange={setAiInput}
-        onSend={handleSendAiChat}
-      />
 
       <ReviewInviteModal
         show={showInviteModal}

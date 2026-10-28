@@ -15,6 +15,7 @@ BATTLE_BUILD_ITEM_BONUS,
 BATTLE_BUILD_LIMIT,
 ITEM_PANEL_EFFECT_MS,
 SELF_ITEM_KEYS,
+TIME_REDUCE_SECONDS,
 type ItemKey,
 } from '../../constants/itemTypes';
 import { BATTLE_CORRECT_SCORE } from '../../constants/battleConstants';
@@ -62,8 +63,15 @@ import { getItemInventory, getRatingScore, setItemInventory as persistItemInvent
 import { emitUpdateLocation } from '../../services/roomSocket';
 import { collectSolvedProblemKeys, isPreviouslySolvedProblem } from '../../utils/codeHistoryUtils';
 import type { BattleProblem, ItemInventory, RoomUser } from '../../types/battle';
-import { loadAudioSettings } from '../../utils/audio/audioSettings';
-import { applyAudioSettings, BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
+import { BattleBGM, LobbyBGM, SFX } from '../../utils/audio/gameAudio';
+import {
+  type ActivePanelEffects,
+  type AttackPanelType,
+  createEmptyPanelEffects,
+  enqueuePanelEffect,
+  isPanelTypeActive,
+  prunePanelEffects,
+} from '../../utils/battle/panelEffects';
 import {
   computeBotRankScore,
   buildRankingSnapshotFromRoomUsers,
@@ -215,7 +223,6 @@ export default function BattlePage() {
   const problemResultsRef = useRef<ProblemResultsMap>({});
   const [myRatingScore] = useState(() => getRatingScore());
   const [problemSolved, setProblemSolved] = useState(false);
-  const [problemStartTime, setProblemStartTime] = useState(Date.now());
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [revealHint, setRevealHint] = useState<string | null>(null);
   const [showAnswerRequiredModal, setShowAnswerRequiredModal] = useState(false);
@@ -223,14 +230,12 @@ export default function BattlePage() {
   const [breakingBlanks, setBreakingBlanks] = useState<Record<string, boolean>>({});
   const [itemCastState, setItemCastState] = useState<{ type: string; ts: number } | null>(null);
   const [panelHit, setPanelHit] = useState<Record<string, boolean>>({});
-  const [selfPanelEffect, setSelfPanelEffect] = useState<{
-    type: 'paint' | 'lightning' | 'scribble' | 'lock';
-    expiresAt: number;
-  } | null>(null);
+  const [selfPanelEffects, setSelfPanelEffects] = useState<ActivePanelEffects>(() =>
+    createEmptyPanelEffects(),
+  );
   const [showItemModal, setShowItemModal] = useState(false);
-  const [opponentEffects, setOpponentEffects] = useState<
-    Record<string, { panelEffect?: { type: string; expiresAt: number } }>
-  >({});
+  const [opponentEffects, setOpponentEffects] = useState<Record<string, ActivePanelEffects>>({});
+  const problemStartedAtElapsedRef = useRef(0);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [itemInventory, setItemInventory] = useState<ItemInventory>(() => getItemInventory());
   const [sessionSavedSnapshot, setSessionSavedSnapshot] = useState('');
@@ -696,11 +701,7 @@ export default function BattlePage() {
 
   useEffect(() => {
     LobbyBGM.stop();
-    const settings = loadAudioSettings();
-    applyAudioSettings(settings);
-    if (settings.gameMusic) {
-      BattleBGM.start('normal');
-    }
+    BattleBGM.stop();
     return () => BattleBGM.stop();
   }, []);
 
@@ -714,11 +715,6 @@ export default function BattlePage() {
   }, [roomId]);
 
   useEffect(() => {
-    if (!loadAudioSettings().gameMusic) return;
-    BattleBGM.setMode(remaining <= 30 && remaining > 0 ? 'urgent' : 'normal');
-  }, [remaining]);
-
-  useEffect(() => {
     if (battleFinished) BattleBGM.stop();
   }, [battleFinished]);
 
@@ -727,30 +723,86 @@ export default function BattlePage() {
   }, [currentIndex]);
 
   useEffect(() => {
+    const restartSelfCanvas = (type: AttackPanelType) => {
+      if (type !== 'paint' && type !== 'scribble') return;
+      const tryRun = (attempts = 0) => {
+        const panelEl = document.querySelector(
+          '.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card',
+        );
+        if (panelEl) {
+          if (type === 'paint') startPaintCanvas(panelEl as HTMLElement, 'self');
+          else {
+            startScribbleCanvas(panelEl as HTMLElement, 'self', ITEM_PANEL_EFFECT_MS, {
+              interactive: false,
+            });
+          }
+          return;
+        }
+        if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+      };
+      tryRun();
+    };
+
+    const restartOpponentCanvas = (botId: string, type: AttackPanelType) => {
+      if (type !== 'paint' && type !== 'scribble') return;
+      const tryRun = (attempts = 0) => {
+        const panelEl =
+          document.querySelector(
+            `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
+          ) ||
+          document.querySelector(`[data-opponent-canvas="${botId}"]`) ||
+          document.querySelector(
+            `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] .mini-code-area`,
+          );
+        if (panelEl) {
+          if (type === 'paint') startPaintCanvas(panelEl as HTMLElement, botId);
+          else {
+            startScribbleCanvas(panelEl as HTMLElement, botId, ITEM_PANEL_EFFECT_MS, {
+              interactive: false,
+            });
+          }
+          return;
+        }
+        if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+      };
+      tryRun();
+    };
+
     const pruneExpiredEffects = () => {
-      const now = Date.now();
-      setSelfPanelEffect((prev) => {
-        if (!prev) return prev;
-        if (now < prev.expiresAt) return prev;
-        if (prev.type === 'paint') clearPaintCanvas('self');
-        if (prev.type === 'scribble') clearScribbleCanvas('self');
-        return null;
+      setSelfPanelEffects((prev) => {
+        const result = prunePanelEffects(prev);
+        if (!result.changed) return prev;
+        result.cleared.forEach((type) => {
+          if (type === 'paint') clearPaintCanvas('self');
+          if (type === 'scribble') clearScribbleCanvas('self');
+        });
+        result.restarted.forEach((type) => restartSelfCanvas(type));
+        return result.next;
       });
       setOpponentEffects((prev) => {
         let changed = false;
         const next: typeof prev = {};
-
-        Object.entries(prev).forEach(([botId, effectEntry]) => {
-          const panelEffect = effectEntry?.panelEffect;
-          if (panelEffect && now >= panelEffect.expiresAt) {
-            if (panelEffect.type === 'paint') clearPaintCanvas(botId);
-            if (panelEffect.type === 'scribble') clearScribbleCanvas(botId);
-            changed = true;
+        Object.entries(prev).forEach(([botId, effects]) => {
+          const result = prunePanelEffects(effects);
+          if (!result.changed) {
+            next[botId] = effects;
             return;
           }
-          next[botId] = effectEntry;
+          changed = true;
+          result.cleared.forEach((type) => {
+            if (type === 'paint') clearPaintCanvas(botId);
+            if (type === 'scribble') clearScribbleCanvas(botId);
+          });
+          result.restarted.forEach((type) => {
+            queueMicrotask(() => restartOpponentCanvas(botId, type));
+          });
+          if (
+            Object.keys(result.next.active).length > 0 ||
+            Object.keys(result.next.queue).length > 0
+          ) {
+            next[botId] = result.next;
+          }
         });
-
         return changed ? next : prev;
       });
     };
@@ -834,7 +886,10 @@ export default function BattlePage() {
     if (isLiveMatch && !matchResultSubmittedRef.current) {
       matchResultSubmittedRef.current = true;
       const problemResultsList = finalizeProblemResults(problemResultsRef.current, totalProblems);
-      const totalSolveTime = Object.values(solveTimes).reduce((sum, value) => sum + (Number(value) || 0), 0);
+      const battleElapsedAtEnd = Math.max(0, totalBattleSeconds - remaining);
+      const finishElapsed =
+        finishedAtElapsedSec >= 0 ? finishedAtElapsedSec : battleElapsedAtEnd;
+      const endMetrics = getUserRankMetrics(localSolvedProblems, solveTimes, finishElapsed);
       void submitMatchResult(matchId, {
         ingameScore,
         codes: answers,
@@ -843,8 +898,8 @@ export default function BattlePage() {
         solveTimes,
         problemResults: problemResultsList,
         localSolvedProblems,
-        totalSolveTime,
-        finishedAtElapsedSec: Math.max(0, finishedAtElapsedSec),
+        totalSolveTime: endMetrics.totalSolveTime,
+        finishedAtElapsedSec: finishElapsed,
       })
         .then((result) => {
           setBattleSettings({
@@ -965,7 +1020,7 @@ export default function BattlePage() {
 
             if (payload.itemType === 'timeReduce' && isTargetMe) {
               SFX.play(payload.itemType);
-              setRemaining((prev) => Math.max(0, prev - 15));
+              setRemaining((prev) => Math.max(0, prev - TIME_REDUCE_SECONDS));
               return;
             }
 
@@ -977,12 +1032,14 @@ export default function BattlePage() {
                 payload.itemType === 'lock')
             ) {
               SFX.play(payload.itemType);
-              const effectType = payload.itemType as 'paint' | 'lightning' | 'scribble' | 'lock';
-              setSelfPanelEffect({
-                type: effectType,
-                expiresAt: Date.now() + ITEM_PANEL_EFFECT_MS,
+              const effectType = payload.itemType as AttackPanelType;
+              let started = false;
+              setSelfPanelEffects((prev) => {
+                const result = enqueuePanelEffect(prev, effectType);
+                started = result.started;
+                return result.next;
               });
-              if (effectType === 'paint' || effectType === 'scribble') {
+              if (started && (effectType === 'paint' || effectType === 'scribble')) {
                 const tryRun = (attempts = 0) => {
                   const panelEl = document.querySelector(
                     '.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card',
@@ -1024,11 +1081,14 @@ export default function BattlePage() {
               ) {
                 queueMicrotask(() => {
                   SFX.play(payload.itemType);
-                  applyAttackPanelEffect(
+                  const started = applyAttackPanelEffect(
                     targetBot.id,
-                    payload.itemType as 'paint' | 'lightning' | 'scribble' | 'lock',
+                    payload.itemType as AttackPanelType,
                   );
-                  if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
+                  if (
+                    started &&
+                    (payload.itemType === 'paint' || payload.itemType === 'scribble')
+                  ) {
                     setExpandedOpponentId(targetBot.id);
                     runPanelCanvasEffect(
                       targetBot.id,
@@ -1368,7 +1428,7 @@ export default function BattlePage() {
     }
 
     const problemResultsList = finalizeProblemResults(problemResultsRef.current, totalProblems);
-    const totalSolveTime = Object.values(solveTimes).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const earlyMetrics = getUserRankMetrics(localSolvedProblems, solveTimes, elapsed);
     void submitMatchResult(matchId, {
       ingameScore,
       codes: answers,
@@ -1377,7 +1437,7 @@ export default function BattlePage() {
       solveTimes,
       problemResults: problemResultsList,
       localSolvedProblems,
-      totalSolveTime,
+      totalSolveTime: earlyMetrics.totalSolveTime,
       finishedAtElapsedSec: Math.max(0, elapsed),
     })
       .then((result) => {
@@ -1510,7 +1570,7 @@ export default function BattlePage() {
     setCurrentIndex(nextIndex);
     setProblemSolved(false);
     setSelectedOption(null);
-    setProblemStartTime(Date.now());
+    problemStartedAtElapsedRef.current = Math.max(0, totalBattleSeconds - remaining);
     setShowGameOver(false);
     setDemoSpectating(false);
     setSpectatorLocked(false);
@@ -1617,7 +1677,7 @@ export default function BattlePage() {
     setCurrentIndex(index);
     setProblemSolved(false);
     setSelectedOption(selectedOptionByProblem[index] ?? null);
-    setProblemStartTime(Date.now());
+    problemStartedAtElapsedRef.current = Math.max(0, totalBattleSeconds - remaining);
   };
 
   const confirmReviseSelection = async () => {
@@ -1641,7 +1701,7 @@ export default function BattlePage() {
     setCurrentIndex(first);
     setProblemSolved(false);
     setSelectedOption(selectedOptionByProblem[first] ?? null);
-    setProblemStartTime(Date.now());
+    problemStartedAtElapsedRef.current = Math.max(0, totalBattleSeconds - remaining);
   };
 
   const cancelFinalSubmit = () => {
@@ -1711,7 +1771,7 @@ export default function BattlePage() {
 
   const updateBlankAnswer = (problemIndex: number, blankIndex: number, value: string) => {
     if (problemSolved && !revisionEditMode) return;
-    if (selfPanelEffect?.type === 'lock' && Date.now() < selfPanelEffect.expiresAt) return;
+    if (isPanelTypeActive(selfPanelEffects, 'lock')) return;
     setBlankAnswers((prev) => {
       const next = prev.map((arr) => [...arr]);
       if (!next[problemIndex]) next[problemIndex] = [];
@@ -1739,8 +1799,8 @@ export default function BattlePage() {
     if (answerSubmittingRef.current) return false;
     answerSubmittingRef.current = true;
 
-    const elapsed = (Date.now() - problemStartTime) / 1000;
     const battleElapsed = Math.max(0, totalBattleSeconds - remaining);
+    const elapsed = Math.max(0, battleElapsed - problemStartedAtElapsedRef.current);
     let isCorrect = false;
 
     try {
@@ -1822,7 +1882,7 @@ export default function BattlePage() {
     setCurrentIndex((prev) => prev + 1);
     setProblemSolved(false);
     setSelectedOption(null);
-    setProblemStartTime(Date.now());
+    problemStartedAtElapsedRef.current = Math.max(0, totalBattleSeconds - remaining);
   };
 
   const handleAdvance = () => {
@@ -1836,7 +1896,7 @@ export default function BattlePage() {
     setCurrentIndex(currentIndex + 1);
     setProblemSolved(false);
     setSelectedOption(null);
-    setProblemStartTime(Date.now());
+    problemStartedAtElapsedRef.current = Math.max(0, totalBattleSeconds - remaining);
   };
 
   const selectChoice = (idx: number) => {
@@ -1997,13 +2057,14 @@ export default function BattlePage() {
 
   const canUseAttackItems = isItemMode && selectedAttackItems.length > 0 && !showGameOver;
 
-  const applyAttackPanelEffect = (botId: string, type: 'paint' | 'lightning' | 'scribble' | 'lock') => {
-    setOpponentEffects((prev) => ({
-      ...prev,
-      [botId]: {
-        panelEffect: { type, expiresAt: Date.now() + ITEM_PANEL_EFFECT_MS },
-      },
-    }));
+  const applyAttackPanelEffect = (botId: string, type: AttackPanelType): boolean => {
+    let started = false;
+    setOpponentEffects((prev) => {
+      const result = enqueuePanelEffect(prev[botId], type);
+      started = result.started;
+      return { ...prev, [botId]: result.next };
+    });
+    return started;
   };
 
   const runPanelCanvasEffect = (
@@ -2104,8 +2165,7 @@ export default function BattlePage() {
     }
 
     if (type === 'paint') {
-      applyAttackPanelEffect(botId, 'paint');
-      runPanelCanvasEffect(botId, 'paint');
+      if (applyAttackPanelEffect(botId, 'paint')) runPanelCanvasEffect(botId, 'paint');
       setItemInventory((prev) => ({ ...prev, paint: prev.paint - 1 }));
     } else if (type === 'lightning') {
       applyAttackPanelEffect(botId, 'lightning');
@@ -2114,18 +2174,19 @@ export default function BattlePage() {
       // 상대 시간 감소는 상대 클라이언트에서 적용 (로컬 남은 시간은 건드리지 않음)
       setItemInventory((prev) => ({ ...prev, timeReduce: prev.timeReduce - 1 }));
     } else if (type === 'scribble') {
-      applyAttackPanelEffect(botId, 'scribble');
-      runPanelCanvasEffect(botId, 'scribble', {
-        interactive: true,
-        onStroke: (stroke) => {
-          if (!isLiveMatch || !roomId || !targetUserId) return;
-          void emitBattleItemUsed(roomId, {
-            itemType: 'scribble',
-            targetUserId,
-            scribbleStroke: stroke,
-          });
-        },
-      });
+      if (applyAttackPanelEffect(botId, 'scribble')) {
+        runPanelCanvasEffect(botId, 'scribble', {
+          interactive: true,
+          onStroke: (stroke) => {
+            if (!isLiveMatch || !roomId || !targetUserId) return;
+            void emitBattleItemUsed(roomId, {
+              itemType: 'scribble',
+              targetUserId,
+              scribbleStroke: stroke,
+            });
+          },
+        });
+      }
       setItemInventory((prev) => ({ ...prev, scribble: prev.scribble - 1 }));
     } else if (type === 'lock') {
       applyAttackPanelEffect(botId, 'lock');
@@ -2235,10 +2296,7 @@ export default function BattlePage() {
     );
   };
 
-  const blanksLockedByItem =
-    Boolean(selfPanelEffect) &&
-    selfPanelEffect!.type === 'lock' &&
-    Date.now() < selfPanelEffect!.expiresAt;
+  const blanksLockedByItem = isPanelTypeActive(selfPanelEffects, 'lock');
 
   const isLocked =
     demoSpectating || spectatorLocked || (problemSolved && !revisionEditMode) || blanksLockedByItem;
@@ -2357,10 +2415,10 @@ export default function BattlePage() {
     <div className={`battle-main-column${demoSpectating ? ' is-spectator-my' : ''}`}>
       <div
         className={`pixel-card code-card${itemCastState ? ' casting-item' : ''}${
-          selfPanelEffect?.type === 'paint' ? ' paint-marked' : ''
-        }${selfPanelEffect?.type === 'lightning' ? ' lightning-struck' : ''}${
-          selfPanelEffect?.type === 'scribble' ? ' scribble-marked' : ''
-        }${selfPanelEffect?.type === 'lock' ? ' lock-marked' : ''}
+          isPanelTypeActive(selfPanelEffects, 'paint') ? ' paint-marked' : ''
+        }${isPanelTypeActive(selfPanelEffects, 'lightning') ? ' lightning-struck' : ''}${
+          isPanelTypeActive(selfPanelEffects, 'scribble') ? ' scribble-marked' : ''
+        }${isPanelTypeActive(selfPanelEffects, 'lock') ? ' lock-marked' : ''}
         }`}
         style={{ position: 'relative' }}
       >

@@ -372,7 +372,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     LobbyBGM.stop();
-    RoomBGM.start();
+    RoomBGM.stop();
     return () => RoomBGM.stop();
   }, []);
 

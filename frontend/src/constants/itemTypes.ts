@@ -83,6 +83,8 @@ export const BATTLE_ITEM_DEFS: Array<{ key: ItemKey; icon: string; name: string;
 
 export const ATTACK_ITEM_KEYS: ItemKey[] = ['paint', 'lightning', 'timeReduce', 'scribble', 'lock'];
 export const ITEM_PANEL_EFFECT_MS = 7000;
+/** 시간감소 아이템이 깎는 초 */
+export const TIME_REDUCE_SECONDS = 60;
 export const SELF_ITEM_KEYS: ItemKey[] = ['revealLength', 'revealPrev', 'blankBreak', 'buildCharge'];
 
 export function loadItemInventory(): ItemInventory {

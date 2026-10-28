@@ -122,15 +122,19 @@ export function registerSocketHandlers(io, socket) {
         return;
       }
 
-      // 채팅용 소켓 입장만으로 결과/배틀 위치를 대기방으로 바꾸지 않는다.
+      // 채팅용 소켓 입장만으로 위치를 바꾸지 않는다.
+      // 대기방 위치는 RoomPage의 UPDATE_LOCATION으로만 설정한다.
       if (/^\d+$/.test(String(roomId))) {
         const currentLocation = await getUserLocation(socket.user.id);
         const keepLocation =
           currentLocation === "battle" ||
           currentLocation === "result" ||
           currentLocation === "practice" ||
-          currentLocation === "build";
+          currentLocation === "build" ||
+          currentLocation === "room" ||
+          currentLocation === "lobby";
         if (!keepLocation) {
+          // 위치 정보가 없을 때만 대기방으로 보정 (재접속 등)
           let roomTitle = "";
           try {
             const room = await roomModel.findRoomById(roomId);

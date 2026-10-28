@@ -69,7 +69,7 @@ export default function PracticePage() {
 
   useEffect(() => {
     LobbyBGM.stop();
-    PracticeBGM.start();
+    PracticeBGM.stop();
     return () => PracticeBGM.stop();
   }, []);
 

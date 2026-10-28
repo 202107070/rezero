@@ -31,7 +31,7 @@ export default function BuildPage() {
 
   useEffect(() => {
     LobbyBGM.stop();
-    BuildBGM.start();
+    BuildBGM.stop();
     return () => BuildBGM.stop();
   }, []);
 

@@ -349,12 +349,24 @@ function buildTitleData(previous, player, isWinner, match, isDraw) {
   };
 }
 
+function resolveTotalSolveTime(submitted, solvedProblems) {
+  const times = parseJson(submitted.solveTimes, {});
+  let sum = 0;
+  (solvedProblems || []).forEach(function (idx) {
+    const value = Number(times[idx] ?? times[String(idx)]);
+    if (Number.isFinite(value) && value > 0) sum += value;
+  });
+  if (sum > 0) return sum;
+  return numberOrZero(submitted.totalSolveTime);
+}
+
 function toRankingPlayer(participant, submission, match) {
   const submitted = submission || {};
   const solvedProblems = solvedProblemsOf(submitted);
   const problemResults = parseJson(submitted.problemResults, []);
+  const totalSolveTime = resolveTotalSolveTime(submitted, solvedProblems);
   const completionTime =
-    numberOrZero(submitted.completionTime) || numberOrZero(submitted.totalSolveTime);
+    numberOrZero(submitted.completionTime) || totalSolveTime;
 
   return {
     id: participant.userId,
@@ -365,7 +377,7 @@ function toRankingPlayer(participant, submission, match) {
       numberOrZero(submitted.ratingScoreBefore) ||
       numberOrZero(participant.ratingScore) ||
       1000,
-    totalSolveTime: numberOrZero(submitted.totalSolveTime),
+    totalSolveTime,
     completionTime,
     solvedProblems,
     problemResults: Array.isArray(problemResults) ? problemResults : [],
@@ -445,9 +457,17 @@ async function finalizeSubmittedMatch(match, participants, submissions) {
     }),
   );
 
+  const totalPlayers = players.length;
   const playersWithRewards = players.map(function (player) {
     const isWinner = !noSolveDraw && player.rank <= winnerRankLimit;
-    const ratingAmount = noSolveDraw ? 0 : Math.max(10, Math.floor(player.ingameScore / 10));
+    const base = Math.max(10, Math.floor(player.ingameScore / 10));
+    const placeBonus = Math.max(0, (totalPlayers - player.rank) * 5);
+    const placePenalty = Math.max(0, (player.rank - 1) * 3);
+    const ratingAmount = noSolveDraw
+      ? 0
+      : isWinner
+        ? base + placeBonus
+        : -(base + placePenalty);
     const titleData = buildTitleData(
       titleByUserId.get(String(player.id)),
       player,
@@ -458,8 +478,8 @@ async function finalizeSubmittedMatch(match, participants, submissions) {
 
     return {
       ...player,
-      earnedGold: noSolveDraw ? 0 : player.ingameScore,
-      ratingDelta: noSolveDraw ? 0 : isWinner ? ratingAmount : -ratingAmount,
+      earnedGold: noSolveDraw ? 0 : player.ingameScore + placeBonus * 2,
+      ratingDelta: ratingAmount,
       titleData,
     };
   });

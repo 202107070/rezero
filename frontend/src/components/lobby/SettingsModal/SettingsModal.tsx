@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ExitConfirmModal } from '../ExitConfirmModal/ExitConfirmModal';
 import { useModalShake } from '../../../hooks/useModalShake';
-import { normalizeAudioSettings, type AudioSettings } from '../../../types/audioSettings';
 import type { DisplayMode } from '../../../types/electron';
 
 interface SettingsModalProps {
   open: boolean;
   displayMode: DisplayMode;
-  audioSettings: AudioSettings;
   onClose: () => void;
-  onConfirm: (displayMode: DisplayMode, audioSettings: AudioSettings) => void;
+  onConfirm: (displayMode: DisplayMode) => void;
   onLogout?: () => void;
   onDeleteAccount?: () => void;
 }
@@ -17,7 +15,6 @@ interface SettingsModalProps {
 export function SettingsModal({
   open,
   displayMode,
-  audioSettings,
   onClose,
   onConfirm,
   onLogout,
@@ -25,7 +22,6 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const { shaking, triggerShake } = useModalShake();
   const [draftMode, setDraftMode] = useState<DisplayMode>(displayMode);
-  const [draftAudio, setDraftAudio] = useState<AudioSettings>(audioSettings);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -33,22 +29,17 @@ export function SettingsModal({
   useEffect(() => {
     if (open) {
       setDraftMode(displayMode);
-      setDraftAudio(normalizeAudioSettings(audioSettings));
       setConfirmDelete(false);
       setConfirmLogout(false);
       setDeleting(false);
     }
-  }, [open, displayMode, audioSettings]);
+  }, [open, displayMode]);
 
   if (!open) return null;
 
   const handleConfirm = () => {
-    onConfirm(draftMode, draftAudio);
+    onConfirm(draftMode);
     onClose();
-  };
-
-  const toggleAudio = () => {
-    setDraftAudio((prev) => ({ gameMusic: !prev.gameMusic }));
   };
 
   const handleDelete = async () => {
@@ -88,25 +79,6 @@ export function SettingsModal({
             {draftMode === 'window'
               ? '1280×960 고정 창으로 실행됩니다.'
               : '모니터 전체 화면으로 실행됩니다.'}
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-section-label">음악</div>
-          <div className="settings-audio-list">
-            <div className="settings-audio-item">
-              <div className="settings-audio-copy">
-                <span className="settings-audio-name">🎵 게임 음악</span>
-                <span className="settings-audio-desc">로비·대기방·대결·결과·연습·빌드 등 모든 페이지 BGM</span>
-              </div>
-              <button
-                type="button"
-                className={`settings-audio-toggle${draftAudio.gameMusic ? ' on' : ''}`}
-                onClick={toggleAudio}
-              >
-                {draftAudio.gameMusic ? 'ON' : 'OFF'}
-              </button>
-            </div>
           </div>
         </div>
 

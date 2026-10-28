@@ -10,10 +10,9 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   gameMusic: false,
 };
 
-export function isGameMusicEnabled(settings: AudioSettings | null | undefined): boolean {
-  if (!settings) return false;
-  if (typeof settings.gameMusic === 'boolean') return settings.gameMusic;
-  return Boolean(settings.lobbyMusic || settings.battleMusic);
+export function isGameMusicEnabled(_settings?: AudioSettings | null): boolean {
+  // 페이지 BGM 제거: 아이템 SFX만 유지
+  return false;
 }
 
 export function normalizeAudioSettings(settings: Partial<AudioSettings> | null | undefined): AudioSettings {

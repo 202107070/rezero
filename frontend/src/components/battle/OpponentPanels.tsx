@@ -10,6 +10,11 @@ import {
 import { resolveProblemCapabilities } from '../../utils/problemCapabilities';
 import FillBlankRenderer from './FillBlankRenderer';
 import { getTierIconByTier } from '../../utils/tierUtils';
+import {
+  type ActivePanelEffects,
+  getActivePanelTypes,
+  isPanelTypeActive,
+} from '../../utils/battle/panelEffects';
 
 export interface BotView extends DemoBot {
   status: string;
@@ -18,11 +23,6 @@ export interface BotView extends DemoBot {
   currentProblemSolved: boolean;
   currentBlankAnswers: string[];
   currentSchedule: number;
-}
-
-interface PanelEffect {
-  type: string;
-  expiresAt: number;
 }
 
 interface OpponentPanelsProps {
@@ -37,8 +37,8 @@ interface OpponentPanelsProps {
   isItemMode: boolean;
   langKey: string;
   spectatorViewProblemByBot: Record<string, number>;
-  /** 상대별 패널 이펙트 (문제 인덱스와 무관) */
-  opponentEffects: Record<string, { panelEffect?: PanelEffect }>;
+  /** 상대별 패널 이펙트 (문제 인덱스와 무관, 타입별 동시/큐 지원) */
+  opponentEffects: Record<string, ActivePanelEffects>;
   panelHit: Record<string, boolean>;
   onOpenItemModal: (botId: string) => void;
   showItemButton?: boolean;
@@ -47,15 +47,14 @@ interface OpponentPanelsProps {
   renderMiniStatus: (bot: BotView) => ReactNode;
 }
 
-function effectIcons(
-  panelEff: PanelEffect | undefined,
-  now: number,
-): string {
+function effectIcons(effects: ActivePanelEffects | undefined, now: number): string {
   let icons = '';
-  if (panelEff?.type === 'paint' && now < panelEff.expiresAt) icons += '🎨';
-  if (panelEff?.type === 'lightning' && now < panelEff.expiresAt) icons += '⚡';
-  if (panelEff?.type === 'scribble' && now < panelEff.expiresAt) icons += '✏️';
-  if (panelEff?.type === 'lock' && now < panelEff.expiresAt) icons += '🔒';
+  for (const type of getActivePanelTypes(effects, now)) {
+    if (type === 'paint') icons += '🎨';
+    if (type === 'lightning') icons += '⚡';
+    if (type === 'scribble') icons += '✏️';
+    if (type === 'lock') icons += '🔒';
+  }
   return icons;
 }
 
@@ -204,12 +203,12 @@ export default function OpponentPanels({
 
   const renderMini = (bot: BotView) => {
     const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
-    const panelEff = opponentEffects[bot.id]?.panelEffect;
-    const hasPaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
-    const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
-    const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
-    const hasLock = panelEff?.type === 'lock' && now < panelEff.expiresAt;
-    const effIcon = effectIcons(panelEff, now);
+    const panelEffects = opponentEffects[bot.id];
+    const hasPaint = isPanelTypeActive(panelEffects, 'paint', now);
+    const hasLightning = isPanelTypeActive(panelEffects, 'lightning', now);
+    const hasScribble = isPanelTypeActive(panelEffects, 'scribble', now);
+    const hasLock = isPanelTypeActive(panelEffects, 'lock', now);
+    const effIcon = effectIcons(panelEffects, now);
     const botProb = problems[viewProblemIndex] || currentProblem;
     const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
     const revealWritten = demoSpectating && (bot.solvedProblems || []).includes(viewProblemIndex);
@@ -271,11 +270,11 @@ export default function OpponentPanels({
     if (!bot) return null;
 
     const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
-    const panelEff = opponentEffects[bot.id]?.panelEffect;
-    const hasActivePaint = panelEff?.type === 'paint' && now < panelEff.expiresAt;
-    const hasLightning = panelEff?.type === 'lightning' && now < panelEff.expiresAt;
-    const hasScribble = panelEff?.type === 'scribble' && now < panelEff.expiresAt;
-    const hasLock = panelEff?.type === 'lock' && now < panelEff.expiresAt;
+    const panelEffects = opponentEffects[bot.id];
+    const hasActivePaint = isPanelTypeActive(panelEffects, 'paint', now);
+    const hasLightning = isPanelTypeActive(panelEffects, 'lightning', now);
+    const hasScribble = isPanelTypeActive(panelEffects, 'scribble', now);
+    const hasLock = isPanelTypeActive(panelEffects, 'lock', now);
     const isRevealed = demoSpectating;
     const botProb = problems[viewProblemIndex] || currentProblem;
     const itemDisabled = Boolean(itemDisabledByBot?.[bot.id]);
@@ -304,7 +303,7 @@ export default function OpponentPanels({
             <span className="mini-view-problem-label"> · Q{viewProblemIndex + 1}</span>
           </span>
           <span>
-            {effectIcons(panelEff, now)}
+            {effectIcons(panelEffects, now)}
             {showItemButton && (
               <button
                 type="button"
