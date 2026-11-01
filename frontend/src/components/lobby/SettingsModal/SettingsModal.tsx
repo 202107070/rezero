@@ -78,7 +78,7 @@ export function SettingsModal({
           <div className="settings-mode-hint">
             {draftMode === 'window'
               ? '1280×960 고정 창으로 실행됩니다.'
-              : '모니터 전체 화면으로 실행됩니다.'}
+              : '전체 화면에서 1280×960 UI를 모니터 크기에 맞게 확대합니다.'}
           </div>
         </div>
 

@@ -1,3 +1,4 @@
+import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants/layout';
 import { loadDisplayMode as readDisplayMode, saveDisplayMode as writeDisplayMode } from '../services/clientPrefsStore';
 import type { DisplayMode } from '../types/electron';
 
@@ -11,17 +12,15 @@ export function saveDisplayMode(mode: DisplayMode) {
 
 export function updateUiScale() {
   const mode = loadDisplayMode();
+  const scale =
+    mode === 'fullscreen'
+      ? Math.min(window.innerWidth / DESIGN_WIDTH, window.innerHeight / DESIGN_HEIGHT)
+      : 1;
 
-  if (mode === 'fullscreen') {
-    document.documentElement.style.setProperty('--ui-scale-x', '1');
-    document.documentElement.style.setProperty('--ui-scale-y', '1');
-    document.documentElement.style.setProperty('--ui-scale', '1');
-    return;
-  }
-
-  document.documentElement.style.setProperty('--ui-scale-x', '1');
-  document.documentElement.style.setProperty('--ui-scale-y', '1');
-  document.documentElement.style.setProperty('--ui-scale', '1');
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  document.documentElement.style.setProperty('--ui-scale-x', String(safeScale));
+  document.documentElement.style.setProperty('--ui-scale-y', String(safeScale));
+  document.documentElement.style.setProperty('--ui-scale', String(safeScale));
 }
 
 export function applyDisplayModeToDom(mode: DisplayMode) {
