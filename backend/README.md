@@ -1,42 +1,42 @@
 # Rezero Backend
 
-백엔드는 Node.js, Express, CommonJS 기준으로 작업한다. API 기본 주소는 `/api/v1`이다.
+Node.js · Express · Socket.io 백엔드입니다. API 기본 주소는 `/api/v1`입니다.
 
 ## 실행
 
-1. 저장소 루트에서 패키지를 설치한다.
-2. `backend/.env.example`을 복사해서 `backend/.env`를 만들고 서버 값을 넣는다.
-3. 저장소 루트에서 `npm run backend`를 실행한다.
+1. 저장소 **루트**에서 `npm ci`
+2. `backend/.env.example` → `backend/.env` 작성
+3. 루트에서 `npm run backend` 또는 `npm run backend:dev`
 
-MariaDB와 Valkey 연결이 모두 성공해야 8080 포트가 열린다.
+MariaDB와 Valkey 연결이 성공해야 기본 포트 **8080**이 열립니다.
 
-서버 확인 주소:
+확인:
 
 - `GET /health`
 - `GET /api/v1/health`
 
+자세한 환경 설정은 [docs/setup.md](../docs/setup.md)를 참고하세요.
+
 ## 작업 위치
 
-| 위치                           | 담당 작업 |
-| ---                           | --- |
-| `src/api/user`                | 인증, 사용자, 골드, 칭호, 전적 |
-| `src/api/room`                | 방 REST API |
-| `src/api/problem`             | 문제 조회와 선택 |
-| `src/api/battle`              | 배틀 진행, 판정, 점수, 결과 |
-| `src/api/build`               | 코드 실행 API |
-| `src/config`, `src/db`        | MariaDB, Valkey, 환경변수 |
-| `src/sockets`                 | 로비, 방, 배틀 WebSocket |
-| `src/infra/redis`             | Valkey를 직접 사용하는 코드 |
-| `src/infra/docker`            | Podman 실행 코드 |
-| `src/middleware`, `src/utils` | 여러 API에서 같이 쓰는 코드 |
+| 위치 | 담당 |
+|------|------|
+| `src/api/user` | 인증, 사용자, 골드, 칭호, 전적, AI 분석 |
+| `src/api/room` | 방 REST API |
+| `src/api/problem` | 문제 조회·선택 |
+| `src/api/battle` | 배틀 진행, 판정, 점수, 결과, 아이템 |
+| `src/api/build` | 코드 실행 API |
+| `src/handler` | Socket.io 이벤트 |
+| `src/service` | presence·소켓 공용 로직 |
+| `src/config`, `src/db` | MariaDB, Valkey, 환경변수 |
+| `src/infra/redis` | Valkey 직접 사용 |
+| `src/infra/docker` | Podman 실행 |
+| `src/models` | SQL 마이그레이션 메모 |
+| `src/middleware`, `src/utils` | 공용 미들웨어·유틸 |
 
-폴더 이름은 develop에 합친 뒤부터 옮기지 않는다. 새 기능은 담당 폴더 안에서 추가한다.
+새 기능은 담당 폴더 안에서 추가합니다.
 
-## 응답 규칙
-
-성공 응답은 `frontend/backend-handoff.md`에 적힌 JSON 모양 그대로 보낸다.
-
-오류 응답은 아래 모양으로 통일한다.
+## 오류 응답
 
 ```json
 {
@@ -46,3 +46,5 @@ MariaDB와 Valkey 연결이 모두 성공해야 8080 포트가 열린다.
   }
 }
 ```
+
+초기 연동 초안(참고용)은 [docs/archive/frontend-backend-handoff.md](../docs/archive/frontend-backend-handoff.md)에 있습니다. 최신 동작은 코드와 실제 API를 기준으로 하세요.

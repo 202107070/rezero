@@ -1,8 +1,11 @@
 # re:zero 프론트 → 백엔드 연동 가이드
 
-> **목적**: 백엔드(DB·API·소켓) 작업 전, 프론트가 실제로 쓰는 데이터를 **테이블 / API / 실시간 / 클라이언트 전용**으로 나눠 정리한 문서  
-> **소스 오브 트루스**: `src/types/*.ts`, `data-dictionary.txt`, `front.txt`  
-> **현재 상태**: 프론트는 메모리 store + localStorage mock. 백엔드 API는 거의 미구현( `/api/v1/build/session/*` stub만 존재).
+> **⚠️ 아카이브 (참고용)**  
+> 이 문서는 초기 연동 초안입니다. **현재 구현과 다를 수 있으며**, 최신 동작은 코드·`docs/`·`backend/README.md`를 기준으로 하세요.  
+> 원본 위치: `frontend/backend-handoff.md` → `docs/archive/`
+
+> **목적 (작성 당시)**: 프론트가 쓰는 데이터를 테이블 / API / 실시간 / 클라이언트 전용으로 정리  
+> **당시 상태**: mock store 중심 · API 미구현 단계 (현재는 Express·Socket.io·MariaDB·Valkey 연동 완료)
 
 ---
 
