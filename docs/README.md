@@ -8,6 +8,7 @@
 |------|------|
 | [setup.md](setup.md) | Node 설치, `.env`, 프론트/백 실행, 자주 나는 오류 |
 | [architecture.md](architecture.md) | 프론트·백엔드 폴더 구조와 역할 |
+| [**report/**](report/README.md) | **개발단계별 보고서 (1~7단계)** |
 | [../backend/README.md](../backend/README.md) | API 영역별 작업 위치, 응답 규칙 |
 | [../frontend/README.md](../frontend/README.md) | 프론트 실행 요약 |
 

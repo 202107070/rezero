@@ -95,6 +95,7 @@ rezero/
 | 문서 | 설명 |
 |------|------|
 | [docs/README.md](docs/README.md) | 문서 목록 |
+| [docs/report/](docs/report/README.md) | **개발단계별 보고서 (문제정의~최종문서화)** |
 | [docs/setup.md](docs/setup.md) | 로컬 설치·실행 |
 | [docs/architecture.md](docs/architecture.md) | 디렉터리·모듈 구조 |
 | [backend/README.md](backend/README.md) | 백엔드 작업 가이드 |
