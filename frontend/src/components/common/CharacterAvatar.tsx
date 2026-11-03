@@ -23,7 +23,7 @@ export function CharacterAvatar({ character, className, style, alt }: CharacterA
         src={src}
         alt={label}
         className={`character-avatar-img${className ? ` ${className}` : ''}`}
-        style={style}
+        style={{ objectFit: 'contain', objectPosition: 'center', background: 'transparent', ...style }}
         draggable={false}
       />
     );
