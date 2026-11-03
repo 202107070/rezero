@@ -1,23 +1,18 @@
-"""오리지널 캐릭터 PNG 준비.
-
-우선순위:
-1) Cursor 생성본 JPG가 assets에 있으면 import_generated_characters.py 로 변환
-2) 없으면 간단한 절차적 픽셀 초상화로 폴백
-"""
+"""캐릭터 PNG/JPG의 회색·검정 사각 배경을 투명화."""
 from __future__ import annotations
 
 from collections import deque
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "frontend" / "public" / "assets" / "characters"
 ASSETS = Path(r"C:\Users\USER\.cursor\projects\c-Users-USER-OneDrive-IT-rezero\assets")
 OUT = 512
-CONTENT = 0.90
+CONTENT = 0.92
 
-GENERATED = [
+SOURCES = [
     ("char1", ASSETS / "orig-char1-sepi.jpg"),
     ("char2", ASSETS / "orig-char2-nox.jpg"),
     ("char3", ASSETS / "orig-char3-ark.jpg"),
@@ -26,13 +21,20 @@ GENERATED = [
 
 
 def is_bg(r: int, g: int, b: int) -> bool:
+    """중립(회색) 배경 — 캐릭터 색(채도 있음)은 제외."""
     mx, mn = max(r, g, b), min(r, g, b)
-    if mx - mn > 28:
-        return False
-    return 70 <= ((r + g + b) / 3) <= 210
+    chroma = mx - mn
+    luma = (r + g + b) / 3.0
+    # 어두운~중간 회색 배경 (현재 에셋의 ~33~57 포함)
+    if chroma <= 22 and luma <= 100:
+        return True
+    # 생성본 JPG의 중간 회색
+    if chroma <= 30 and 100 < luma <= 215:
+        return True
+    return False
 
 
-def flood_alpha(im: Image.Image) -> Image.Image:
+def flood_clear(im: Image.Image) -> Image.Image:
     im = im.convert("RGBA")
     w, h = im.size
     px = im.load()
@@ -42,7 +44,11 @@ def flood_alpha(im: Image.Image) -> Image.Image:
     def push(x: int, y: int) -> None:
         if x < 0 or y < 0 or x >= w or y >= h or visited[y][x]:
             return
-        r, g, b, _ = px[x, y]
+        r, g, b, a = px[x, y]
+        if a == 0:
+            visited[y][x] = True
+            q.append((x, y))
+            return
         if not is_bg(r, g, b):
             return
         visited[y][x] = True
@@ -63,21 +69,35 @@ def flood_alpha(im: Image.Image) -> Image.Image:
         push(x, y + 1)
         push(x, y - 1)
 
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = px[x, y]
-            if a == 0 or not is_bg(r, g, b):
-                continue
-            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-                if 0 <= nx < w and 0 <= ny < h and px[nx, ny][3] == 0:
-                    px[x, y] = (r, g, b, 0)
-                    break
+    # 가장자리 회색 잔여 · 반투명 헤일로 정리
+    for _ in range(4):
+        victims: list[tuple[int, int]] = []
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = px[x, y]
+                if a == 0:
+                    continue
+                touch = any(
+                    0 <= nx < w and 0 <= ny < h and px[nx, ny][3] == 0
+                    for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+                )
+                if not touch:
+                    continue
+                if is_bg(r, g, b) or (max(r, g, b) - min(r, g, b) <= 25 and (r + g + b) / 3 <= 70):
+                    victims.append((x, y))
+        if not victims:
+            break
+        for x, y in victims:
+            px[x, y] = (0, 0, 0, 0)
+
     return im
 
 
 def center(im: Image.Image) -> Image.Image:
     alpha = im.split()[-1]
-    bbox = alpha.point(lambda v: 255 if v >= 16 else 0).getbbox()
+    # 살짝 블러 후 bbox — 들쭉날쭉 가장자리 포함
+    soft = alpha.filter(ImageFilter.MaxFilter(3))
+    bbox = soft.point(lambda v: 255 if v >= 12 else 0).getbbox()
     if not bbox:
         return Image.new("RGBA", (OUT, OUT), (0, 0, 0, 0))
     crop = im.crop(bbox)
@@ -90,38 +110,28 @@ def center(im: Image.Image) -> Image.Image:
     return canvas
 
 
-def procedural_fallback(cid: str) -> Image.Image:
-    """생성본이 없을 때만 쓰는 단순 오리지널 실루엣."""
-    palettes = {
-        "char1": ((120, 230, 255), (40, 90, 160), (255, 220, 90)),
-        "char2": ((150, 100, 220), (50, 30, 80), (200, 120, 255)),
-        "char3": ((70, 160, 140), (50, 90, 100), (240, 190, 70)),
-        "char4": ((255, 120, 40), (160, 40, 40), (255, 220, 80)),
-    }
-    hair, body, accent = palettes[cid]
-    im = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    d.ellipse([16, 36, 47, 60], fill=(*body, 255))
-    d.ellipse([18, 10, 45, 42], fill=(*hair, 255))
-    d.ellipse([22, 18, 41, 40], fill=(255, 220, 190, 255))
-    d.rectangle([26, 26, 28, 29], fill=(40, 40, 60, 255))
-    d.rectangle([35, 26, 37, 29], fill=(40, 40, 60, 255))
-    d.ellipse([28, 46, 35, 53], fill=(*accent, 255))
-    return im.resize((OUT, OUT), Image.Resampling.NEAREST)
-
-
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for cid, src in GENERATED:
+    for cid, src in SOURCES:
         if src.exists():
-            im = center(flood_alpha(Image.open(src)))
-            print("import", cid, src.name)
+            im = Image.open(src)
+            print("from", src.name)
         else:
-            im = procedural_fallback(cid)
-            print("fallback", cid)
+            im = Image.open(OUT_DIR / f"{cid}.png")
+            print("from existing", cid)
+        im = flood_clear(im)
+        im = center(im)
+        # 재차 가장자리 정리 (리사이즈 후 회색 번짐)
+        im = flood_clear(im)
         path = OUT_DIR / f"{cid}.png"
         im.save(path, "PNG", optimize=True)
-        print("ok", path.name)
+        # 통계
+        dark = sum(
+            1
+            for r, g, b, a in im.getdata()
+            if a > 200 and max(r, g, b) - min(r, g, b) <= 18 and (r + g + b) / 3 < 90
+        )
+        print("ok", path.name, "dark_gray_left", dark)
 
 
 if __name__ == "__main__":
