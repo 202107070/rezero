@@ -1,4 +1,5 @@
 import type { MouseEvent } from 'react';
+import { CharacterAvatar } from '../../common/CharacterAvatar';
 import type { ResultPlayer } from '../../../utils/resultUtils';
 
 function formatSolveDuration(seconds: number): string {
@@ -57,7 +58,9 @@ export function ResultPlayerRow({
   const rowContent = (
     <>
       {showRank && <div className={`rank-number${player.rank <= 3 ? ` rank-${player.rank}` : ''}`}>{player.rank}</div>}
-      <div className="player-avatar">{player.avatar}</div>
+      <div className="player-avatar">
+        <CharacterAvatar character={player.avatar} />
+      </div>
       <div className="player-info-col">
         <div
           className="player-nickname"

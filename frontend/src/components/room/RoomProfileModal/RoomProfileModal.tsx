@@ -1,4 +1,4 @@
-import { CHARACTERS } from '../../../constants/roomConstants';
+import { CharacterAvatar } from '../../common/CharacterAvatar';
 import { useModalShake } from '../../../hooks/useModalShake';
 import type { RoomPlayer } from '../../../types/room';
 
@@ -24,9 +24,6 @@ export function RoomProfileModal({
   const { shaking, triggerShake } = useModalShake();
   if (!open || !player) return null;
 
-  const charIcon =
-    player.character || CHARACTERS.find((c) => c.id === myCharacter)?.icon;
-
   return (
     <div className="problem-modal-overlay" onClick={triggerShake}>
       <div className={`modal-content${shaking ? ' modal-shake-error' : ''}`} style={{ width: '360px' }} onClick={(e) => e.stopPropagation()}>
@@ -34,7 +31,9 @@ export function RoomProfileModal({
           USER PROFILE
         </h3>
         <div className="d-flex flex-column align-items-center gap-3 mb-4">
-          <div style={{ fontSize: '4rem', lineHeight: 1 }}>{charIcon}</div>
+          <div className="room-profile-avatar">
+            <CharacterAvatar character={player.character || myCharacter} />
+          </div>
           <div style={{ fontSize: '22px', color: '#eee' }}>{player.name}</div>
           {player.isHost && <div className="slot-host-badge" style={{ visibility: 'visible', fontSize: '18px' }}>HOST</div>}
         </div>

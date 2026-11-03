@@ -13,10 +13,10 @@ export const LANGUAGES: LanguageOption[] = [
 ];
 
 export const CHARACTERS: CharacterOption[] = [
-  { id: 'char1', icon: '🤺', label: '검사' },
-  { id: 'char2', icon: '🧙', label: '마법사' },
-  { id: 'char3', icon: '🥷', label: '닌자' },
-  { id: 'char4', icon: '🤖', label: '로봇' },
+  { id: 'char1', icon: '🤺', label: '에밀리아', imageSrc: '/assets/characters/char1.png' },
+  { id: 'char2', icon: '🧙', label: '렘', imageSrc: '/assets/characters/char2.png' },
+  { id: 'char3', icon: '🥷', label: '라인하르트', imageSrc: '/assets/characters/char3.png' },
+  { id: 'char4', icon: '🤖', label: '프리실라', imageSrc: '/assets/characters/char4.png' },
 ];
 
 /** 로컬 테스트용 봇 — 비활성화 (빈 풀) */
@@ -27,7 +27,7 @@ export const BOT_READY_DELAY_MS = 3000;
 
 export function pickDemoBot(existingBotCount: number): (typeof DEMO_BOT_POOL)[number] {
   if (DEMO_BOT_POOL.length === 0) {
-    return { name: '', rank: '브론즈', language: '☕', character: '🤺' };
+    return { name: '', rank: '브론즈', language: '☕', character: 'char1' };
   }
   return DEMO_BOT_POOL[existingBotCount % DEMO_BOT_POOL.length];
 }
@@ -56,7 +56,7 @@ export function buildInitialPlayers(): (RoomPlayer | null)[] {
       isHost: true,
       isReady: false,
       language: '☕',
-      character: '🤺',
+      character: 'char1',
       status: 'HOST',
     },
   ];

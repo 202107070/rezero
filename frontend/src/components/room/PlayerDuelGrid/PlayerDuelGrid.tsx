@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import { CHARACTERS } from '../../../constants/roomConstants';
+import { CharacterAvatar } from '../../common/CharacterAvatar';
 import type { RoomPlayer } from '../../../types/room';
 import { getTierIconByTier } from '../../../utils/tierUtils';
 
@@ -20,8 +20,6 @@ function DuelSide({
   onPlayerClick,
   onPlayerContextMenu,
 }: DuelSideProps) {
-  const myCharIcon = CHARACTERS.find((c) => c.id === myCharacter)?.icon;
-
   return (
     <div
       className={`duel-side ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''}`}
@@ -31,8 +29,12 @@ function DuelSide({
         onPlayerContextMenu(event, player);
       }}
     >
-      <div className="duel-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
-        {player ? player.character || myCharIcon : <span className="duel-empty-mark">?</span>}
+      <div className="duel-avatar">
+        {player ? (
+          <CharacterAvatar character={player.character || myCharacter} />
+        ) : (
+          <span className="duel-empty-mark">?</span>
+        )}
       </div>
       <div className="duel-name">
         {player ? (

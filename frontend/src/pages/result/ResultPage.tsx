@@ -155,11 +155,11 @@ export default function ResultPage() {
 
   const resolveAvatarIcon = (avatar?: string) => {
     const key = String(avatar || '').trim();
-    if (!key) return '😎';
-    const mapped = CHARACTERS.find((c) => c.id === key)?.icon;
-    if (mapped) return mapped;
+    if (!key) return 'char1';
+    if (CHARACTERS.some((c) => c.id === key)) return key;
+    // 레거시 이모지/짧은 키는 CharacterAvatar가 처리
     if (key.length <= 4) return key;
-    return '🤺';
+    return 'char1';
   };
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('roomId') || '';

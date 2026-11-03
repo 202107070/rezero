@@ -377,8 +377,10 @@ function toFlag(value: unknown): boolean {
 }
 
 function toRoomPlayer(participant: RoomParticipant): RoomPlayer {
-  const character =
-    CHARACTERS.find((item) => item.id === participant.character)?.icon || participant.character || '🤺';
+  const characterId = String(participant.character || 'char1');
+  const character = CHARACTERS.some((item) => item.id === characterId)
+    ? characterId
+    : characterId || 'char1';
   const name =
     String(participant.displayName || '').trim() ||
     String(participant.name || '').trim() ||

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { CharacterAvatar } from '../common/CharacterAvatar';
 import ProblemVisualPreview from './ProblemVisualPreview';
 import type { BattleProblem } from '../../types/battle';
 import {
@@ -225,7 +226,8 @@ export default function OpponentPanels({
       >
         <div className="mini-header">
           <span>
-            {bot.avatar} <span className="mini-tier">{getTierIconByTier(bot.rank || '브론즈')}</span> {bot.name}
+            <CharacterAvatar character={bot.avatar} className="opponent-char-avatar" />{' '}
+            <span className="mini-tier">{getTierIconByTier(bot.rank || '브론즈')}</span> {bot.name}
             <span className="mini-view-problem-label"> · Q{viewProblemIndex + 1}</span>
           </span>
           <span>
@@ -304,7 +306,8 @@ export default function OpponentPanels({
                 ◀ BACK
               </button>
             )}
-            {bot.avatar} <span className="mini-tier">{getTierIconByTier(bot.rank || '브론즈')}</span> {bot.name}
+            <CharacterAvatar character={bot.avatar} className="opponent-char-avatar" />{' '}
+            <span className="mini-tier">{getTierIconByTier(bot.rank || '브론즈')}</span> {bot.name}
             <span className="mini-view-problem-label"> · Q{viewProblemIndex + 1}</span>
           </span>
           <span>

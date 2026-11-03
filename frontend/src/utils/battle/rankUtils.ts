@@ -160,15 +160,10 @@ export function buildRankingSnapshotFromRoomUsers(params: {
 export function rankingSnapshotToResultPlayers(
   snapshot: FinalRankingSnapshot,
 ): import('../resultUtils').ResultPlayer[] {
-  const iconById: Record<string, string> = {
-    char1: '🤺',
-    char2: '🧙',
-    char3: '🥷',
-    char4: '🤖',
-  };
   return snapshot.players.map((p) => {
     const raw = String(p.avatar || '').trim();
-    const avatar = iconById[raw] || (raw.length <= 4 ? raw : '🤺') || '😎';
+    // char1~char4 또는 레거시 이모지 — CharacterAvatar가 해석
+    const avatar = raw || 'char1';
     return {
       id: normalizeBattlePlayerId(p.id, p.name),
       name: p.name,

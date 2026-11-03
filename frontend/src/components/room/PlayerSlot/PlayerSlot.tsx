@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import { CHARACTERS } from '../../../constants/roomConstants';
+import { CharacterAvatar } from '../../common/CharacterAvatar';
 import type { RoomPlayer } from '../../../types/room';
 import { getTierIconByTier } from '../../../utils/tierUtils';
 
@@ -20,8 +20,6 @@ export function PlayerSlot({
   onClick,
   onContextMenu,
 }: PlayerSlotProps) {
-  const myCharIcon = CHARACTERS.find((c) => c.id === myCharacter)?.icon;
-
   return (
     <div
       className={`player-slot ${player ? 'occupied' : 'empty'} ${player?.isHost ? 'host' : ''}`}
@@ -31,8 +29,12 @@ export function PlayerSlot({
         onContextMenu(event, player);
       }}
     >
-      <div className="slot-avatar" style={{ color: player?.isHost ? 'var(--px-warning)' : 'var(--px-primary)' }}>
-        {player ? player.character || myCharIcon : <span className="status-empty">X</span>}
+      <div className="slot-avatar">
+        {player ? (
+          <CharacterAvatar character={player.character || myCharacter} />
+        ) : (
+          <span className="status-empty">X</span>
+        )}
       </div>
       <div className="slot-name" style={{ color: player ? '#ddd' : '#555' }}>
         {player ? (

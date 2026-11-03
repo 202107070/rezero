@@ -212,20 +212,16 @@ function isNoSolveDraw(players) {
   });
 }
 
-const CHARACTER_ICONS = {
-  char1: "🤺",
-  char2: "🧙",
-  char3: "🥷",
-  char4: "🤖",
-};
+const CHARACTER_IDS = new Set(["char1", "char2", "char3", "char4"]);
 
 function resolveAvatarIcon(avatar) {
   const key = String(avatar || "").trim();
-  if (!key) return "😎";
-  if (CHARACTER_ICONS[key]) return CHARACTER_ICONS[key];
-  // 이미 이모지면 그대로
+  if (!key) return "char1";
+  // 프론트 CharacterAvatar가 이미지로 해석하도록 id 유지
+  if (CHARACTER_IDS.has(key)) return key;
+  // 레거시 이모지 등 짧은 키는 그대로 전달
   if (key.length <= 4) return key;
-  return CHARACTER_ICONS.char1;
+  return "char1";
 }
 
 function parseJson(value, fallback) {

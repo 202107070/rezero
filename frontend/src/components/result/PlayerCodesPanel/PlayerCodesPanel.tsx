@@ -1,4 +1,5 @@
 import type { TitleDef } from '../../../constants/titleTypes';
+import { CharacterAvatar } from '../../common/CharacterAvatar';
 
 interface OnlineUser {
   id?: string;
@@ -30,7 +31,9 @@ export function UserStatusPanel({ onlineUsers, equippedTitle, myUserId, departed
               const isDeparted = departedUserIds?.has(userKey) ?? false;
               return (
                 <div className={`online-user-row${isDeparted ? ' departed' : ''}`} key={idx}>
-                  <div className="online-user-avatar">{u.avatar || '👤'}</div>
+                  <div className="online-user-avatar">
+                    <CharacterAvatar character={u.avatar || 'char1'} />
+                  </div>
                   <div className="online-user-name">
                     <span style={isMe ? { fontWeight: 'bold', color: 'var(--px-warning)' } : {}}>
                       {(u.name || 'Unknown').replace(' (나)', '')}

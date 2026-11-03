@@ -271,6 +271,7 @@ body::after { content:""; position:fixed; inset:0; background: repeating-linear-
 .mini-problem-check.filled.active { color:#000; }
 .mini-view-problem-label { color: var(--px-primary); font-size: 14px; margin-left: 2px; }
 .mini-tier { color: var(--px-warning); margin: 0 4px 0 2px; }
+.opponent-char-avatar { width: 22px; height: 22px; object-fit: cover; border: 2px solid var(--px-border); vertical-align: middle; background: #fff; display: inline-block; }
 .mini-status-gauge { background:#1a1e21; border:2px solid var(--px-border); height:6px; width:100%; box-shadow: var(--px-inset-light); }
 .mini-status-gauge-fill { background: var(--px-success); height:100%; box-shadow: inset -1px -1px 0 rgba(0,0,0,0.2); transition: width 0.3s; }
 

@@ -443,11 +443,17 @@ export default function BattlePage() {
 
   const roomUsers: RoomUser[] = useMemo(() => {
     const meMetrics = getUserRankMetrics(localSolvedProblems, solveTimes, finishedAtElapsedSec);
+    const myId = String(getCurrentUserId() || '');
+    const roster = Array.isArray(roomRoster)
+      ? (roomRoster as Array<{ userId?: string; character?: string }>)
+      : [];
+    const myCharacter =
+      roster.find((player) => String(player.userId || '') === myId)?.character || 'char1';
     return [
       {
         id: 'me',
         name: getCurrentUserName(),
-        avatar: '😎',
+        avatar: myCharacter,
         problem: currentProblemNumber,
         solvedCount: localSolvedProblems.length,
         solvedProblems: localSolvedProblems,
@@ -485,6 +491,7 @@ export default function BattlePage() {
     solveTimes,
     finishedAtElapsedSec,
     finalizedProblemResults,
+    roomRoster,
   ]);
 
   const doPersistSession = useCallback(

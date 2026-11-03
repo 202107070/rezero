@@ -839,12 +839,12 @@ export default function RoomPage() {
                 ROOM_SOCKET_EVENTS.CHARACTER_CHANGED,
                 (payload?: { userId?: string; character?: string }) => {
                   if (!payload?.userId || !payload.character) return;
-                  const icon =
-                    CHARACTERS.find((item) => item.id === payload.character)?.icon || payload.character;
+                  const characterId =
+                    CHARACTERS.find((item) => item.id === payload.character)?.id || payload.character;
                   setPlayers((prev) =>
                     prev.map((player) =>
                       player && String(player.userId) === String(payload.userId)
-                        ? { ...player, character: icon }
+                        ? { ...player, character: characterId }
                         : player,
                     ),
                   );
@@ -938,11 +938,10 @@ export default function RoomPage() {
 
   const handleSelectCharacter = (characterId: string) => {
     setMyCharacter(characterId);
-    const icon = CHARACTERS.find((item) => item.id === characterId)?.icon || characterId;
     setPlayers((prev) =>
       prev.map((player) =>
         player && String(player.userId) === String(getCurrentUserId())
-          ? { ...player, character: icon }
+          ? { ...player, character: characterId }
           : player,
       ),
     );

@@ -34,6 +34,9 @@ export interface LanguageOption {
 
 export interface CharacterOption {
   id: string;
+  /** 텍스트/폴백용 이모지 */
   icon: string;
   label: string;
+  /** 초상화 이미지 경로 (public/) */
+  imageSrc: string;
 }

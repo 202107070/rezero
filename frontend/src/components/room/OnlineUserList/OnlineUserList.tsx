@@ -1,5 +1,5 @@
 import { TITLE_DEFS, loadTitles } from '../../../constants/titleTypes';
-import { CHARACTERS } from '../../../constants/roomConstants';
+import { CharacterAvatar } from '../../common/CharacterAvatar';
 import type { RoomPlayer } from '../../../types/room';
 
 interface OnlineUserListProps {
@@ -53,7 +53,6 @@ function TitleBadgeForUser() {
 
 export function OnlineUserList({ players, myCharacter, onPlayerClick, expanded = false }: OnlineUserListProps) {
   const occupied = players.filter((p): p is RoomPlayer => p !== null);
-  const myCharIcon = CHARACTERS.find((c) => c.id === myCharacter)?.icon;
 
   return (
     <div className="panel-section online-user-panel">
@@ -70,7 +69,9 @@ export function OnlineUserList({ players, myCharacter, onPlayerClick, expanded =
             (p, idx) =>
               p && (
                 <div className="online-user-row" key={idx} onClick={() => onPlayerClick(p, idx)}>
-                  <div className="online-user-avatar">{p.character || myCharIcon}</div>
+                  <div className="online-user-avatar">
+                    <CharacterAvatar character={p.character || myCharacter} />
+                  </div>
                   <div className="online-user-info">
                     <div className="online-user-name">
                       <span style={idx === 0 ? { fontWeight: 'bold', color: 'var(--px-warning)' } : undefined}>
