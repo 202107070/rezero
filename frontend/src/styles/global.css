@@ -7,7 +7,7 @@
   border-radius: 0 !important;
 }
 
-/* 캐릭터 초상화는 픽셀아트가 아님 — 전역 pixelated 해제 */
+/* 캐릭터 초상화 — 전역 pixelated 해제 */
 img.character-avatar-img {
   image-rendering: auto !important;
 }

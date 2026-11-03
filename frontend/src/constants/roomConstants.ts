@@ -13,10 +13,10 @@ export const LANGUAGES: LanguageOption[] = [
 ];
 
 export const CHARACTERS: CharacterOption[] = [
-  { id: 'char1', icon: '🤺', label: '에밀리아', imageSrc: '/assets/characters/char1.png' },
-  { id: 'char2', icon: '🧙', label: '렘', imageSrc: '/assets/characters/char2.png' },
-  { id: 'char3', icon: '🥷', label: '라인하르트', imageSrc: '/assets/characters/char3.png' },
-  { id: 'char4', icon: '🤖', label: '프리실라', imageSrc: '/assets/characters/char4.png' },
+  { id: 'char1', icon: '✨', label: '세피', imageSrc: '/assets/characters/char1.png' },
+  { id: 'char2', icon: '🔮', label: '녹스', imageSrc: '/assets/characters/char2.png' },
+  { id: 'char3', icon: '🛡️', label: '아크', imageSrc: '/assets/characters/char3.png' },
+  { id: 'char4', icon: '🔥', label: '솔', imageSrc: '/assets/characters/char4.png' },
 ];
 
 /** 로컬 테스트용 봇 — 비활성화 (빈 풀) */
