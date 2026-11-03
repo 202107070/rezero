@@ -300,6 +300,36 @@ export function clearScribbleCanvas(botId: string): void {
   delete scribbleRefs[botId];
 }
 
+function syncScribbleCanvasSize(entry: ScribbleEntry): boolean {
+  const w = Math.floor(entry.container.clientWidth);
+  const h = Math.floor(entry.container.clientHeight);
+  if (w <= 0 || h <= 0) return false;
+  if (entry.canvas.width !== w || entry.canvas.height !== h) {
+    // 비트맵 리사이즈 시 기존 낙서 보존
+    const prev = document.createElement('canvas');
+    prev.width = entry.canvas.width;
+    prev.height = entry.canvas.height;
+    const prevCtx = prev.getContext('2d');
+    if (prevCtx && entry.canvas.width > 0 && entry.canvas.height > 0) {
+      prevCtx.drawImage(entry.canvas, 0, 0);
+    }
+    entry.canvas.width = w;
+    entry.canvas.height = h;
+    entry.ctx.drawImage(prev, 0, 0, w, h);
+  }
+  return true;
+}
+
+function pointerToCanvasPoint(canvas: HTMLCanvasElement, e: MouseEvent): { x: number; y: number } {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / Math.max(1, rect.width);
+  const scaleY = canvas.height / Math.max(1, rect.height);
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY,
+  };
+}
+
 function ensureScribbleCanvas(
   containerEl: HTMLElement,
   botId: string,
@@ -309,14 +339,22 @@ function ensureScribbleCanvas(
   if (existing && existing.container === containerEl && existing.canvas.isConnected) {
     if (existing.timerId) clearTimeout(existing.timerId);
     existing.timerId = setTimeout(() => clearScribbleCanvas(botId), durationMs);
+    syncScribbleCanvasSize(existing);
     return existing;
   }
   clearScribbleCanvas(botId);
 
+  const w = Math.floor(containerEl.clientWidth);
+  const h = Math.floor(containerEl.clientHeight);
+  // 패널 확장 직후 레이아웃 전이면 캔버스를 만들지 않음 (호출측에서 재시도)
+  if (w <= 0 || h <= 0) return null;
+
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, containerEl.clientWidth);
-  canvas.height = Math.max(1, containerEl.clientHeight);
-  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:15';
+  canvas.width = w;
+  canvas.height = h;
+  // lock(z=18)·lightning(z=17)보다 위에 두어 동시 사용 시에도 보이·조작 가능
+  canvas.style.cssText =
+    'position:absolute;inset:0;width:100%;height:100%;z-index:20;touch-action:none;';
   canvas.classList.add('cursor-crosshair');
   if (getComputedStyle(containerEl).position === 'static') {
     containerEl.style.position = 'relative';
@@ -331,9 +369,10 @@ function ensureScribbleCanvas(
   return entry;
 }
 
-export function applyScribbleStroke(botId: string, stroke: ScribbleStroke): void {
+/** @returns false면 패널 크기가 아직 0이라 호출측에서 재시도 필요 */
+export function applyScribbleStroke(botId: string, stroke: ScribbleStroke): boolean {
   let entry = scribbleRefs[botId];
-  if (!entry) {
+  if (!entry || !entry.canvas.isConnected) {
     const panelEl =
       document.querySelector(
         `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
@@ -347,7 +386,8 @@ export function applyScribbleStroke(botId: string, stroke: ScribbleStroke): void
       entry = scribbleRefs[botId];
     }
   }
-  if (!entry) return;
+  if (!entry) return false;
+  if (!syncScribbleCanvasSize(entry)) return false;
   const { ctx, canvas } = entry;
   const w = canvas.width;
   const h = canvas.height;
@@ -362,8 +402,10 @@ export function applyScribbleStroke(botId: string, stroke: ScribbleStroke): void
   ctx.lineWidth = stroke.width;
   ctx.lineCap = 'round';
   ctx.stroke();
+  return true;
 }
 
+/** @returns false면 패널 미준비(크기 0 등) — 호출측에서 재시도 */
 export function startScribbleCanvas(
   containerEl: HTMLElement | null,
   botId: string,
@@ -372,19 +414,23 @@ export function startScribbleCanvas(
     interactive?: boolean;
     onStroke?: (stroke: ScribbleStroke) => void;
   },
-): void {
-  if (!containerEl || !botId) return;
+): boolean {
+  if (!containerEl || !botId) return false;
   const entry = ensureScribbleCanvas(containerEl, botId, durationMs);
-  if (!entry) return;
+  if (!entry) return false;
+  if (!syncScribbleCanvasSize(entry)) return false;
 
   const interactive = options?.interactive !== false;
   const onStroke = options?.onStroke;
   if (!interactive) {
+    entry.cleanup?.();
+    entry.cleanup = undefined;
     entry.canvas.style.pointerEvents = 'none';
-    return;
+    return true;
   }
 
   entry.cleanup?.();
+  entry.canvas.style.pointerEvents = 'auto';
   const { canvas, ctx } = entry;
   let drawing = false;
   let erasing = false;
@@ -394,11 +440,13 @@ export function startScribbleCanvas(
   let currentColor = strokeColors[0];
 
   const onDown = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (e.button === 2) erasing = true;
     else drawing = true;
-    const rect = canvas.getBoundingClientRect();
-    lastX = e.clientX - rect.left;
-    lastY = e.clientY - rect.top;
+    const pt = pointerToCanvasPoint(canvas, e);
+    lastX = pt.x;
+    lastY = pt.y;
     currentColor = strokeColors[Math.floor(Math.random() * strokeColors.length)];
     ctx.beginPath();
     ctx.moveTo(lastX, lastY);
@@ -409,10 +457,15 @@ export function startScribbleCanvas(
 
   const onMove = (e: MouseEvent) => {
     if (!drawing && !erasing) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const pt = pointerToCanvasPoint(canvas, e);
+    const x = pt.x;
+    const y = pt.y;
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
     ctx.lineTo(x, y);
+    ctx.strokeStyle = erasing ? '#1a1e21' : currentColor;
+    ctx.lineWidth = erasing ? 14 : 3;
+    ctx.lineCap = 'round';
     ctx.stroke();
     if (onStroke) {
       onStroke({
@@ -436,18 +489,16 @@ export function startScribbleCanvas(
   const onUp = () => {
     drawing = false;
     erasing = false;
-    ctx.closePath();
   };
 
   canvas.addEventListener('mousedown', onDown);
-  canvas.addEventListener('mousemove', onMove);
-  canvas.addEventListener('mouseup', onUp);
-  canvas.addEventListener('mouseleave', onUp);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   entry.cleanup = () => {
     canvas.removeEventListener('mousedown', onDown);
-    canvas.removeEventListener('mousemove', onMove);
-    canvas.removeEventListener('mouseup', onUp);
-    canvas.removeEventListener('mouseleave', onUp);
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
   };
+  return true;
 }

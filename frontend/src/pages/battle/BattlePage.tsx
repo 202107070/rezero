@@ -728,17 +728,19 @@ export default function BattlePage() {
       const tryRun = (attempts = 0) => {
         const panelEl = document.querySelector(
           '.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card',
-        );
+        ) as HTMLElement | null;
         if (panelEl) {
-          if (type === 'paint') startPaintCanvas(panelEl as HTMLElement, 'self');
-          else {
-            startScribbleCanvas(panelEl as HTMLElement, 'self', ITEM_PANEL_EFFECT_MS, {
-              interactive: false,
-            });
+          if (type === 'paint') {
+            startPaintCanvas(panelEl, 'self');
+            return;
           }
-          return;
+          if (
+            startScribbleCanvas(panelEl, 'self', ITEM_PANEL_EFFECT_MS, { interactive: false })
+          ) {
+            return;
+          }
         }
-        if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+        if (attempts < 40) requestAnimationFrame(() => tryRun(attempts + 1));
       };
       tryRun();
     };
@@ -746,24 +748,25 @@ export default function BattlePage() {
     const restartOpponentCanvas = (botId: string, type: AttackPanelType) => {
       if (type !== 'paint' && type !== 'scribble') return;
       const tryRun = (attempts = 0) => {
-        const panelEl =
-          document.querySelector(
-            `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
-          ) ||
+        const panelEl = (document.querySelector(
+          `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
+        ) ||
           document.querySelector(`[data-opponent-canvas="${botId}"]`) ||
           document.querySelector(
             `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] .mini-code-area`,
-          );
+          )) as HTMLElement | null;
         if (panelEl) {
-          if (type === 'paint') startPaintCanvas(panelEl as HTMLElement, botId);
-          else {
-            startScribbleCanvas(panelEl as HTMLElement, botId, ITEM_PANEL_EFFECT_MS, {
-              interactive: false,
-            });
+          if (type === 'paint') {
+            startPaintCanvas(panelEl, botId);
+            return;
           }
-          return;
+          if (
+            startScribbleCanvas(panelEl, botId, ITEM_PANEL_EFFECT_MS, { interactive: false })
+          ) {
+            return;
+          }
         }
-        if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+        if (attempts < 40) requestAnimationFrame(() => tryRun(attempts + 1));
       };
       tryRun();
     };
@@ -1014,7 +1017,12 @@ export default function BattlePage() {
                       bots.find((bot) => bot.name === targetName);
                     return targetBot?.id || `player-${targetId}`;
                   })();
-              applyScribbleStroke(strokeTargetId, payload.scribbleStroke as ScribbleStroke);
+              const stroke = payload.scribbleStroke as ScribbleStroke;
+              const tryStroke = (attempts = 0) => {
+                if (applyScribbleStroke(strokeTargetId, stroke)) return;
+                if (attempts < 40) requestAnimationFrame(() => tryStroke(attempts + 1));
+              };
+              tryStroke();
               return;
             }
 
@@ -1038,17 +1046,21 @@ export default function BattlePage() {
                 const tryRun = (attempts = 0) => {
                   const panelEl = document.querySelector(
                     '.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card',
-                  );
+                  ) as HTMLElement | null;
                   if (panelEl) {
-                    if (effectType === 'paint') startPaintCanvas(panelEl as HTMLElement, 'self');
-                    else {
-                      startScribbleCanvas(panelEl as HTMLElement, 'self', ITEM_PANEL_EFFECT_MS, {
-                        interactive: false,
-                      });
+                    if (effectType === 'paint') {
+                      startPaintCanvas(panelEl, 'self');
+                      return;
                     }
-                    return;
+                    if (
+                      startScribbleCanvas(panelEl, 'self', ITEM_PANEL_EFFECT_MS, {
+                        interactive: false,
+                      })
+                    ) {
+                      return;
+                    }
                   }
-                  if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+                  if (attempts < 40) requestAnimationFrame(() => tryRun(attempts + 1));
                 };
                 tryRun();
               }
@@ -1123,6 +1135,11 @@ export default function BattlePage() {
                   return botUid !== leftId && bot.id !== leftId;
                 }),
               );
+              setExpandedOpponentId((prev) => {
+                if (!prev) return prev;
+                const raw = String(prev).replace(/^player-/, '');
+                return raw === leftId || prev === leftId ? null : prev;
+              });
               const remainingAfter =
                 typeof payload?.remainingPlayers === 'number'
                   ? payload.remainingPlayers
@@ -1149,36 +1166,15 @@ export default function BattlePage() {
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload?: RoomRosterPayload) => {
             if (String(payload?.roomId || '') !== String(roomId)) return;
+            // 불완전한 participantIds로 상대 패널을 지우지 않음 — 퇴장 제거는 USER_LEFT만
             const active = new Set(
               (payload?.participantIds || []).map((id) => String(id).replace(/^player-/, '')),
             );
-            const roster = Array.isArray(battleMeta.roomRoster)
-              ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
-              : [];
             const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
-            const newlyLeft: string[] = [];
-            for (const player of roster) {
-              const id = String(player.userId || '').replace(/^player-/, '');
-              if (!id || id === myId || active.has(id) || departedUserIdsRef.current.has(id)) continue;
-              departedUserIdsRef.current.add(id);
-              newlyLeft.push(player.name || '상대');
-            }
-            if (newlyLeft.length > 0) {
-              setChatMessages((messages) => [
-                ...messages,
-                ...newlyLeft.map((name) => ({
-                  sender: 'SYSTEM',
-                  text: `${name}가 퇴장하였습니다`,
-                  time: '',
-                })),
-              ]);
-              setBattleBots((prev) =>
-                prev.filter((bot) => !departedUserIdsRef.current.has(String(bot.id).replace(/^player-/, ''))),
-              );
-            }
             const remaining = Number(payload?.currentPlayers ?? active.size);
-            if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId) || (myId && !active.has(myId))) return;
-            if (remaining <= 1) {
+            if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId)) return;
+            if (myId && active.size > 0 && !active.has(myId)) return;
+            if (remaining <= 1 && active.size > 0 && (!myId || active.has(myId))) {
               clearBattleAndLeave(sessionId, roomId);
               navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
             }
@@ -1364,7 +1360,8 @@ export default function BattlePage() {
 
   useEffect(() => {
     if (!isLiveMatch || !roomId) return;
-    const myId = String(getCurrentUserId() || '');
+    // 폴링은 전원 이탈(혼자 남음) 감지용. 상대 패널 제거는 USER_LEFT만 담당
+    const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
     const timer = window.setInterval(() => {
       void fetchRoom(roomId)
         .then((room) => {
@@ -1374,36 +1371,17 @@ export default function BattlePage() {
             ),
           );
           if (active.size === 0) return;
-          const roster = Array.isArray(battleMeta.roomRoster)
-            ? (battleMeta.roomRoster as Array<{ name?: string; userId?: string }>)
-            : [];
-          const newlyLeft: string[] = [];
-          for (const player of roster) {
-            const id = String(player.userId || '').replace(/^player-/, '');
-            if (!id || id === myId || active.has(id) || departedUserIdsRef.current.has(id)) continue;
-            departedUserIdsRef.current.add(id);
-            newlyLeft.push(player.name || '상대');
+          if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId)) return;
+          if (myId && !active.has(myId)) return;
+          if (active.size <= 1) {
+            clearBattleAndLeave(sessionId, roomId);
+            navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
           }
-          if (newlyLeft.length === 0) return;
-          setChatMessages((messages) => [
-            ...messages,
-            ...newlyLeft.map((name) => ({
-              sender: 'SYSTEM',
-              text: `${name}가 퇴장하였습니다`,
-              time: '',
-            })),
-          ]);
-          setBattleBots((prev) =>
-            prev.filter((bot) => {
-              const raw = String(bot.id).replace(/^player-/, '');
-              return !departedUserIdsRef.current.has(raw);
-            }),
-          );
         })
         .catch(() => undefined);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [isLiveMatch, roomId, battleMeta.roomRoster]);
+  }, [isLiveMatch, roomId, sessionId, navigate]);
 
   // 라이브: 마지막 문제까지 제출(관전)하면 결과 제출만 하고, 상대 대기 (바로 결과창 X)
   useEffect(() => {
@@ -2065,23 +2043,28 @@ export default function BattlePage() {
     options?: { interactive?: boolean; onStroke?: (stroke: ScribbleStroke) => void },
   ) => {
     const tryRun = (attempts = 0) => {
-      const panelEl =
-        document.querySelector(
-          `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
-        ) ||
+      const panelEl = (document.querySelector(
+        `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] [data-opponent-canvas="${botId}"]`,
+      ) ||
         document.querySelector(`[data-opponent-canvas="${botId}"]`) ||
-        document.querySelector(`.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] .mini-code-area`);
+        document.querySelector(
+          `.opponent-code-panel-mini.expanded[data-opponent-id="${botId}"] .mini-code-area`,
+        )) as HTMLElement | null;
       if (panelEl) {
-        if (type === 'paint') startPaintCanvas(panelEl as HTMLElement, botId);
-        else {
-          startScribbleCanvas(panelEl as HTMLElement, botId, ITEM_PANEL_EFFECT_MS, {
+        if (type === 'paint') {
+          startPaintCanvas(panelEl, botId);
+          return;
+        }
+        if (
+          startScribbleCanvas(panelEl, botId, ITEM_PANEL_EFFECT_MS, {
             interactive: options?.interactive !== false,
             onStroke: options?.onStroke,
-          });
+          })
+        ) {
+          return;
         }
-        return;
       }
-      if (attempts < 24) requestAnimationFrame(() => tryRun(attempts + 1));
+      if (attempts < 40) requestAnimationFrame(() => tryRun(attempts + 1));
     };
     tryRun();
   };

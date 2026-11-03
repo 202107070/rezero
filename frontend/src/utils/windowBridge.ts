@@ -12,15 +12,15 @@ export function saveDisplayMode(mode: DisplayMode) {
 
 export function updateUiScale() {
   const mode = loadDisplayMode();
-  const scale =
-    mode === 'fullscreen'
-      ? Math.min(window.innerWidth / DESIGN_WIDTH, window.innerHeight / DESIGN_HEIGHT)
-      : 1;
+  // 전체화면: 가로·세로 각각 스케일해 모니터를 꽉 채움 (창모드와 같이 여백 없음)
+  const scaleX = mode === 'fullscreen' ? window.innerWidth / DESIGN_WIDTH : 1;
+  const scaleY = mode === 'fullscreen' ? window.innerHeight / DESIGN_HEIGHT : 1;
 
-  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  document.documentElement.style.setProperty('--ui-scale-x', String(safeScale));
-  document.documentElement.style.setProperty('--ui-scale-y', String(safeScale));
-  document.documentElement.style.setProperty('--ui-scale', String(safeScale));
+  const safeX = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1;
+  const safeY = Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1;
+  document.documentElement.style.setProperty('--ui-scale-x', String(safeX));
+  document.documentElement.style.setProperty('--ui-scale-y', String(safeY));
+  document.documentElement.style.setProperty('--ui-scale', String(Math.min(safeX, safeY)));
 }
 
 export function applyDisplayModeToDom(mode: DisplayMode) {
