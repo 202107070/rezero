@@ -283,9 +283,21 @@ type ScribbleEntry = {
   container: HTMLElement;
   timerId?: ReturnType<typeof setTimeout>;
   cleanup?: () => void;
+  interactive: boolean;
+  onStroke?: (stroke: ScribbleStroke) => void;
+  clearAt: number;
 };
 
 const scribbleRefs: Record<string, ScribbleEntry> = {};
+
+export function isScribbleInteractive(botId: string): boolean {
+  const entry = scribbleRefs[botId];
+  return Boolean(entry?.interactive && entry.canvas.isConnected);
+}
+
+export function getScribbleOnStroke(botId: string): ((stroke: ScribbleStroke) => void) | undefined {
+  return scribbleRefs[botId]?.onStroke;
+}
 
 export function clearScribbleCanvas(botId: string): void {
   const entry = scribbleRefs[botId];
@@ -298,6 +310,13 @@ export function clearScribbleCanvas(botId: string): void {
     /* ignore */
   }
   delete scribbleRefs[botId];
+}
+
+function scheduleScribbleClear(entry: ScribbleEntry, botId: string, durationMs: number, stack: boolean): void {
+  const now = Date.now();
+  entry.clearAt = stack && entry.clearAt > now ? entry.clearAt + durationMs : now + durationMs;
+  if (entry.timerId) clearTimeout(entry.timerId);
+  entry.timerId = setTimeout(() => clearScribbleCanvas(botId), Math.max(0, entry.clearAt - Date.now()));
 }
 
 function syncScribbleCanvasSize(entry: ScribbleEntry): boolean {
@@ -334,11 +353,14 @@ function ensureScribbleCanvas(
   containerEl: HTMLElement,
   botId: string,
   durationMs: number,
+  extendDuration: boolean,
 ): ScribbleEntry | null {
   const existing = scribbleRefs[botId];
   if (existing && existing.container === containerEl && existing.canvas.isConnected) {
-    if (existing.timerId) clearTimeout(existing.timerId);
-    existing.timerId = setTimeout(() => clearScribbleCanvas(botId), durationMs);
+    // 새 아이템 사용일 때만 페인트처럼 지속 시간 누적 (큐 재시작은 연장하지 않음)
+    if (extendDuration) {
+      scheduleScribbleClear(existing, botId, durationMs, true);
+    }
     syncScribbleCanvasSize(existing);
     return existing;
   }
@@ -363,8 +385,14 @@ function ensureScribbleCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
-  const entry: ScribbleEntry = { canvas, ctx, container: containerEl };
-  entry.timerId = setTimeout(() => clearScribbleCanvas(botId), durationMs);
+  const entry: ScribbleEntry = {
+    canvas,
+    ctx,
+    container: containerEl,
+    interactive: false,
+    clearAt: 0,
+  };
+  scheduleScribbleClear(entry, botId, durationMs, false);
   scribbleRefs[botId] = entry;
   return entry;
 }
@@ -382,7 +410,11 @@ export function applyScribbleStroke(botId: string, stroke: ScribbleStroke): bool
         ? document.querySelector('.code-card .fill-blank-code, .code-card .fill-blank-area, .code-card')
         : null);
     if (panelEl) {
-      startScribbleCanvas(panelEl as HTMLElement, botId, 7000, { interactive: false });
+      // 원격 스트로크만 — 시간 연장 없이 캔버스만 확보 (스트로크마다 중첩되면 안 됨)
+      startScribbleCanvas(panelEl as HTMLElement, botId, 7000, {
+        interactive: false,
+        extendDuration: false,
+      });
       entry = scribbleRefs[botId];
     }
   }
@@ -413,23 +445,38 @@ export function startScribbleCanvas(
   options?: {
     interactive?: boolean;
     onStroke?: (stroke: ScribbleStroke) => void;
+    /** false면 지속시간 누적 없음(큐 재시작 등). 기본 true */
+    extendDuration?: boolean;
   },
 ): boolean {
   if (!containerEl || !botId) return false;
-  const entry = ensureScribbleCanvas(containerEl, botId, durationMs);
+  const entry = ensureScribbleCanvas(
+    containerEl,
+    botId,
+    durationMs,
+    options?.extendDuration !== false,
+  );
   if (!entry) return false;
   if (!syncScribbleCanvasSize(entry)) return false;
 
-  const interactive = options?.interactive !== false;
+  const wantInteractive = options?.interactive !== false;
   const onStroke = options?.onStroke;
-  if (!interactive) {
-    entry.cleanup?.();
-    entry.cleanup = undefined;
+
+  // 원격 낙서 시작/큐 재시작이 로컬 그리기를 끄지 않음 (다인 동시 낙서)
+  if (!wantInteractive) {
+    if (entry.interactive) return true;
     entry.canvas.style.pointerEvents = 'none';
     return true;
   }
 
+  // 이미 같은 콜백으로 인터랙티브면 리스너 재부착 없이 시간만 연장된 상태 유지
+  if (entry.interactive && entry.onStroke === onStroke && entry.cleanup) {
+    return true;
+  }
+
   entry.cleanup?.();
+  entry.interactive = true;
+  entry.onStroke = onStroke;
   entry.canvas.style.pointerEvents = 'auto';
   const { canvas, ctx } = entry;
   let drawing = false;
@@ -467,8 +514,9 @@ export function startScribbleCanvas(
     ctx.lineWidth = erasing ? 14 : 3;
     ctx.lineCap = 'round';
     ctx.stroke();
-    if (onStroke) {
-      onStroke({
+    const emit = entry.onStroke;
+    if (emit) {
+      emit({
         x0: lastX,
         y0: lastY,
         x1: x,
@@ -499,6 +547,7 @@ export function startScribbleCanvas(
     canvas.removeEventListener('mousedown', onDown);
     window.removeEventListener('mousemove', onMove);
     window.removeEventListener('mouseup', onUp);
+    entry.interactive = false;
   };
   return true;
 }

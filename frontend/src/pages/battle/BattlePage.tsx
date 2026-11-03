@@ -82,6 +82,8 @@ import {
   applyScribbleStroke,
   clearPaintCanvas,
   clearScribbleCanvas,
+  getScribbleOnStroke,
+  isScribbleInteractive,
   startPaintCanvas,
   startScribbleCanvas,
   type ScribbleStroke,
@@ -735,7 +737,11 @@ export default function BattlePage() {
             return;
           }
           if (
-            startScribbleCanvas(panelEl, 'self', ITEM_PANEL_EFFECT_MS, { interactive: false })
+            startScribbleCanvas(panelEl, 'self', ITEM_PANEL_EFFECT_MS, {
+              interactive: isScribbleInteractive('self'),
+              onStroke: getScribbleOnStroke('self'),
+              extendDuration: false,
+            })
           ) {
             return;
           }
@@ -760,8 +766,13 @@ export default function BattlePage() {
             startPaintCanvas(panelEl, botId);
             return;
           }
+          // 큐 재시작: 로컬 그리기 유지, 지속시간은 이미 중첩되어 있으므로 연장하지 않음
           if (
-            startScribbleCanvas(panelEl, botId, ITEM_PANEL_EFFECT_MS, { interactive: false })
+            startScribbleCanvas(panelEl, botId, ITEM_PANEL_EFFECT_MS, {
+              interactive: isScribbleInteractive(botId),
+              onStroke: getScribbleOnStroke(botId),
+              extendDuration: false,
+            })
           ) {
             return;
           }
@@ -990,15 +1001,14 @@ export default function BattlePage() {
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.ITEM_USED, (payload: BattleItemUsedPayload) => {
             const myId = getCurrentUserId();
-            if (String(payload.fromUserId) === String(myId)) {
-              // 본인이 보낸 아이템/낙서는 로컬에서 이미 재생·그림
-              return;
-            }
+            const normId = (id: string | number | null | undefined) =>
+              String(id || '').replace(/^player-/, '');
+            // 본인이 보낸 아이템/낙서는 로컬에서 이미 재생·그림
+            if (normId(payload.fromUserId) === normId(myId)) return;
 
             const targetId = String(payload.targetUserId || '');
             const isTargetMe =
-              Boolean(targetId) &&
-              (targetId === String(myId) || targetId === `player-${myId}`);
+              Boolean(targetId) && normId(targetId) === normId(myId);
 
             // 낙서 스트로크 동기화 (SFX 없음)
             if (payload.itemType === 'scribble' && payload.scribbleStroke) {
@@ -1094,10 +1104,16 @@ export default function BattlePage() {
                   );
                   if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
                     setExpandedOpponentId(targetBot.id);
+                    // 낙서: 내가 이미 그리는 중이면 interactive를 유지한 채 시간만 연장
                     runPanelCanvasEffect(
                       targetBot.id,
                       payload.itemType,
-                      payload.itemType === 'scribble' ? { interactive: false } : undefined,
+                      payload.itemType === 'scribble'
+                        ? {
+                            interactive: isScribbleInteractive(targetBot.id),
+                            onStroke: getScribbleOnStroke(targetBot.id),
+                          }
+                        : undefined,
                     );
                   }
                 });
