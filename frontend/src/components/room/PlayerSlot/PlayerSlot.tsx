@@ -60,9 +60,6 @@ export function PlayerSlot({
       >
         {player ? (player.isHost ? 'HOST' : player.isReady ? 'READY' : 'WAITING') : ''}
       </div>
-      <div className="slot-button-area">
-        <div style={{ width: '1px' }} />
-      </div>
     </div>
   );
 }
