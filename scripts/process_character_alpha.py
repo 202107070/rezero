@@ -1,17 +1,16 @@
-"""캐릭터 PNG: 가장자리 연결 흰 배경 투명화 + 정사각 중앙 균일 배치."""
+"""캐릭터 PNG: 흰 배경 투명화 + 업스케일/선명·명암 보정 + 중앙 균일 배치."""
 from __future__ import annotations
 
 from collections import deque
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 CHAR_DIR = ROOT / "frontend" / "public" / "assets" / "characters"
-OUT_SIZE = 256
-CONTENT_RATIO = 0.9
+OUT_SIZE = 512  # 큰 해상도로 저장해 UI 축소 시에도 덜 뭉개지게
+CONTENT_RATIO = 0.92
 
-# 안티앨리어싱 회색 링까지 포함해 flood (피부/은발은 chroma로 보호)
 BG_LUMA = 232
 BG_CHROMA = 14
 
@@ -54,7 +53,6 @@ def flood_clear_white(im: Image.Image) -> Image.Image:
         try_push(x, y + 1)
         try_push(x, y - 1)
 
-    # 투명에 맞닿은 잔여 밝은 배경을 몇 바퀴 더 깎음
     for _ in range(6):
         victims: list[tuple[int, int]] = []
         for y in range(h):
@@ -71,7 +69,6 @@ def flood_clear_white(im: Image.Image) -> Image.Image:
         for x, y in victims:
             px[x, y] = (0, 0, 0, 0)
 
-    # 가장자리 흰색 헤일로: 투명 이웃이 있으면 알파를 낮춤
     for y in range(h):
         for x in range(w):
             r, g, b, a = px[x, y]
@@ -90,6 +87,36 @@ def flood_clear_white(im: Image.Image) -> Image.Image:
                 px[x, y] = (r, g, b, max(0, a // 3))
 
     return im
+
+
+def enhance_portrait(im: Image.Image) -> Image.Image:
+    """작은 원본 한계 안에서 선명·명암·채도를 살짝 살림 (디테일 복원은 불가)."""
+    rgb = im.convert("RGBA")
+    alpha = rgb.split()[-1]
+    base = Image.merge("RGB", rgb.split()[:3])
+
+    # 단계적 업스케일 (한 번에 크게 키우면 더 뭉개짐)
+    w, h = base.size
+    while max(w, h) < OUT_SIZE:
+        w, h = min(OUT_SIZE, w * 2), min(OUT_SIZE, h * 2)
+        base = base.resize((w, h), Image.Resampling.LANCZOS)
+        alpha = alpha.resize((w, h), Image.Resampling.LANCZOS)
+
+    if (w, h) != (OUT_SIZE, OUT_SIZE):
+        # 비율 유지하며 OUT_SIZE 박스에 맞게 맞추기 전 단계 — 긴 변 기준
+        scale = OUT_SIZE / max(w, h)
+        nw, nh = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
+        base = base.resize((nw, nh), Image.Resampling.LANCZOS)
+        alpha = alpha.resize((nw, nh), Image.Resampling.LANCZOS)
+
+    base = ImageEnhance.Contrast(base).enhance(1.18)
+    base = ImageEnhance.Color(base).enhance(1.12)
+    base = ImageEnhance.Sharpness(base).enhance(1.45)
+    base = base.filter(ImageFilter.UnsharpMask(radius=1.6, percent=140, threshold=2))
+
+    out = base.convert("RGBA")
+    out.putalpha(alpha)
+    return out
 
 
 def opaque_bbox(im: Image.Image, alpha_min: int = 16) -> tuple[int, int, int, int] | None:
@@ -130,12 +157,12 @@ def recrop_from_sheets() -> dict[str, Image.Image]:
     cw2, ch2 = s2.width / 5, s2.height / 2
 
     def cell(im: Image.Image, col: int, row: int, cw: float, ch: float, ratio: float = 0.68) -> Image.Image:
-        # ratio를 낮춰 하단 이름 라벨이 들어가지 않게
         x0 = int(col * cw) + 2
         y0 = int(row * ch) + 2
         x1 = int((col + 1) * cw) - 2
         y1 = int(y0 + ch * ratio)
-        return im.crop((x0, y0, x1, y1)).resize((OUT_SIZE, OUT_SIZE), Image.Resampling.LANCZOS)
+        # 원본 해상도 유지한 채 크롭 (업스케일은 enhance에서)
+        return im.crop((x0, y0, x1, y1))
 
     return {
         "char1": cell(s1, 1, 0, cw1, ch1),
@@ -149,15 +176,11 @@ def main() -> None:
     CHAR_DIR.mkdir(parents=True, exist_ok=True)
     for cid, im in recrop_from_sheets().items():
         im = flood_clear_white(im)
+        im = enhance_portrait(im)
         im = center_on_canvas(im)
         path = CHAR_DIR / f"{cid}.png"
-        im.save(path, "PNG")
-        rem = sum(
-            1
-            for p in im.getdata()
-            if p[3] > 0 and p[0] >= 245 and p[1] >= 245 and p[2] >= 245 and max(p[:3]) - min(p[:3]) <= 8
-        )
-        print("ok", path.name, "bbox", opaque_bbox(im), "pureWhiteLeft", rem)
+        im.save(path, "PNG", optimize=True)
+        print("ok", path.name, im.size, "bbox", opaque_bbox(im))
 
 
 if __name__ == "__main__":

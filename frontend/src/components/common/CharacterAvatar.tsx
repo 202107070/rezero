@@ -23,7 +23,14 @@ export function CharacterAvatar({ character, className, style, alt }: CharacterA
         src={src}
         alt={label}
         className={`character-avatar-img${className ? ` ${className}` : ''}`}
-        style={{ objectFit: 'contain', objectPosition: 'center', background: 'transparent', ...style }}
+        style={{
+          objectFit: 'contain',
+          objectPosition: 'center',
+          background: 'transparent',
+          // 전역 pixelated 오버라이드 — 애니 일러스트는 부드럽게 축소
+          imageRendering: 'auto',
+          ...style,
+        }}
         draggable={false}
       />
     );
