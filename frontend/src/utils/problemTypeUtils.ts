@@ -115,8 +115,28 @@ export function getProblemAnswersForLang(
   return [];
 }
 
-/** 공백·대소문자를 무시하고 정답을 비교한다. "stack overflow"와 "StackOverflow"는 같은 답이다. */
+/** 정답이 공백(스페이스 등)만으로 이루어진 경우 — print(" ") 류 시각 문제 */
+export function isWhitespaceLiteralAnswer(expected: unknown): boolean {
+  const s = String(expected ?? '').replace(/\u00a0/g, ' ');
+  return s.length > 0 && s.trim() === '';
+}
+
+/** 빈칸 입력 여부. 정답이 공백 리터럴이면 동일 공백 입력을 채움으로 본다. */
+export function isUserBlankFilled(user: unknown, expected?: unknown): boolean {
+  const raw = String(user ?? '').replace(/\u00a0/g, ' ');
+  if (raw.length === 0) return false;
+  if (expected !== undefined && isWhitespaceLiteralAnswer(expected)) {
+    return raw === String(expected).replace(/\u00a0/g, ' ');
+  }
+  return raw.trim() !== '';
+}
+
+/** 공백·대소문자를 무시하고 정답을 비교한다. "stack overflow"와 "StackOverflow"는 같은 답이다.
+ *  단, 정답이 공백 리터럴이면 공백을 보존해 비교한다. */
 export function looseAnswerEqual(user: unknown, expected: unknown): boolean {
+  if (isWhitespaceLiteralAnswer(expected)) {
+    return String(user ?? '').replace(/\u00a0/g, ' ') === String(expected ?? '').replace(/\u00a0/g, ' ');
+  }
   const normalize = (value: unknown) =>
     String(value ?? '')
       .replace(/\u00a0/g, ' ')

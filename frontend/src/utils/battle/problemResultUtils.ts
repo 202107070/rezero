@@ -1,5 +1,9 @@
 import type { BattleProblem } from '../../types/battle';
-import { looseAnswerEqual } from '../problemTypeUtils';
+import {
+  getProblemAnswersForLang,
+  isUserBlankFilled,
+  looseAnswerEqual,
+} from '../problemTypeUtils';
 
 export type ProblemResultsMap = Record<number, boolean>;
 
@@ -49,18 +53,19 @@ export function isProblemAnswerCorrect(params: {
   const problem = normalizeBattleProblem(params.problem);
   const { problemIndex, langKey, blankAnswers, selectedOption } = params;
 
+  const correctAnswers = getProblemAnswersForLang(problem.answer, langKey);
+
   if (problem.type === 'fill_blank' || problem.type === 'visual_fill_blank') {
-    const correct = problem.answer?.[langKey] || [];
     const user = blankAnswers[problemIndex] || [];
-    if (correct.length === 0) return false;
-    for (let i = 0; i < correct.length; i++) {
-      if (!looseAnswerEqual(user[i], correct[i])) return false;
+    if (correctAnswers.length === 0) return false;
+    for (let i = 0; i < correctAnswers.length; i++) {
+      if (!looseAnswerEqual(user[i], correctAnswers[i])) return false;
     }
     return true;
   }
 
   if (problem.type === 'short_answer') {
-    return looseAnswerEqual(blankAnswers[problemIndex]?.[0], problem.answer?.[langKey]?.[0]);
+    return looseAnswerEqual(blankAnswers[problemIndex]?.[0], correctAnswers[0]);
   }
 
   if (problem.type === 'multiple_choice') {
@@ -84,18 +89,19 @@ export function hasProblemAnswerAttempted(params: {
     return selectedOption !== null;
   }
 
+  const correct = getProblemAnswersForLang(problem.answer, langKey);
+
   if (problem.type === 'short_answer') {
-    return String(blankAnswers[problemIndex]?.[0] || '').trim() !== '';
+    return isUserBlankFilled(blankAnswers[problemIndex]?.[0], correct[0]);
   }
 
   if (problem.type === 'fill_blank' || problem.type === 'visual_fill_blank') {
     const question = problem.question || '';
-    const correct = problem.answer?.[langKey] || [];
     const blankCount = Math.max(correct.length, (question.match(/_____/g) || []).length);
     if (blankCount === 0) return false;
     const user = blankAnswers[problemIndex] || [];
     for (let i = 0; i < blankCount; i++) {
-      if (String(user[i] || '').trim() === '') return false;
+      if (!isUserBlankFilled(user[i], correct[i])) return false;
     }
     return true;
   }

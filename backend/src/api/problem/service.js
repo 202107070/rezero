@@ -42,11 +42,28 @@ function parseJson(value, fallbackValue) {
   }
 }
 
+function isWhitespaceLiteralAnswer(expected) {
+  const s = String(expected ?? "").replace(/\u00a0/g, " ");
+  return s.length > 0 && s.trim() === "";
+}
+
 function normalizeAnswer(value) {
   return String(value || "")
     .replace(/\u00a0/g, " ")
     .replace(/\s+/g, "")
     .toLowerCase();
+}
+
+function answersEqual(user, expected) {
+  if (isWhitespaceLiteralAnswer(expected)) {
+    return (
+      String(user ?? "").replace(/\u00a0/g, " ") ===
+      String(expected ?? "").replace(/\u00a0/g, " ")
+    );
+  }
+  const left = normalizeAnswer(user);
+  const right = normalizeAnswer(expected);
+  return left.length > 0 && left === right;
 }
 
 function getAnswersForLanguage(answer, language) {
@@ -220,7 +237,7 @@ export function judgeProblemAnswer(input) {
   }
 
   if (problem.type === "short_answer") {
-    return normalizeAnswer(answers[0]) === normalizeAnswer(expectedAnswers[0]);
+    return answersEqual(answers[0], expectedAnswers[0]);
   }
 
   if (answers.length !== expectedAnswers.length) {
@@ -228,6 +245,6 @@ export function judgeProblemAnswer(input) {
   }
 
   return answers.every(function (answer, index) {
-    return normalizeAnswer(answer) === normalizeAnswer(expectedAnswers[index]);
+    return answersEqual(answer, expectedAnswers[index]);
   });
 }

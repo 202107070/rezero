@@ -12,7 +12,12 @@ import { emitUpdateLocation } from '../../services/roomSocket';
 import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { LobbyBGM, PracticeBGM } from '../../utils/audio/gameAudio';
 import { getLangKey } from '../../utils/battle/codeUtils';
-import { getProblemAnswersForLang, isBlankBasedType, looseAnswerEqual } from '../../utils/problemTypeUtils';
+import {
+  getProblemAnswersForLang,
+  isBlankBasedType,
+  isUserBlankFilled,
+  looseAnswerEqual,
+} from '../../utils/problemTypeUtils';
 import {
   createExercisePool,
   isExerciseCorrect,
@@ -146,10 +151,14 @@ export default function PracticePage() {
     } else if (isBlankBasedType(currentEx.type) || (currentEx.type === 'short_answer' && blankCount > 0)) {
       const blanks = blankAnswers[currentIndex] || [];
       const required = blankCount || correctAnswers.length;
-      if (blanks.length < required || blanks.some((v) => !v || v.trim() === '')) return;
+      if (
+        blanks.length < required ||
+        blanks.some((v, i) => !isUserBlankFilled(v, correctAnswers[i]))
+      ) {
+        return;
+      }
     } else if (currentEx.type === 'short_answer') {
-      const ans = (blankAnswers[currentIndex]?.[0] || '').trim();
-      if (ans === '') return;
+      if (!isUserBlankFilled(blankAnswers[currentIndex]?.[0], correctAnswers[0])) return;
     }
     setChecked((prev) => new Set(prev).add(currentIndex));
   };

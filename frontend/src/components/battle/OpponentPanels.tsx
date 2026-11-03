@@ -40,6 +40,8 @@ interface OpponentPanelsProps {
   /** 상대별 패널 이펙트 (문제 인덱스와 무관, 타입별 동시/큐 지원) */
   opponentEffects: Record<string, ActivePanelEffects>;
   panelHit: Record<string, boolean>;
+  /** 번개 애니메이션 재시작을 위해 한 프레임 클래스 억제 */
+  lightningAnimSuppress?: Record<string, boolean>;
   onOpenItemModal: (botId: string) => void;
   showItemButton?: boolean;
   /** 상대별로 아이템 버튼 비활성 (전부 풀이 완료 등) */
@@ -194,6 +196,7 @@ export default function OpponentPanels({
   spectatorViewProblemByBot,
   opponentEffects,
   panelHit,
+  lightningAnimSuppress,
   onOpenItemModal,
   showItemButton = true,
   itemDisabledByBot,
@@ -205,7 +208,8 @@ export default function OpponentPanels({
     const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
     const panelEffects = opponentEffects[bot.id];
     const hasPaint = isPanelTypeActive(panelEffects, 'paint', now);
-    const hasLightning = isPanelTypeActive(panelEffects, 'lightning', now);
+    const hasLightning =
+      isPanelTypeActive(panelEffects, 'lightning', now) && !lightningAnimSuppress?.[bot.id];
     const hasScribble = isPanelTypeActive(panelEffects, 'scribble', now);
     const hasLock = isPanelTypeActive(panelEffects, 'lock', now);
     const effIcon = effectIcons(panelEffects, now);
@@ -272,7 +276,8 @@ export default function OpponentPanels({
     const viewProblemIndex = getViewProblemIndex(bot, demoSpectating, spectatorViewProblemByBot);
     const panelEffects = opponentEffects[bot.id];
     const hasActivePaint = isPanelTypeActive(panelEffects, 'paint', now);
-    const hasLightning = isPanelTypeActive(panelEffects, 'lightning', now);
+    const hasLightning =
+      isPanelTypeActive(panelEffects, 'lightning', now) && !lightningAnimSuppress?.[bot.id];
     const hasScribble = isPanelTypeActive(panelEffects, 'scribble', now);
     const hasLock = isPanelTypeActive(panelEffects, 'lock', now);
     const isRevealed = demoSpectating;

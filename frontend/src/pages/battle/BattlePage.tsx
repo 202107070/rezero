@@ -112,7 +112,11 @@ import {
   type ProblemResultsMap,
 } from '../../utils/battle/problemResultUtils';
 import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSimulator';
-import { getProblemAnswersForLang, isCodeBlankBuildProblem } from '../../utils/problemTypeUtils';
+import {
+  getProblemAnswersForLang,
+  isCodeBlankBuildProblem,
+  isUserBlankFilled,
+} from '../../utils/problemTypeUtils';
 import problemsBank from '../../data/problems.js';
 import './battle.css';
 
@@ -232,6 +236,22 @@ export default function BattlePage() {
   const [breakingBlanks, setBreakingBlanks] = useState<Record<string, boolean>>({});
   const [itemCastState, setItemCastState] = useState<{ type: string; ts: number } | null>(null);
   const [panelHit, setPanelHit] = useState<Record<string, boolean>>({});
+  /** 번개 CSS 애니메이션 재시작용 (클래스 한 프레임 제거) */
+  const [lightningAnimSuppress, setLightningAnimSuppress] = useState<Record<string, boolean>>({});
+  const timeoutSpectateRef = useRef(false);
+  const [timeoutSpectateRequest, setTimeoutSpectateRequest] = useState(false);
+
+  const bumpLightningAnim = useCallback((targetId: string) => {
+    setLightningAnimSuppress((prev) => ({ ...prev, [targetId]: true }));
+    requestAnimationFrame(() => {
+      setLightningAnimSuppress((prev) => {
+        if (!prev[targetId]) return prev;
+        const next = { ...prev };
+        delete next[targetId];
+        return next;
+      });
+    });
+  }, []);
   const [selfPanelEffects, setSelfPanelEffects] = useState<ActivePanelEffects>(() =>
     createEmptyPanelEffects(),
   );
@@ -790,7 +810,10 @@ export default function BattlePage() {
           if (type === 'paint') clearPaintCanvas('self');
           if (type === 'scribble') clearScribbleCanvas('self');
         });
-        result.restarted.forEach((type) => restartSelfCanvas(type));
+        result.restarted.forEach((type) => {
+          if (type === 'lightning') bumpLightningAnim('self');
+          else restartSelfCanvas(type);
+        });
         return result.next;
       });
       setOpponentEffects((prev) => {
@@ -808,6 +831,10 @@ export default function BattlePage() {
             if (type === 'scribble') clearScribbleCanvas(botId);
           });
           result.restarted.forEach((type) => {
+            if (type === 'lightning') {
+              queueMicrotask(() => bumpLightningAnim(botId));
+              return;
+            }
             queueMicrotask(() => restartOpponentCanvas(botId, type));
           });
           if (
@@ -835,29 +862,25 @@ export default function BattlePage() {
       ? false
       : areAllBotsSolvedOnPlayerProblem(battleBots, currentIndex, elapsedSec, totalBattleSeconds);
     const timeUp = remaining <= 0;
-    const isLastProblem = currentIndex >= problems.length - 1;
-    const shouldAdvance = timeUp || (allBotsSolved && currentProblemLocked);
+    const playerFinalSubmitted = demoSpectating || spectatorLocked;
 
-    if (!shouldAdvance) return;
-
-    if (isLastProblem) {
-      if (timeUp && problemResultsRef.current[currentIndex] === undefined) {
-        problemResultsRef.current = { ...problemResultsRef.current, [currentIndex]: false };
-        setProblemResults(problemResultsRef.current);
-      }
-      // 라이브: 본인 올클리어 후에도 상대/제한시간 대기 (타임업일 때만 종료)
-      // 데모: 봇 올클리어 + 본인 제출 시 종료
-      const playerFinalSubmitted = demoSpectating || spectatorLocked;
-      if (timeUp || (!isLiveMatch && allBotsSolved && playerFinalSubmitted)) {
-        setBattleFinished(true);
-        setShowGameOver(true);
-        doPersistSubmission(answers, currentIndex);
-      }
+    // 제한시간 종료 → GAME OVER 고착 대신 관전 모드로 전환 (상대 대기)
+    if (timeUp && !playerFinalSubmitted) {
+      setTimeoutSpectateRequest(true);
       return;
     }
 
-    const reason = timeUp ? 'time' : 'all-clear';
-    queueAdvanceProblem(reason);
+    // 데모: 관전 중 봇까지 모두 끝나면 결과로
+    if (!isLiveMatch && allBotsSolved && playerFinalSubmitted) {
+      setBattleFinished(true);
+      setShowGameOver(true);
+      doPersistSubmission(answers, currentIndex);
+      return;
+    }
+
+    if (allBotsSolved && currentProblemLocked && currentIndex < problems.length - 1) {
+      queueAdvanceProblem('all-clear');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remaining, currentIndex, problems.length, battleBots, elapsedSec, totalBattleSeconds, currentProblemLocked, battleFinished, demoSpectating, spectatorLocked, isLiveMatch]);
 
@@ -1052,6 +1075,7 @@ export default function BattlePage() {
               SFX.play(payload.itemType);
               const effectType = payload.itemType as AttackPanelType;
               setSelfPanelEffects((prev) => enqueuePanelEffect(prev, effectType).next);
+              if (effectType === 'lightning') bumpLightningAnim('self');
               if (effectType === 'paint' || effectType === 'scribble') {
                 const tryRun = (attempts = 0) => {
                   const panelEl = document.querySelector(
@@ -1102,6 +1126,7 @@ export default function BattlePage() {
                     targetBot.id,
                     payload.itemType as AttackPanelType,
                   );
+                  if (payload.itemType === 'lightning') bumpLightningAnim(targetBot.id);
                   if (payload.itemType === 'paint' || payload.itemType === 'scribble') {
                     setExpandedOpponentId(targetBot.id);
                     // 낙서: 내가 이미 그리는 중이면 interactive를 유지한 채 시간만 연장
@@ -1546,6 +1571,7 @@ export default function BattlePage() {
       prev[currentIndex] !== undefined ? prev : { ...prev, [currentIndex]: false },
     );
     if (currentIndex >= problems.length - 1) {
+      // 타임업은 관전 전환으로 처리. 여기까지 오면 데모 올클리어 등
       setBattleFinished(true);
       setShowGameOver(true);
       doPersistSubmission(answers, currentIndex);
@@ -1572,6 +1598,95 @@ export default function BattlePage() {
     });
     advanceQueuedRef.current = false;
   };
+
+  /** 제한시간 종료: 미제출 문항을 서버에 반영(상대 100% 표시) 후 관전 모드 */
+  const enterTimeoutSpectator = useCallback(async () => {
+    if (timeoutSpectateRef.current || demoSpectating || spectatorLocked || battleFinished) return;
+    timeoutSpectateRef.current = true;
+    setTimeoutSpectateRequest(false);
+
+    const lastIndex = Math.max(0, problems.length - 1);
+    const nextResults: ProblemResultsMap = { ...problemResultsRef.current };
+    for (let i = 0; i < problems.length; i += 1) {
+      if (nextResults[i] === undefined) nextResults[i] = false;
+    }
+    problemResultsRef.current = nextResults;
+    setProblemResults(nextResults);
+
+    if (isLiveMatch && matchId) {
+      for (let i = 0; i < problems.length; i += 1) {
+        try {
+          await submitMatchAnswer(matchId, {
+            problemIndex: i,
+            answers: (blankAnswers[i] || []).map((value) => String(value ?? '')),
+            selectedOption:
+              selectedOptionByProblem[i] == null ? undefined : selectedOptionByProblem[i],
+          });
+        } catch (error) {
+          if (!isAlreadySubmittedError(error)) {
+            // 타임업 플러시는 개별 실패해도 관전 전환 계속
+          }
+        }
+      }
+    }
+
+    const elapsed = Math.max(0, totalBattleSeconds - remaining);
+    if (finishedAtElapsedSec < 0) {
+      setFinishedAtElapsedSec(elapsed);
+    }
+    setCurrentIndex(lastIndex);
+    setSpectatorMyViewProblem(lastIndex);
+    setRevisionEditMode(false);
+    setShowSaveModal(false);
+    setShowGameOver(false);
+    setSpectatorLocked(true);
+    setDemoSpectating(true);
+    setShowClearFlash(true);
+    setRevealHint(null);
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        sender: 'SYSTEM',
+        text: '제한 시간이 종료되어 관전 모드로 전환합니다. 다른 플레이어를 기다립니다...',
+        time: '',
+      },
+    ]);
+    syncBattleDemoState(sessionId, {
+      event: 'timeout-spectate',
+      lockedProblemIndex: lastIndex,
+      demoSpectating: true,
+      spectatorLocked: true,
+      currentProblemLocked: true,
+      answers,
+    });
+    try {
+      await doPersistSession(answers, true);
+    } catch {
+      /* ignore */
+    }
+    doPersistSubmission(answers, lastIndex);
+  }, [
+    demoSpectating,
+    spectatorLocked,
+    battleFinished,
+    problems.length,
+    isLiveMatch,
+    matchId,
+    blankAnswers,
+    selectedOptionByProblem,
+    totalBattleSeconds,
+    remaining,
+    finishedAtElapsedSec,
+    sessionId,
+    answers,
+    doPersistSession,
+    doPersistSubmission,
+  ]);
+
+  useEffect(() => {
+    if (!timeoutSpectateRequest) return;
+    void enterTimeoutSpectator();
+  }, [timeoutSpectateRequest, enterTimeoutSpectator]);
 
   const goToResultPage = () => {
     if (resultLeavingNavRef.current) return;
@@ -1892,14 +2007,18 @@ export default function BattlePage() {
   };
 
   const getEmptyBlankIndexes = () => {
+    const correct = resolveProblemAnswersWithFallback(currentProblem, langKey);
     if (currentCaps.showShortAnswerPanel) {
-      return String(blankAnswers[currentIndex]?.[0] || '').trim() ? [] : [0];
+      return isUserBlankFilled(blankAnswers[currentIndex]?.[0], correct[0]) ? [] : [0];
     }
-    const blankCount = (currentProblem.question || '').match(/_____/g)?.length || 0;
+    const blankCount = Math.max(
+      correct.length,
+      (currentProblem.question || '').match(/_____/g)?.length || 0,
+    );
     const blanks = blankAnswers[currentIndex] || [];
     const empty: number[] = [];
     for (let i = 0; i < blankCount; i += 1) {
-      if (!String(blanks[i] || '').trim()) empty.push(i);
+      if (!isUserBlankFilled(blanks[i], correct[i])) empty.push(i);
     }
     return empty;
   };
@@ -1997,7 +2116,10 @@ export default function BattlePage() {
       return true;
     }
 
-    const blankCount = (currentProblem.question || '').match(/_____/g)?.length || 0;
+    const blankCount = Math.max(
+      answers.length,
+      (currentProblem.question || '').match(/_____/g)?.length || 0,
+    );
     if (blankCount === 0) {
       setRevealHint('(정보 없음)');
       return false;
@@ -2005,7 +2127,7 @@ export default function BattlePage() {
     const blanks = blankAnswers[currentIndex] || [];
     const unsolved: number[] = [];
     for (let i = 0; i < blankCount; i += 1) {
-      if (!String(blanks[i] || '').trim()) unsolved.push(i);
+      if (!isUserBlankFilled(blanks[i], answers[i])) unsolved.push(i);
     }
     if (unsolved.length === 0) return false;
 
@@ -2050,6 +2172,8 @@ export default function BattlePage() {
       started = result.started;
       return { ...prev, [botId]: result.next };
     });
+    // 중첩(큐)이어도 페인트처럼 시각 효과를 다시 재생
+    if (type === 'lightning') bumpLightningAnim(botId);
     return started;
   };
 
@@ -2408,9 +2532,12 @@ export default function BattlePage() {
       <div
         className={`pixel-card code-card${itemCastState ? ' casting-item' : ''}${
           isPanelTypeActive(selfPanelEffects, 'paint') ? ' paint-marked' : ''
-        }${isPanelTypeActive(selfPanelEffects, 'lightning') ? ' lightning-struck' : ''}${
-          isPanelTypeActive(selfPanelEffects, 'scribble') ? ' scribble-marked' : ''
-        }${isPanelTypeActive(selfPanelEffects, 'lock') ? ' lock-marked' : ''}
+        }${
+          isPanelTypeActive(selfPanelEffects, 'lightning') && !lightningAnimSuppress.self
+            ? ' lightning-struck'
+            : ''
+        }${isPanelTypeActive(selfPanelEffects, 'scribble') ? ' scribble-marked' : ''}${
+          isPanelTypeActive(selfPanelEffects, 'lock') ? ' lock-marked' : ''
         }`}
         style={{ position: 'relative' }}
       >
@@ -2615,6 +2742,7 @@ export default function BattlePage() {
                 spectatorViewProblemByBot={spectatorViewProblemByBot}
                 opponentEffects={opponentEffects}
                 panelHit={panelHit}
+                lightningAnimSuppress={lightningAnimSuppress}
                 onOpenItemModal={handleOpenItemModal}
                 showItemButton={canUseAttackItems}
                 itemDisabledByBot={Object.fromEntries(
