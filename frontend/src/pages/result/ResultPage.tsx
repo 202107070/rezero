@@ -477,31 +477,16 @@ export default function ResultPage() {
               const remoteRoom = String(remote.roomId || '');
               const wasInMatch = prev === 'result' || prev === 'battle';
               const leftToLobby = loc === 'lobby' || loc === 'offline';
-              const leftToSameRoom =
+              // 다시하기 → 대기방(room)도 로비와 동일하게 즉시 퇴장 처리
+              const leftToWaitingRoom =
                 loc === 'room' && (!myRoom || !remoteRoom || remoteRoom === myRoom);
-              // room 깜빡임만 1틱 보류, lobby/offline은 즉시 반영
-              if (prev && wasInMatch && prev !== loc && (leftToLobby || leftToSameRoom)) {
-                if (leftToSameRoom && prev) {
-                  const pendingKey = `${pid}:${loc}`;
-                  const pending = seenLocationRef.current.get(`pending:${pid}`);
-                  if (pending === pendingKey) {
-                    notices.push(`${name} 유저가 대기방으로 이동하였습니다.`);
-                    awayStayRef.current.add(pid);
-                    seenLocationRef.current.delete(`pending:${pid}`);
-                  } else {
-                    seenLocationRef.current.set(`pending:${pid}`, pendingKey);
-                  }
-                } else {
-                  notices.push(
-                    leftToLobby
-                      ? `${name} 유저가 로비로 이동하였습니다.`
-                      : `${name} 유저가 대기방으로 이동하였습니다.`,
-                  );
-                  awayStayRef.current.add(pid);
-                  seenLocationRef.current.delete(`pending:${pid}`);
-                }
-              } else if (loc === 'result' || loc === 'battle') {
-                seenLocationRef.current.delete(`pending:${pid}`);
+              if (prev && wasInMatch && prev !== loc && (leftToLobby || leftToWaitingRoom)) {
+                notices.push(
+                  leftToLobby
+                    ? `${name} 유저가 로비로 이동하였습니다.`
+                    : `${name} 유저가 대기방으로 이동하였습니다.`,
+                );
+                awayStayRef.current.add(pid);
               }
 
               if (loc === 'result' || loc === 'battle') awayStayRef.current.delete(pid);

@@ -1379,6 +1379,7 @@ export default function RoomPage() {
           <div className="room-main-col">
             <div className="pixel-card room-main-card">
               <RoomHeader
+                roomId={roomId || numericRoomId}
                 roomTitle={roomTitle}
                 isPrivate={isPrivate}
                 playerCount={occupiedCount}
