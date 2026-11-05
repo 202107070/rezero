@@ -1,0 +1,142 @@
+[
+  {
+    "title": "문자열 인덱스 접근",
+    "submitted": true
+  },
+  {
+    "title": "반복문 실행 횟수",
+    "submitted": true
+  },
+  {
+    "case": "Java same-tab page exit and return",
+    "passed": true
+  },
+  {
+    "title": "나무 모양",
+    "submitted": true
+  },
+  {
+    "title": "문자열 길이 구하기",
+    "submitted": true
+  },
+  {
+    "title": "문자열 이어붙이기",
+    "submitted": true
+  },
+  {
+    "title": "최솟값 구하기",
+    "submitted": true
+  },
+  {
+    "title": "리스트 크기",
+    "submitted": true
+  },
+  {
+    "title": "버블정렬 1단계",
+    "submitted": true
+  },
+  {
+    "case": "java full flow",
+    "resultA": "- generic: \"💰 GOLD +1,010 (총 보유: 2,840 G) · 레이팅 1300 (골드)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 48초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 1195 + 105\"\n- generic: WIN + 105\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 49초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 811 -103\"\n- generic: LOSE - 103\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 1등입니다.\n- generic: 10문제 중 10문제를 맞췄습니다.\n- button \"확인\"",
+    "resultB": "- generic: \"💰 GOLD +1,000 (총 보유: 2,800 G) · 레이팅 708 (브론즈)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 48초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 1195 + 105\"\n- generic: WIN + 105\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 49초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 811 -103\"\n- generic: LOSE - 103\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 2등입니다.\n- generic: 10문제 중 10문제를 맞췄습니다.\n- button \"확인\""
+  },
+  {
+    "case": "C++ refresh",
+    "passed": true
+  },
+  {
+    "title": "반복문 실행 횟수",
+    "submitted": true
+  },
+  {
+    "title": "리스트 크기",
+    "submitted": true
+  },
+  {
+    "title": "최솟값 구하기",
+    "submitted": true
+  },
+  {
+    "title": "숫자를 문자열로",
+    "submitted": true
+  },
+  {
+    "title": "배열 합계",
+    "submitted": true
+  },
+  {
+    "case": "C++ diamond compile",
+    "passed": true
+  },
+  {
+    "title": "문자열 이어붙이기",
+    "submitted": true
+  },
+  {
+    "title": "최댓값 구하기",
+    "submitted": true
+  },
+  {
+    "case": "cpp full flow",
+    "resultA": "- generic: \"💰 GOLD +1,010 (총 보유: 3,850 G) · 레이팅 1405 (골드)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 9초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 1300 + 105\"\n- generic: WIN + 105\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 10초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 708 -103\"\n- generic: LOSE - 103\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 1등입니다.\n- generic: 10문제 중 10문제를 맞췄습니다.\n- button \"확인\"",
+    "resultB": "- generic: \"💰 GOLD +1,000 (총 보유: 3,800 G) · 레이팅 605 (브론즈)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 9초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 1300 + 105\"\n- generic: WIN + 105\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- button \"4\"\n- button \"5\"\n- button \"6\"\n- button \"7\"\n- button \"8\"\n- button \"9\"\n- button \"10\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 10초\"\n- generic: \"배틀 인게임 점수: 1,000\"\n- generic: \"레이팅: 708 -103\"\n- generic: LOSE - 103\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- generic: \"[시스템] 운영검증A1106 유저가 로비로 이동하였습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 2등입니다.\n- generic: 10문제 중 10문제를 맞췄습니다.\n- button \"확인\""
+  },
+  {
+    "title": "구분선",
+    "submitted": true
+  },
+  {
+    "case": "html full flow",
+    "resultA": "- generic: \"💰 GOLD +310 (총 보유: 4,160 G) · 레이팅 1440 (골드)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 31초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 1405 + 35\"\n- generic: WIN + 35\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 31초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 605 -33\"\n- generic: LOSE - 33\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 1등입니다.\n- generic: 3문제 중 3문제를 맞췄습니다.\n- button \"확인\"",
+    "resultB": "- generic: \"💰 GOLD +300 (총 보유: 4,100 G) · 레이팅 572 (브론즈)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 31초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 1405 + 35\"\n- generic: WIN + 35\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 31초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 605 -33\"\n- generic: LOSE - 33\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 2등입니다.\n- generic: 3문제 중 3문제를 맞췄습니다.\n- button \"확인\""
+  },
+  {
+    "case": "CSS refresh restores two blanks",
+    "passed": true
+  },
+  {
+    "title": "Flexbox 시작",
+    "submitted": true
+  },
+  {
+    "case": "css full flow",
+    "resultA": "- generic: \"💰 GOLD +310 (총 보유: 4,470 G) · 레이팅 1475 (골드)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 40초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 1440 + 35\"\n- generic: WIN + 35\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 41초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 572 -33\"\n- generic: LOSE - 33\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 1등입니다.\n- generic: 3문제 중 3문제를 맞췄습니다.\n- button \"확인\"",
+    "resultB": "- generic: \"💰 GOLD +300 (총 보유: 4,400 G) · 레이팅 539 (브론즈)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 40초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 1440 + 35\"\n- generic: WIN + 35\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 0분 41초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 572 -33\"\n- generic: LOSE - 33\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- generic: \"[시스템] 운영검증A1106 유저가 로비로 이동하였습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 2등입니다.\n- generic: 3문제 중 3문제를 맞췄습니다.\n- button \"확인\""
+  },
+  {
+    "case": "close tab and reopen original battle URL",
+    "result": "redirected to login",
+    "battleUrl": "http://127.0.0.1:15175/battle?fresh=1&roomId=9&lang=python&mode=1%2F1&count=3&maxPlayers=2&gameMode=normal&matchId=battle-9-9340a7dd-95d7-487e-b57c-e5f33c673938"
+  },
+  {
+    "case": "tab close, relogin, click STARTED room",
+    "passed": false,
+    "reason": "login returns to lobby; started/full room card does not allow returning participants"
+  },
+  {
+    "case": "after relogin manual original battle URL",
+    "passed": true,
+    "restored": "- generic: MY CODE\n- generic: python\n- generic: 2/3\n- generic: PROBLEM\n- generic: 사용자 정의 타입\n- generic: 새로운 데이터 타입(클래스)을 정의할 때 사용하는 키워드는?\n- textbox: class\n- generic: TIME LEFT\n- generic: 03:22\n- img \"세피\"\n- text: 🥉 운영검증B1106\n- generic: · Q2\n- generic: 1/3\n- generic: 33%\n- generic \"1번 문제\": ✓\n- generic \"2번 문제\"\n- generic \"3번 문제\"\n- generic: PROBLEM\n- generic: 사용자 정의 타입\n- generic: 새로운 데이터 타입(클래스)을 정의할 때 사용하는 키워드는?\n- textbox \"???\" [disabled]\n- button \"제출\"\n- button \"나가기\""
+  },
+  {
+    "case": "tab-close manual URL recovery completion",
+    "passed": true,
+    "result": "- generic: \"💰 GOLD +310 (총 보유: 4,780 G) · 레이팅 1510 (골드)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 3분 17초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 1475 + 35\"\n- generic: WIN + 35\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 3분 17초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 539 -33\"\n- generic: LOSE - 33\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 1등입니다.\n- generic: 3문제 중 3문제를 맞췄습니다.\n- button \"확인\""
+  },
+  {
+    "case": "explicit leave then rejoin via lobby room",
+    "passed": false,
+    "reason": "returns to waiting room; peer was removed from battle; match DB remains IN_PROGRESS",
+    "state": "- heading \"#010 - 명시퇴장 복귀검증1106\" [level=3]\n- generic: PUBLIC | 2/2명\n- img \"세피\"\n- generic: 🥉운영검증B1106\n- generic: HOST\n- generic: VS\n- img \"세피\"\n- generic: 🥇운영검증A1106\n- generic: WAITING\n- generic: \">> 1:1 진검승부 방이 생성되었습니다.\"\n- generic: \">> [운영검증A1106] 님이 입장하셨습니다.\"\n- generic: \">> [운영검증B1106] 님이 입장하셨습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"Enter Chat (Enter)\"\n- button \"SEND\"\n- generic: CHARACTER SELECT\n- button \"세피 세피\":\n  - img \"세피\"\n  - generic: 세피\n- button \"녹스 녹스\":\n  - img \"녹스\"\n  - generic: 녹스\n- button \"아크 아크\":\n  - img \"아크\"\n  - generic: 아크\n- button \"솔 솔\":\n  - img \"솔\"\n  - generic: 솔\n- generic: BATTLE SETTINGS\n- generic: 언어\n- generic: 🐍 Python\n- generic: 난이도\n- generic: EASY\n- generic: 문제 수\n- generic: 3 개\n- button \"💬 친구\"\n- button \"READY\"\n- button \"로비\""
+  },
+  {
+    "case": "after explicit rejoin manual old battle URL",
+    "passed": true,
+    "state": "- generic: MY CODE\n- generic: python\n- generic: 2/3\n- generic: PROBLEM\n- generic: 다중 분기 기본값\n- generic: 여러 조건을 나열한 분기문에서 어느 조건에도 맞지 않을 때 실행되는 기본 키워드는?\n- textbox: else\n- generic: TIME LEFT\n- generic: 04:23\n- img \"세피\"\n- text: 🥉 운영검증B1106\n- generic: · Q2\n- generic: 1/3\n- generic: 33%\n- generic \"1번 문제\": ✓\n- generic \"2번 문제\"\n- generic \"3번 문제\"\n- generic: PROBLEM\n- generic: 다중 분기 기본값\n- generic: 여러 조건을 나열한 분기문에서 어느 조건에도 맞지 않을 때 실행되는 기본 키워드는?\n- textbox \"???\" [disabled]\n- button \"제출\"\n- button \"나가기\""
+  },
+  {
+    "case": "explicit rejoin manual original URL completion",
+    "passed": true,
+    "result": "- generic: \"💰 GOLD +310 (총 보유: 5,090 G) · 레이팅 1545 (골드)\"\n- generic: WIN\n- img \"세피\"\n- generic: 운영검증A1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 52초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 1510 + 35\"\n- generic: WIN + 35\n- generic: LOSE\n- img \"세피\"\n- generic: 운영검증B1106\n- button \"1\"\n- button \"2\"\n- button \"3\"\n- generic: 문제를 확인하세요.\n- generic: \"총 풀이 시간: 1분 53초\"\n- generic: \"배틀 인게임 점수: 300\"\n- generic: \"레이팅: 506 -33\"\n- generic: LOSE - 33\n- generic: 총 2명 참가\n- button \"리뷰하기\"\n- generic: \"[시스템] 매치가 종료되었습니다.\"\n- combobox:\n  - option \"모두에게\" [selected]\n  - option \"친구에게\"\n- textbox \"메시지 입력...\"\n- button \"전송\"\n- button \"다시하기\"\n- button \"나가기\"\n- generic: 당신은 2명 중 1등입니다.\n- generic: 3문제 중 3문제를 맞췄습니다.\n- button \"확인\""
+  }
+]
