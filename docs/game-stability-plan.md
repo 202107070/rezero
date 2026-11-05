@@ -116,8 +116,8 @@
 | 2 | 항목 검증 통과 | 원본 168개 감사, 실행 변형 43개 실제 컴파일·실행 및 언어별 출력 일치 |
 | 3 | 항목 검증 통과 | 격리 템플릿 43개·오류/제한/격리 검증, 실제 빌드 API 통합 테스트 통과 |
 | 4 | 항목 검증 통과 | 동일 닉네임 동시 가입 201/409, DB 1행, 대소문자·마이그레이션 검증 통과 |
-| 5 | 진행 중 | 분리된 테스트 환경과 접속 적용 절차 |
-| 6 | 대기 | 전체 변경 통합 테스트 |
+| 5 | 학교 통과 / Pi 설정 차단 | 학교 사전 점검 통과. Pi는 cgroup_disable=memory로 격리 실행 불가. 운영 부팅 설정은 변경하지 않음 |
+| 6 | 진행 중 | 학교 전체 변경 통합 테스트. Pi 전체 실행은 메모리 cgroup 활성화 후 재검증 필요 |
 | 7 | 대기 | 실제 게임 전체 흐름 테스트 |
 
 ### 2026-11-05 작업 재개
@@ -169,3 +169,12 @@
 - `backend/scripts/nicknameUnique.js`는 기본 조회 전용이며 collation·중복·기존 인덱스를 확인한다. `--apply`를 명시해야 제약을 추가한다. 중복이 있으면 그룹/행 수만 보고하고 중단한다. 기존 SQL 안내도 조회 전용 절차로 변경했다.
 - 오류 매핑 단위 테스트 통과. 학교 별도 DB `test/testNicknameApi.js`: 같은 닉네임 동시 가입 201/409, 실제 DB 1행, 대소문자 동일 정책, 중복 자료가 있는 별도 fixture 테이블의 마이그레이션 거부 및 2행 보존, 빈 fixture 테이블 적용/재적용, 기존 unique 보유 users의 재실행 통과.
 - 학교/Pi 운영 users 인덱스와 닉네임 데이터는 변경하지 않았다. 테스트가 만든 자료는 별도 테스트 DB에만 존재한다.
+
+### 단계 5 분리 환경과 서버 차이
+
+- 학교와 Pi에 독립 테스트 디렉터리/DB 계정/DB/Valkey 16379/백엔드 18082를 준비했다. Pi 원본 `/home/dgyu/rezero`와 운영 DB·Valkey·8080·기존 이미지는 변경하지 않았다. 테스트별 시크릿은 각 호스트에서 새로 생성했다.
+- `docs/game-stability-deployment.md`에 이미지·닉네임 사전 점검/적용/프록시/팀원별 Tailscale 방화벽/복구 절차를 기록했다. 방화벽 명령은 실행하지 않았다.
+- `backend/scripts/gamePreflight.js`: DB/Valkey 조회, 닉네임 unique/collation, 언어별 문제 수, 실행기를 검사한다. 기존 connectRedis의 채팅 초기화 루틴을 호출하지 않는 조회 경로다.
+- 학교 x64 사전 점검 통과. 컨테이너 내부에서 UID 65534, memory.max 402653184, pids.max 64, /work 67108864 bytes를 실제 확인했다. 별도 Vite 15174와 SSH 터널의 프론트/API HTTP 200을 확인했다.
+- Pi arm64 이미지 빌드는 성공했지만 준비 검사는 실패했다. 실제 Podman 오류는 `open memory.max for writing: No such file or directory`. `/proc/cmdline`에 `cgroup_disable=memory`, `/proc/cgroups`의 memory enabled=0, cgroup.controllers에 memory 없음이 확인됐다. 기존 문제 자료/DB 차이가 아닌 Pi 커널 부팅 설정 차이다.
+- Pi의 운영 부팅 설정 변경/재부팅은 이 브랜치 검증에 포함하지 않는다. 자원 제한을 제거해 성공으로 처리하지 않는다. Pi의 격리 실행/게임 전체 통과는 미검증으로 남기며, 학교 통합/브라우저 검증은 계속한다.
