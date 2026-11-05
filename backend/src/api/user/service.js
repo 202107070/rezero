@@ -1,4 +1,6 @@
 import * as userModel from "./model.js";
+import { randomUUID } from 'node:crypto';
+import { mapSignupConflict } from './signupConflict.js';
 import { toSignupUserResponse, toUserResponse } from "./dto/userResponseDto.js";
 import { ERROR_CODE } from "#constants/errorCode.js";
 import { getSocket } from "#config/socketConfig.js";
@@ -84,12 +86,17 @@ export async function signupUser(input) {
     );
   }
 
-  const user = await createUser({
-    id: `user_${Date.now()}`,
-    username: input.username,
-    passwordHash: await hashPassword(input.password),
-    displayName: input.displayName,
-  });
+  let user;
+  try {
+    user = await createUser({
+      id: `user_${randomUUID()}`,
+      username: input.username,
+      passwordHash: await hashPassword(input.password),
+      displayName: input.displayName,
+    });
+  } catch (error) {
+    await mapSignupConflict(error, input, { isUsernameTaken, isDisplayNameTaken });
+  }
 
   try {
     await getModelFunction("grantStarterItems")(user.id, 5);

@@ -1,4 +1,6 @@
--- 기존 DB에 닉네임 유니크 제약을 추가한다.
--- 이미 중복 닉네임이 있으면 먼저 정리한 뒤 실행하세요.
-ALTER TABLE users
-  ADD UNIQUE KEY uq_users_display_name (display_name);
+-- 이 파일은 조회 전용이다. 기존 행을 삭제하거나 닉네임을 변경하지 않는다.
+-- 점검: node backend/scripts/nicknameUnique.js
+-- 검토 후 적용: node backend/scripts/nicknameUnique.js --apply
+-- JS 절차는 중복/collation/기존 인덱스를 검사하고 안전하게 재실행할 수 있다.
+SELECT COUNT(*) AS duplicate_group_size
+FROM users GROUP BY display_name HAVING COUNT(*) > 1;
