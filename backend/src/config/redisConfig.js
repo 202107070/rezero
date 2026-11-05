@@ -41,6 +41,8 @@ export async function connectRedis() {
   }
   await redisClient.ping();
   console.log("[Valkey] connected");
+  // Preserve existing messages when starting a versioned production release.
+  if (process.env.PRESERVE_CHAT_ON_START === "true") return;
   const { clearAllPersistedChatMessages } = await import(
     "#service/socketService.js"
   );

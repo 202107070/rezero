@@ -41,6 +41,8 @@ node backend/scripts/nicknameUnique.js --apply
 
 5. 프론트와 백엔드의 배포 버전을 함께 맞춘다. 저장/복원 API·문제 실행 메타데이터·실제 빌드 API가 연결되어 있어 한쪽만 구버전이면 정상 동작을 보장할 수 없다. 서버 재시작/서비스 등록은 실제 운영 실행 방식에 맞춰 별도로 검토한다.
 
+운영 기동에는 `PRESERVE_CHAT_ON_START=true`를 지정한다. 이 옵션은 기존 시작 시 채팅 캐시 정리만 생략하며 채팅 기능과 일반 개발 기동 기본값은 유지한다. `testRedisStartup.js`는 분리된 테스트 Valkey에서 현재/과거 형식의 채팅 키와 TTL 보존을 검증한다.
+
 ## 프론트 대상과 원격 접근
 
 Vite 개발 서버는 API와 Socket을 같은 `VITE_API_PROXY_TARGET`으로 전달한다. Electron 개발 실행도 같은 Vite 구성을 사용한다. 기본 대상은 최종 서버인 학교 `http://100.75.215.11:8080`이다. 별도 테스트 환경에서는 주소를 명시적으로 지정한다.
