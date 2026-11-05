@@ -1,3 +1,4 @@
+import { selectProblems } from "../problem/service.js";
 import * as roomModel from "./model.js";
 import { toRoomResponse } from "./dto/roomResponseDto.js";
 import { redisClient } from "#config/redisConfig.js";
@@ -635,6 +636,8 @@ export async function startRoom(roomId, userId) {
       "방장을 제외한 모든 참가자가 READY 상태여야 합니다.",
     );
   }
+
+  await selectProblems({ difficulty: room.difficulty, language: room.language, count: Number(room.problemCount) });
 
   const started = await roomModel.markRoomStarted(roomId);
 

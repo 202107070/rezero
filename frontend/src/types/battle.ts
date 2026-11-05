@@ -29,6 +29,8 @@ export interface BattleProblem {
   difficulty?: string;
   title?: string;
   question?: string;
+  language?: string;
+  executionKind?: 'body' | 'program';
   answer?: Record<string, string[]>;
   options?: string[] | null;
   correctIndex?: number | null;

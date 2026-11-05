@@ -87,7 +87,7 @@ export async function createBattle(roomId, userId, options = {}) {
   await battleModel.createMatchWithProblems({
     matchId,
     roomId: Number(room.id),
-    language: room.language,
+    language: problems[0].language || room.language,
     difficulty: room.difficulty,
     maxPlayers: Number(room.maxPlayers),
     roomMode: room.mode,

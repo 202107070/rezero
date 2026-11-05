@@ -5,6 +5,8 @@ function toPublicProblem(problem) {
     difficulty: problem.difficulty,
     title: problem.title,
     question: problem.question,
+    language: problem.language,
+    executionKind: problem.executionKind,
     options: problem.options,
     description: problem.description,
     input: problem.input,

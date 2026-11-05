@@ -175,7 +175,7 @@ export default function BattlePage() {
   const battleCount = String(battleMeta.count ?? '5');
   const roomRoster = Array.isArray(battleMeta.roomRoster) ? battleMeta.roomRoster : undefined;
   const maxPlayersParam = params.get('maxPlayers') || '2';
-  const lang = params.get('lang') || 'JAVA';
+  const lang = String(battleMeta.language || params.get('lang') || 'JAVA');
   const langKey = getLangKey(lang);
   const langLabel = getLangLabel(langKey);
   const templateCode = DEFAULT_TEMPLATE[langKey] || DEFAULT_TEMPLATE.JAVA;

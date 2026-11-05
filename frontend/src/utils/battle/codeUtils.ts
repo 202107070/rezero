@@ -1,8 +1,7 @@
-import { renderForRoom } from '../build/previewRuntime';
 
 export function countBlanks(partialCode: string): number {
   if (!partialCode) return 0;
-  const matches = partialCode.match(/[a-zA-Z0-9_]*_____/g);
+  const matches = partialCode.match(/_{5,}/g);
   return matches ? matches.length : 0;
 }
 
@@ -10,7 +9,7 @@ export function assembleCode(partialCode: string, blanks: string[]): string {
   const codeStr = typeof partialCode === 'string' ? partialCode : '';
   if (!codeStr) return '';
   let blankIdx = 0;
-  return codeStr.replace(/[a-zA-Z0-9_]*_____/g, () => {
+  return codeStr.replace(/_{5,}/g, () => {
     const ans = blanks[blankIdx] || '';
     blankIdx += 1;
     return ans;
@@ -31,7 +30,7 @@ export function buildPreviewSource(question: string, blanks: string[], lang: str
   const key = getLangKey(lang);
   const filled = assembleCode(question || '', blanks);
   if (key === 'CSS' || key === 'HTML') return filled;
-  return renderForRoom(filled, key);
+  return filled;
 }
 
 export function getLangLabel(langKey: string): string {
