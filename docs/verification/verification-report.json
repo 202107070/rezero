@@ -253,5 +253,18 @@
   "notes": [
     "The four DELETE 401 entries in the earlier C++/HTML log were found and removed before the final exit check.",
     "First two browser matches exposed and helped reproduce issues fixed before the final passes."
-  ]
+  ],
+  "finalCoreCommit": "0ca2bea",
+  "sameRuntimeSourceOnMacSchoolPi": true,
+  "piFinalCheck": {
+    "backendUnitTests": 16,
+    "passed": 16,
+    "preflightExit": 1,
+    "kernel": "6.6.77-8.el10.altarch.aarch64+4k",
+    "runner": "unavailable",
+    "reason": "memory cgroup disabled; memory.max missing",
+    "bootInputFile": "/boot/efi/cmdline.txt",
+    "bootFileChanged": false,
+    "rebooted": false
+  }
 }
