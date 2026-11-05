@@ -163,8 +163,8 @@ export default function ResultPage() {
   };
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('roomId') || '';
-  const sessionId = getSessionId(roomId);
   const matchId = searchParams.get('matchId') || String(getBattleSettings().matchId || '');
+  const sessionId = getSessionId(roomId, matchId);
 
   const submission = useMemo((): BattleSubmission => getBattleSubmission<BattleSubmission>(), []);
 

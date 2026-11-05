@@ -1,5 +1,32 @@
 import type { BattleProblem, RoomUser } from '../types/battle';
 import type { FinalRankingSnapshot } from '../utils/battle/rankUtils';
+import { getAccessToken } from './apiClient';
+
+function contextKey(): string {
+  try {
+    const payload = getAccessToken()?.split('.')[1] || '';
+    const owner = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))).sub;
+    return `rezero:battle-context:v1:${encodeURIComponent(String(owner))}`;
+  } catch { return 'rezero:battle-context:v1:anonymous'; }
+}
+
+let contextOwner = '';
+function readContext(): void {
+  const owner = contextKey();
+  if (contextOwner === owner) return;
+  contextOwner = owner;
+  battleProblems = null;
+  battleSettings = null;
+  try {
+    const data = JSON.parse(sessionStorage.getItem(owner) || 'null');
+    if (data?.settings && typeof data.settings === 'object') battleSettings = data.settings;
+    if (Array.isArray(data?.problems)) battleProblems = data.problems;
+  } catch { /* 서버의 경기 정보에서 복원 */ }
+}
+function writeContext(): void {
+  try { sessionStorage.setItem(contextKey(), JSON.stringify({ settings: battleSettings, problems: battleProblems })); }
+  catch { /* 서버 복원 경로 유지 */ }
+}
 
 let battleProblems: BattleProblem[] | null = null;
 let battleSettings: Record<string, unknown> | null = null;
@@ -15,19 +42,25 @@ const battleSubmittedProblems = new Map<string, number[]>();
 const battleFinalRankings = new Map<string, FinalRankingSnapshot>();
 
 export function getBattleProblems(): BattleProblem[] | null {
+  readContext();
   return battleProblems;
 }
 
 export function setBattleProblems(problems: BattleProblem[]): void {
+  readContext();
   battleProblems = problems;
+  writeContext();
 }
 
 export function getBattleSettings(): Record<string, unknown> {
+  readContext();
   return battleSettings ?? {};
 }
 
 export function setBattleSettings(settings: Record<string, unknown>): void {
+  readContext();
   battleSettings = settings;
+  writeContext();
 }
 
 export function getBattleSubmission<T = Record<string, unknown>>(): T {
@@ -122,6 +155,7 @@ export function clearActiveBattleGlobals(): void {
   battleSubmission = null;
   opponentBattleCode = null;
   roomUsers = null;
+  try { sessionStorage.removeItem(contextKey()); } catch { /* 메모리 초기화는 유지 */ }
 }
 
 export function clearBattleSessionData(sessionId: string): void {

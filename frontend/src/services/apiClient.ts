@@ -84,6 +84,7 @@ interface ErrorBody {
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
+  handling: { background?: boolean } = {},
 ): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has('Content-Type')) {
@@ -103,7 +104,7 @@ export async function apiRequest<T>(
     });
   } catch {
     const error = new ApiError(0, 'NETWORK_ERROR', '서버에 연결할 수 없습니다.');
-    notifyServerDown();
+    if (!handling.background) notifyServerDown();
     throw error;
   }
 
@@ -121,10 +122,10 @@ export async function apiRequest<T>(
     const body = (payload || {}) as ErrorBody;
     const code = body.error?.code || 'REQUEST_FAILED';
     if (response.status === 401 && (code === 'TOKEN_EXPIRED' || code === 'UNAUTHORIZED' || code === 'INVALID_TOKEN' || code === 'TOKEN_INVALID')) {
-      dispatchAuthExpired(code);
+      if (!handling.background) dispatchAuthExpired(code);
     }
     if (response.status === 0 || response.status >= 502) {
-      notifyServerDown();
+      if (!handling.background) notifyServerDown();
     }
     throw new ApiError(
       response.status,

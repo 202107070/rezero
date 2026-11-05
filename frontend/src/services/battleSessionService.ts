@@ -1,5 +1,6 @@
 import type { BattleProblem, RoomUser } from '../types/battle';
 import { getCurrentUserId } from './authService';
+import { preserveDraft, saveDraft, isCurrentDraft } from './battleDraftClient';
 import { clearKickedCount } from './roomStore';
 import type { DemoBot } from '../utils/battle/demoBots';
 import type { FinalRankingSnapshot } from '../utils/battle/rankUtils';
@@ -27,17 +28,22 @@ function shouldSyncBackend(): boolean {
   return !import.meta.env.DEV || import.meta.env.VITE_SYNC_BACKEND === 'true';
 }
 
-export function getSessionId(roomId: string): string {
-  return roomId ? `battle-${roomId}` : 'battle-solo';
+export function getSessionId(roomId: string, matchId?: string): string {
+  return matchId ? `battle-${getCurrentUserId()}-${matchId}` : roomId ? `battle-${roomId}` : 'battle-solo';
 }
 
 export async function persistBattleSession(params: {
   sessionId: string;
+  matchId?: string;
   roomId: string;
   langKey: string;
   currentIndex: number;
   remaining: number;
   answers: string[];
+  blankAnswers?: string[][];
+  selectedOptions?: Record<number, number>;
+  solveTimes?: Record<number, number>;
+  buildsUsed?: Record<number, number>;
   problems: BattleProblem[];
   sessionSavedSnapshot: string;
   shouldCommit: boolean;
@@ -68,27 +74,18 @@ export async function persistBattleSession(params: {
       updatedAt: new Date().toISOString(),
     });
 
-    if (shouldSyncBackend()) {
-      await fetch('/api/v1/build/session/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: params.sessionId,
-          userId: getCurrentUserId(),
-          language: params.langKey,
-          roomId: params.roomId,
-          status: 'BATTLE',
-          currentIndex: String(params.currentIndex),
-          remaining: String(params.remaining),
-          problems: params.problems.map((problem, index) => ({
-            title: problem?.title || '',
-            description: problem?.description || '',
-            input: problem?.input || '',
-            output: problem?.output || '',
-            code: params.answers[index] || '',
-          })),
-        }),
+    if (params.matchId) {
+      const userId = getCurrentUserId();
+      const draft = preserveDraft(userId, {
+        matchId: params.matchId, currentIndex: params.currentIndex, codes: params.answers,
+        blankAnswers: params.problems.map((_, i) => params.blankAnswers?.[i] || []),
+        selectedOptions: params.selectedOptions || {}, remaining: params.remaining, solveTimes: params.solveTimes, buildsUsed: params.buildsUsed,
       });
+      const saved = shouldSyncBackend() && await saveDraft(userId, draft);
+      if (!isCurrentDraft(userId, draft)) return;
+      params.onStatus(saved ? 'saved' : 'unsaved');
+      if (saved) params.onSnapshotUpdate?.(snapshot);
+      return;
     }
 
     if (params.shouldCommit) {

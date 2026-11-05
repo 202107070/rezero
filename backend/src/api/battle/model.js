@@ -214,6 +214,8 @@ export async function findMatchParticipantsForResult(matchId) {
        u.username AS username,
        u.display_name AS displayName,
        u.rating_score AS ratingScore,
+       rp.slot_index AS slotIndex,
+       rp.is_host AS isHost,
        rp.\`character\` AS avatar
      FROM matches m
      JOIN room_participants rp ON rp.room_id = m.room_id

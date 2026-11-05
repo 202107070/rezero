@@ -1,5 +1,6 @@
 import { useServerDownChat } from '../../hooks/useServerDownChat';
 import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
+import { closeDraftWriter, loadServerDraft, preserveDraft, readLocalDraft, rememberDraft } from '../../services/battleDraftClient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BattleChatPanel, { type ChatMessage } from '../../components/battle/BattleChatPanel';
@@ -152,7 +153,7 @@ export default function BattlePage() {
   const freshStart = params.get('fresh') === '1';
   const roomId = params.get('roomId') || '';
   const roomMode = params.get('mode') || '1/1';
-  const battleMeta = useMemo(() => getBattleSettings(), []);
+  const [battleMeta, setBattleMeta] = useState<Record<string, unknown>>(() => getBattleSettings());
   const matchId = params.get('matchId') || String(battleMeta.matchId || '');
   const isLiveMatch = Boolean(matchId);
   const gameMode = params.get('gameMode') || battleMeta.gameMode || 'item';
@@ -178,7 +179,7 @@ export default function BattlePage() {
   const langKey = getLangKey(lang);
   const langLabel = getLangLabel(langKey);
   const templateCode = DEFAULT_TEMPLATE[langKey] || DEFAULT_TEMPLATE.JAVA;
-  const sessionId = getSessionId(roomId);
+  const sessionId = getSessionId(roomId, matchId);
   const demoIsVersusMany = roomMode !== '1/1';
 
   const [problems, setProblems] = useState<BattleProblem[]>([]);
@@ -284,6 +285,9 @@ export default function BattlePage() {
   const clearFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialSessionLoadedRef = useRef(false);
+  const [sessionReady, setSessionReady] = useState(!isLiveMatch);
+  const remainingRef = useRef(remaining);
+  remainingRef.current = remaining;
   const initialSessionSaveQueuedRef = useRef(false);
   const lastTimedPersistRemainingRef = useRef(-1);
   const itemInventoryInitialized = useRef(false);
@@ -496,13 +500,19 @@ export default function BattlePage() {
 
   const doPersistSession = useCallback(
     async (nextAnswers: string[], shouldCommit = false) => {
+      if (!initialSessionLoadedRef.current || problems.length === 0 || battleFinished || leavingToLobbyRef.current || demoSpectating || spectatorLocked) return;
       await persistBattleSession({
         sessionId,
+        matchId: matchId || undefined,
         roomId,
         langKey,
         currentIndex,
-        remaining,
+        remaining: remainingRef.current,
         answers: nextAnswers,
+        blankAnswers,
+        selectedOptions: selectedOptionByProblem,
+        solveTimes,
+        buildsUsed: buildsUsedByProblem,
         problems,
         sessionSavedSnapshot,
         shouldCommit,
@@ -513,7 +523,7 @@ export default function BattlePage() {
         },
       });
     },
-    [sessionId, roomId, langKey, currentIndex, remaining, problems, sessionSavedSnapshot],
+    [sessionId, matchId, roomId, langKey, currentIndex, problems, sessionSavedSnapshot, blankAnswers, selectedOptionByProblem, solveTimes, buildsUsedByProblem, battleFinished, demoSpectating, spectatorLocked],
   );
 
   const doPersistSubmission = useCallback(
@@ -571,6 +581,71 @@ export default function BattlePage() {
   );
 
   useEffect(() => {
+    if (isLiveMatch) {
+      let cancelled = false;
+      let retryTimer: ReturnType<typeof setTimeout> | undefined;
+      const userId = getCurrentUserId();
+      async function restoreLive(attempt = 0) {
+        try {
+          const result = await loadServerDraft(matchId);
+          if (cancelled) return;
+          if (result.match.status !== 'IN_PROGRESS') {
+            navigate(`${ROUTES.RESULT}?roomId=${roomId}&matchId=${encodeURIComponent(matchId)}`, { replace: true });
+            return;
+          }
+          const local = readLocalDraft(userId, matchId);
+          const draft = local && local.version > (result.draft?.version || 0) ? local : result.draft;
+          if (draft && draft === result.draft) rememberDraft(userId, { ...draft, localSavedAt: Date.now(), remaining: result.remainingSeconds });
+          const loadedProblems = normalizeBattleProblems(result.match.problems);
+          if (loadedProblems.length === 0) throw new Error('경기 문제를 불러오지 못했습니다.');
+          const index = Math.max(0, Math.min(draft?.currentIndex || 0, loadedProblems.length - 1));
+          const blanks = loadedProblems.map((_, i) => draft?.blankAnswers?.[i] || []);
+          const selections = { ...draft?.selectedOptions };
+          const submitted: ProblemResultsMap = {};
+          for (const row of result.progress.submissions) {
+            submitted[row.index] = row.isCorrect;
+            blanks[row.index] = row.answers;
+            if (row.selectedOption !== null) selections[row.index] = row.selectedOption;
+          }
+          setProblems(loadedProblems);
+          setAnswers(draft?.codes || loadedProblems.map(p => assembleCode(p.question || '', [])));
+          setBlankAnswers(blanks);
+          setSelectedOptionByProblem(selections);
+          setSelectedOption(selections[index] ?? null);
+          setCurrentIndex(index);
+          setProblemResults(submitted);
+          setLocalSolvedProblems(Object.entries(submitted).filter(([, correct]) => correct).map(([i]) => Number(i)));
+          setProblemSolved(submitted[index] !== undefined);
+          setIngameScore(result.progress.score);
+          setSolveTimes(draft?.solveTimes || {});
+          setBuildsUsedByProblem(draft?.buildsUsed || {});
+          if (result.progress.finished) {
+            setDemoSpectating(true);
+            setSpectatorLocked(true);
+          }
+          const localRemaining = local && draft === local ? Math.max(0, local.remaining - Math.floor((Date.now() - local.localSavedAt) / 1000)) : result.remainingSeconds;
+          setRemaining(Math.min(result.remainingSeconds, localRemaining));
+          setElapsedSec(Math.max(0, result.match.roundSeconds - result.remainingSeconds));
+          const metadata = { ...getBattleSettings(), ...result.match, roundSeconds: result.match.roundSeconds, diff: result.match.difficulty, count: String(result.match.problemCount), roomRoster: result.roomRoster };
+          setBattleSettings(metadata);
+          setBattleMeta(metadata);
+          setSessionSavedSnapshot((draft?.codes || []).join('||'));
+          initialSessionLoadedRef.current = true;
+          initialSessionSaveQueuedRef.current = false;
+          setSessionReady(true);
+        } catch {
+          if (!cancelled) {
+            if (attempt < 2) {
+              retryTimer = setTimeout(() => { void restoreLive(attempt + 1); }, 1500);
+            } else {
+              setLeaveAlertMessage('경기 정보를 복구하는 중입니다. 연결 상태를 확인한 뒤 새로고침해 주세요. 작성한 답안은 임시 보관됩니다.');
+            }
+          }
+        }
+      }
+      void restoreLive();
+      return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
+    }
     const fallback: BattleProblem = {
       id: 'FB_FALLBACK',
       type: 'fill_blank',
@@ -720,13 +795,13 @@ export default function BattlePage() {
   }, [showClearFlash]);
 
   useEffect(() => {
-    if (battleFinished) return;
+    if (battleFinished || !sessionReady) return;
     const timer = setInterval(() => {
       setRemaining((prev) => (prev > 0 ? prev - 1 : 0));
       setElapsedSec((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, [battleFinished]);
+  }, [battleFinished, sessionReady]);
 
   useEffect(() => {
     LobbyBGM.stop();
@@ -1511,11 +1586,13 @@ export default function BattlePage() {
   ]);
   useEffect(() => {
     const handleBeforeUnload = () => {
-      doPersistSession(answers).catch(() => {});
+      if (isLiveMatch && initialSessionLoadedRef.current) preserveDraft(getCurrentUserId(), {
+        matchId, currentIndex, codes: answers, blankAnswers, selectedOptions: selectedOptionByProblem, remaining: remainingRef.current, solveTimes, buildsUsed: buildsUsedByProblem,
+      });
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [answers, doPersistSession]);
+  }, [answers, isLiveMatch, matchId, currentIndex, blankAnswers, selectedOptionByProblem, solveTimes, buildsUsedByProblem]);
 
   useEffect(() => {
     return () => {
@@ -1550,9 +1627,9 @@ export default function BattlePage() {
     }
 
     const dirty = currentSnapshot !== sessionSavedSnapshot;
-    setSaveStatus(dirty ? 'unsaved' : 'saved');
+    if (dirty) setSaveStatus('unsaved');
 
-    if (!dirty) return;
+    if (!dirty && !isLiveMatch) return;
 
     if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
     saveDebounceRef.current = setTimeout(() => {
@@ -1562,12 +1639,11 @@ export default function BattlePage() {
     return () => {
       if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
     };
-  }, [answers, sessionSavedSnapshot, problems.length, doPersistSession]);
+  }, [answers, sessionSavedSnapshot, problems.length, doPersistSession, isLiveMatch]);
 
   useEffect(() => {
-    if (!initialSessionLoadedRef.current) return;
-    doPersistSession(answers).catch(() => {});
-  }, [currentIndex, doPersistSession, answers]);
+    if (battleFinished && matchId) closeDraftWriter(getCurrentUserId(), matchId);
+  }, [battleFinished, matchId]);
 
   const queueAdvanceProblem = (_reason = 'time') => {
     if (advanceQueuedRef.current || battleFinished) return;
