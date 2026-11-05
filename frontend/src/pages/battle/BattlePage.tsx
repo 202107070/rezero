@@ -1121,8 +1121,9 @@ export default function BattlePage() {
         unsubs.push(onRoomEvent('connect', () => {
           if (!cancelled) void joinRoomSocket(roomId).catch(() => undefined);
         }));
-        await joinRoomSocket(roomId);
-        if (cancelled) return;
+        // A reconnect can lose the acknowledgement for the previous socket.
+        // Bind game events immediately; the connect listener retries room entry.
+        void joinRoomSocket(roomId).catch(() => undefined);
 
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.ITEM_USED, (payload: BattleItemUsedPayload) => {
