@@ -27,3 +27,14 @@ test('a compiler error or HTTP failure never produces a success log', async () =
   assert.equal(await runCodeBuild('bad', 'PYTHON', line => logs.push(line.text)), null);
   assert.ok(!logs.some(line => line.includes('SUCCESS')));
 });
+test('HTTP origins without crypto.randomUUID can still create idempotent build requests', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { getRandomValues: (bytes: Uint8Array) => bytes.fill(42) } });
+  try {
+    globalThis.fetch = async (_url, options) => {
+      assert.match(JSON.parse(String(options?.body)).requestId, /^[a-f0-9]{32}$/);
+      return new Response(JSON.stringify({ success: true, status: 'SUCCESS', output: '', error: null, executionTime: 1, buildsUsed: 1, buildsAllowed: 3 }));
+    };
+    assert.equal((await runCodeBuild('print(1)', 'PYTHON', () => {}))?.success, true);
+  } finally { if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor); }
+});

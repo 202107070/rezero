@@ -367,6 +367,7 @@ export default function BattlePage() {
     assembledBuildCodeRef.current = '';
     buildTokenRef.current += 1;
     setIsBuilding(false);
+    return () => { buildTokenRef.current += 1; };
   }, [currentIndex]);
 
   const handleBuildCodeChange = useCallback(
@@ -396,9 +397,9 @@ export default function BattlePage() {
 
     try {
       const result = await runCodeBuild(code, buildLangKey, appendLog, { cancelled }, isLiveMatch ? { matchId, problemIndex: currentIndex } : undefined);
-      if (result && !cancelled() && isLiveMatch) {
-        setBuildsUsedByProblem(prev => ({ ...prev, [currentIndex]: result.buildsUsed }));
-        setBuildBonusByProblem(prev => ({ ...prev, [currentIndex]: Math.max(0, result.buildsAllowed - BATTLE_BUILD_LIMIT) }));
+      if (result && isLiveMatch) {
+        setBuildsUsedByProblem(prev => ({ ...prev, [currentIndex]: Math.max(prev[currentIndex] || 0, result.buildsUsed) }));
+        setBuildBonusByProblem(prev => ({ ...prev, [currentIndex]: Math.max(prev[currentIndex] || 0, result.buildsAllowed - BATTLE_BUILD_LIMIT) }));
       }
     } finally {
       if (!cancelled()) setIsBuilding(false);

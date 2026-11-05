@@ -1,8 +1,10 @@
+import { assertIsolatedTestTarget } from "./isolatedTestGuard.js";
 import { pool } from "#config/dbConfig.js";
 import { connectRedis, redisClient } from "#config/redisConfig.js";
 import { io } from "socket.io-client";
 
-const BASE_URL = process.env.TEST_BASE_URL || "http://127.0.0.1:8080";
+const BASE_URL = process.env.TEST_BASE_URL || "http://127.0.0.1:18082";
+assertIsolatedTestTarget(BASE_URL);
 const createdUserIds = [];
 const createdProblemIds = [];
 let createdRoomId;
@@ -83,11 +85,11 @@ function waitForGameEnded(socket) {
 }
 
 async function signup(label) {
-  const suffix = Date.now() + "_" + label;
+  const suffix = Date.now().toString(36) + "_" + label;
   const result = await request("/api/v1/auth/signup", {
     method: "POST",
     body: {
-      username: "result_" + suffix,
+      username: "res_" + suffix,
       password: "password123!",
       displayName: "결과테스트" + label,
     },
@@ -158,6 +160,12 @@ async function createStartedMatch(host, guest) {
   });
   assert(matchResult.response.status === 201, "경기 생성에 실패했습니다.");
   createdMatchId = matchResult.data.matchId;
+  // Pin only this test match to this test's fixtures; leave the shared question bank intact.
+  for (let index = 0; index < createdProblemIds.length; index++) {
+    const snapshot = { id: createdProblemIds[index], type: 'short_answer', difficulty: 'easy', question: '정답을 입력하세요.', answer: { JAVA: ['answer' + index] }, language: 'JAVA' };
+    await pool.query('UPDATE match_problems SET problem_id=?, problem_snapshot=? WHERE match_id=? AND problem_index=?', [snapshot.id, JSON.stringify(snapshot), createdMatchId, index]);
+    matchResult.data.problems[index] = snapshot;
+  }
 }
 
 function submitBody(score, solvedProblems, completionTime) {
@@ -247,8 +255,8 @@ async function runTest() {
   });
   assert(hostResult.response.status === 200, "최종 결과 저장에 실패했습니다.");
   assert(hostResult.data.resultReady === true, "모든 참가자 완료 후 결과가 확정되지 않았습니다.");
-  assert(hostResult.data.earnedGold === 300, "골드 보상 계산에 실패했습니다.");
-  assert(hostResult.data.ratingDelta === 30, "레이팅 보상 계산에 실패했습니다.");
+  assert(hostResult.data.earnedGold === 310, "골드 보상 계산에 실패했습니다.");
+  assert(hostResult.data.ratingDelta === 35, "레이팅 보상 계산에 실패했습니다.");
   assert(hostResult.data.newTitleIds.includes("rookie"), "첫 승리 칭호가 지급되지 않았습니다.");
   console.log("PASS: 순위, 골드, 레이팅, 칭호 저장");
 
@@ -270,6 +278,14 @@ async function runTest() {
   assert(rankingResult.data.players.length === 2, "최종 순위 인원이 올바르지 않습니다.");
   assert(rankingResult.data.players[0].id === host.id, "점수 순위가 올바르지 않습니다.");
   console.log("PASS: 최종 순위 재조회");
+  const rewardBefore = await pool.query('SELECT id, gold, rating_score FROM users WHERE id IN (?, ?) ORDER BY id', [host.id, guest.id]);
+  const retries = await Promise.all([host, guest, host].map(person => request('/api/v1/matches/' + createdMatchId + '/submit', { method: 'POST', token: person.token, body: submitBody(300, [0, 1, 2], 120) })));
+  assert(retries.every(result => result.response.status === 200 && result.data.resultReady), '종료 경기 중복 제출이 실패했습니다.');
+  const rewardAfter = await pool.query('SELECT id, gold, rating_score FROM users WHERE id IN (?, ?) ORDER BY id', [host.id, guest.id]);
+  assert(JSON.stringify(rewardBefore) === JSON.stringify(rewardAfter), '중복 요청으로 보상이 다시 지급됐습니다.');
+  const rows = await pool.query('SELECT COUNT(*) AS count FROM match_rankings WHERE match_id=?', [createdMatchId]);
+  assert(Number(rows[0].count) === 1, '순위가 중복 저장됐습니다.');
+  console.log('PASS: 반복·동시 재제출에도 골드/레이팅/순위 1회 저장');
   console.log("--- 경기 결과 API 통합 테스트 완료 ---");
 }
 

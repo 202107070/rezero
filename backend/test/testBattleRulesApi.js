@@ -1,7 +1,9 @@
+import { assertIsolatedTestTarget } from "./isolatedTestGuard.js";
 import { pool } from "#config/dbConfig.js";
 import { connectRedis, redisClient } from "#config/redisConfig.js";
 
-const BASE_URL = process.env.TEST_BASE_URL || "http://127.0.0.1:8081";
+const BASE_URL = process.env.TEST_BASE_URL || "http://127.0.0.1:18082";
+assertIsolatedTestTarget(BASE_URL);
 const createdUserIds = [];
 const createdProblemIds = [];
 let createdRoomId;
@@ -29,7 +31,7 @@ async function request(path, options = {}) {
 }
 
 async function signup(label) {
-  const suffix = Date.now() + "_" + label;
+  const suffix = Date.now().toString(36) + "_" + label;
   const result = await request("/api/v1/auth/signup", {
     method: "POST",
     body: {
@@ -152,6 +154,12 @@ async function runTest() {
   });
   assert(matchResult.response.status === 201, "경기 생성에 실패했습니다.");
   createdMatchId = matchResult.data.matchId;
+  // Pin only this test match to this test's fixtures; leave the shared question bank intact.
+  for (let index = 0; index < createdProblemIds.length; index++) {
+    const snapshot = { id: createdProblemIds[index], type: 'short_answer', difficulty: 'easy', question: '정답을 입력하세요.', answer: { JAVA: ['answer' + index] }, language: 'JAVA' };
+    await pool.query('UPDATE match_problems SET problem_id=?, problem_snapshot=? WHERE match_id=? AND problem_index=?', [snapshot.id, JSON.stringify(snapshot), createdMatchId, index]);
+    matchResult.data.problems[index] = snapshot;
+  }
 
   const problemId = matchResult.data.problems[0].id;
   const answerIndex = createdProblemIds.indexOf(problemId);
@@ -182,7 +190,7 @@ async function runTest() {
   console.log("PASS: 중복 제출 차단");
 
   await pool.query(
-    "INSERT INTO user_items (user_id, item_key, quantity) VALUES (?, 'paint', 1)",
+    "INSERT INTO user_items (user_id, item_key, quantity) VALUES (?, 'paint', 1) ON DUPLICATE KEY UPDATE quantity=1",
     [guest.id],
   );
 

@@ -14,13 +14,14 @@ export interface BuildResult {
 export async function runCodeBuild(code: string, language: string, onLine: (line: BuildLogLine) => void,
   signal?: { cancelled: () => boolean }, context?: { matchId: string; problemIndex: number }): Promise<BuildResult | null> {
   const emit = (level: BuildLogLevel, text: string) => { if (!signal?.cancelled()) onLine({ level, text }); };
-  const requestId = crypto.randomUUID();
+  const requestId = typeof crypto.randomUUID === 'function' ? crypto.randomUUID()
+    : Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
   emit('info', `[build] ${language} 실행 중...`);
   let result: BuildResult;
   try {
     for (let attempt = 0; ; attempt++) {
       try {
-        result = await apiRequest<BuildResult>('/build/execute', { method: 'POST', body: JSON.stringify({ code, language, requestId, ...context }), signal: AbortSignal.timeout(25000) }, { background: true });
+        result = await apiRequest<BuildResult>('/build/execute', { method: 'POST', body: JSON.stringify({ code, language, requestId, ...context }), signal: AbortSignal.timeout(60000) }, { background: true });
         break;
       } catch (error) {
         if (attempt < 1 && error instanceof ApiError && (error.status === 0 || error.code === 'BUILD_IN_PROGRESS')) {

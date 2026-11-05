@@ -8,8 +8,28 @@ import { randomUUID } from 'node:crypto';
 const execute = promisify(execFile);
 export function createIsolatedRunner({ exec = execute, image = process.env.RUNNER_IMAGE || 'localhost/rezero-runner:1', binary = process.env.RUNNER_BINARY || 'podman', temporaryRoot = process.env.RUNNER_TEMP_DIR || tmpdir() } = {}) {
   let active = 0;
+  const waiting = [];
+  async function acquire() {
+    if (active < 2) { active++; return true; }
+    if (waiting.length >= 24) return false;
+    return new Promise(resolve => {
+      const entry = { resolve, timer: null };
+      entry.timer = setTimeout(() => {
+        const index = waiting.indexOf(entry);
+        if (index >= 0) waiting.splice(index, 1);
+        resolve(false);
+      }, 30000);
+      waiting.push(entry);
+    });
+  }
+  function release() {
+    const entry = waiting.shift();
+    if (entry) { clearTimeout(entry.timer); entry.resolve(true); }
+    else active--;
+  }
   let checkedAt = 0;
   let readiness;
+  let readinessError = '';
   async function ready() {
     if (readiness && Date.now() - checkedAt < 10000) return readiness;
     checkedAt = Date.now();
@@ -17,21 +37,22 @@ export function createIsolatedRunner({ exec = execute, image = process.env.RUNNE
       const name = `rezero-ready-${randomUUID()}`;
       try {
         await exec(binary, ['run', '--rm', '--pull=never', '--name', name, '--network=none', '--read-only', '--user', '65534:65534', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--cpus=1', '--memory=384m', '--pids-limit=64', '--entrypoint', '/usr/bin/python3', image, '-I', '-c', 'print("ready")'], { timeout: 5000, maxBuffer: 2048 });
+        readinessError = '';
         return true;
-      } catch { return false; }
+      } catch (error) { readinessError = String(error.stderr || error.message).slice(0, 2048); return false; }
       finally { await exec(binary, ['rm', '--force', name], { timeout: 5000, maxBuffer: 2048 }).catch(() => undefined); }
     })();
     return readiness;
   }
   return {
     ready,
+    getReadinessError: () => readinessError,
     async run({ code, language }) {
       if (!['JAVA', 'CPP', 'PYTHON'].includes(language) || typeof code !== 'string' || Buffer.byteLength(code) > 32000) {
         return { success: false, status: 'INVALID_SOURCE', output: '', error: '소스 코드 또는 언어가 올바르지 않습니다.', executionTime: 0 };
       }
       if (!await ready()) return { success: false, status: 'UNAVAILABLE', output: '', error: '실행 환경이 준비되지 않았습니다.', executionTime: 0 };
-      if (active >= 2) return { success: false, status: 'BUSY', output: '', error: '실행 요청이 많습니다. 잠시 후 다시 시도해 주세요.', executionTime: 0 };
-      active++;
+      if (!await acquire()) return { success: false, status: 'BUSY', output: '', error: '실행 요청이 많습니다. 잠시 후 다시 시도해 주세요.', executionTime: 0 };
       const started = Date.now();
       const name = `rezero-run-${randomUUID()}`;
       let directory;
@@ -62,7 +83,7 @@ export function createIsolatedRunner({ exec = execute, image = process.env.RUNNE
         // A killed Podman client can leave its container alive. Remove only our random name.
         await exec(binary, ['rm', '--force', name], { timeout: 5000, maxBuffer: 2048 }).catch(() => undefined);
         if (directory) await rm(directory, { recursive: true, force: true });
-        active--;
+        release();
       }
     },
   };

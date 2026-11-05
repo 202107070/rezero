@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { BuildCodeEditor } from '../build/BuildCodeEditor';
-import type { BuildLogLine } from '../../utils/build/buildSimulator';
+import type { BuildLogLine } from '../../services/buildExecutionClient';
 
 interface BattleBuildPanelProps {
   code: string;
