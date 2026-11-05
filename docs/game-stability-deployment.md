@@ -81,4 +81,12 @@ sudo firewall-cmd --permanent --zone="$ZONE" --remove-rich-rule="rule family=ipv
 
 2026-11-05 별도 테스트에서 arm64 실행 이미지 빌드/DB/Valkey는 정상이다. 커널 부팅 옵션의 `cgroup_disable=memory` 때문에 `/sys/fs/cgroup/cgroup.controllers`에 memory가 없고 `/proc/cgroups`에서 memory enabled=0이다. 메모리 제한 컨테이너가 시작되지 않는다. 이 상태에서 실행기는 준비 실패를 반환하고 코드 경기 시작을 차단한다.
 
-해결에는 부팅 옵션의 메모리 cgroup 비활성화 제거 및 해당 OS의 memory cgroup 활성화 확인, 재부팅이 필요하다. 운영 부팅 설정과 재부팅은 실행하지 않았다. 원본 설정 백업·실제 부팅 파일 확인·재부팅 시점 검토 후 별도로 적용해야 한다. 이후 controllers에 memory가 나타나는지 확인하고 `gamePreflight.js`, `testIsolatedRunner.js`, 전체 통합 테스트를 다시 실행한다. 제한을 제거한 컨테이너를 사용자 코드 실행에 사용하지 않는다.
+해결에는 현재 커널에 맞는 부팅 옵션으로 memory cgroup을 활성화하고 재부팅한 뒤 실제 적용을 확인해야 한다. 운영 부팅 설정과 재부팅은 실행하지 않았다. 원본 설정 백업·실제 부팅 파일 확인·재부팅 시점 검토 후 별도로 적용해야 한다. 이후 controllers에 memory가 나타나는지 확인하고 `gamePreflight.js`, `testIsolatedRunner.js`, 전체 통합 테스트를 다시 실행한다. 제한을 제거한 컨테이너를 사용자 코드 실행에 사용하지 않는다.
+
+### Pi 적용 제안 — 아직 실행하지 않음
+
+- 확인한 커널: `6.6.77-8.el10.altarch.aarch64+4k`. 확인한 파일: `/boot/efi/cmdline.txt`. 여기에 cgroup 관련 인자는 없다. `/proc/cmdline`에 비활성화 인자가 나타나므로 파일에서 해당 문자열을 삭제하는 방식은 맞지 않는다.
+- 제안: 이 파일을 별도 이름으로 백업하고, 기존 한 줄의 인자를 유지하면서 끝에 `cgroup_enable=memory`를 추가한 뒤 재부팅한다. Raspberry Pi 측은 DT 기본 비활성화를 이 인자로 덮어쓰는 방식을 설명한다. 적용 가능 여부는 이 호스트의 재부팅 후 검사해야 한다. [Raspberry Pi 커널 유지보수자 설명](https://github.com/raspberrypi/linux/issues/6980), [해당 인자 처리 소스](https://raw.githubusercontent.com/raspberrypi/linux/rpi-6.6.y/kernel/cgroup/cgroup.c).
+- 영향: Pi 전체가 재부팅되어 DB/Valkey 및 다른 사용자의 프로세스도 일시 중단된다. 테스트 프로세스는 자동 시작 서비스가 아니므로 별도 환경의 Valkey/백엔드를 다시 시작해야 한다. 운영 npm 프로세스와 서비스 등록은 변경하지 않는다.
+- 통과 기준: cgroup.controllers에 memory 존재, memory.max 402653184가 컨테이너 안에서 확인됨, 사전 점검·43개 템플릿·통합 묶음·실제 게임 재검증 통과.
+- 복구: 백업한 cmdline.txt를 원래 경로로 되돌리고 재부팅한다. 이 제안의 백업/편집/재부팅 명령은 실행하지 않았다.

@@ -192,12 +192,12 @@ export async function fetchMatchRanking(matchId: string): Promise<MatchRanking> 
   return apiRequest<MatchRanking>(`/matches/${encodeURIComponent(matchId)}/ranking`);
 }
 
-export async function fetchMatchPending(matchId: string): Promise<{
+export async function fetchMatchPending(matchId: string, handling: { background?: boolean } = {}): Promise<{
   roomId?: number;
   resultReady: boolean;
   waitingForUserIds: string[];
 }> {
-  return apiRequest(`/matches/${encodeURIComponent(matchId)}/pending`);
+  return apiRequest(`/matches/${encodeURIComponent(matchId)}/pending`, { signal: AbortSignal.timeout(5000) }, handling);
 }
 
 export function isAlreadySubmittedError(error: unknown): boolean {

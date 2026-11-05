@@ -41,6 +41,8 @@ try {
   const draft = { matchId, version: 10, currentIndex: 1, codes: ['first', 'second', 'third'], blankAnswers: [['answer'], [], []], selectedOptions: { 1: 2 }, remaining: 99999 };
   assert.equal((await request('/build/session/save', null, draft)).status, 401);
   assert.equal((await request('/build/session/save', host.token, { ...draft, userId: guest.user.id })).status, 200);
+  assert.equal((await request('/build/session/save', host.token, draft)).status, 200);
+  assert.equal((await request('/build/session/save', host.token, { ...draft, codes: ['changed', 'second', 'third'] })).status, 409);
   const restored = await request(`/build/session/${matchId}`, host.token);
   assert.equal(restored.status, 200);
   assert.deepEqual(restored.data.draft.codes, draft.codes);

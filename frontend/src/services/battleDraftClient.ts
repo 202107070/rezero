@@ -11,10 +11,12 @@ export interface BattleDraft {
   localSavedAt: number;
   remaining: number;
   solveTimes?: Record<number, number>;
+  problemStartedAtElapsed?: number;
   buildsUsed?: Record<number, number>;
 }
 
 export interface DraftResponse {
+  opponentProgress: Array<{ userId: string; score: number; submittedProblems: number[]; finished: boolean }>;
   buildState: { used: Record<number, string>; bonus: Record<number, string> };
   roomRoster: Array<{ id: number; userId: string; name: string; character: string; isHost: boolean; ratingScore: number }>;
   match: MatchStartResponse;
@@ -27,6 +29,13 @@ export interface DraftResponse {
 const memory = new Map<string, BattleDraft>();
 const writers = new Map<string, { tail: Promise<boolean>; acknowledged: number; blockedToken?: string | null; closed?: boolean }>();
 const keyFor = (userId: string, matchId: string) => `rezero:draft:v1:${userId}:${matchId}`;
+
+export function acknowledgeServerDraft(userId: string, matchId: string, version: number): void {
+  const key = keyFor(userId, matchId);
+  const state = writers.get(key);
+  if (state) state.acknowledged = Math.max(state.acknowledged, version);
+  else writers.set(key, { tail: Promise.resolve(true), acknowledged: version });
+}
 
 export function rememberDraft(userId: string, draft: BattleDraft): void {
   const key = keyFor(userId, draft.matchId);
@@ -45,7 +54,7 @@ export function readLocalDraft(userId: string, matchId: string): BattleDraft | n
 
 export function preserveDraft(userId: string, input: Omit<BattleDraft, 'version' | 'localSavedAt'>): BattleDraft {
   const previous = readLocalDraft(userId, input.matchId);
-  const signature = (draft: typeof input) => JSON.stringify([draft.currentIndex, draft.codes, draft.blankAnswers, draft.selectedOptions, draft.solveTimes, draft.buildsUsed]);
+  const signature = (draft: typeof input) => JSON.stringify([draft.currentIndex, draft.codes, draft.blankAnswers, draft.selectedOptions, draft.solveTimes, draft.buildsUsed, draft.problemStartedAtElapsed]);
   const timeReduced = previous && input.remaining < previous.remaining - Math.floor((Date.now() - previous.localSavedAt) / 1000) - 1;
   if (previous && signature(previous) === signature(input) && !timeReduced) return previous;
   const draft = { ...input, version: Math.max(Date.now(), (previous?.version || 0) + 1), localSavedAt: Date.now() };

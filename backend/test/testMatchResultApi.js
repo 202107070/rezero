@@ -277,7 +277,9 @@ async function runTest() {
   assert(rankingResult.response.status === 200, "최종 순위 조회에 실패했습니다.");
   assert(rankingResult.data.players.length === 2, "최종 순위 인원이 올바르지 않습니다.");
   assert(rankingResult.data.players[0].id === host.id, "점수 순위가 올바르지 않습니다.");
-  console.log("PASS: 최종 순위 재조회");
+  const fetchedReward = rankingResult.data.rewards.find(reward => reward.userId === host.id);
+  assert(fetchedReward.earnedGold === 310 && fetchedReward.ratingDelta === 35, '결과 재조회에서 서버 보상이 복원되지 않았습니다.');
+  console.log("PASS: 최종 순위·확정 보상 재조회");
   const rewardBefore = await pool.query('SELECT id, gold, rating_score FROM users WHERE id IN (?, ?) ORDER BY id', [host.id, guest.id]);
   const retries = await Promise.all([host, guest, host].map(person => request('/api/v1/matches/' + createdMatchId + '/submit', { method: 'POST', token: person.token, body: submitBody(300, [0, 1, 2], 120) })));
   assert(retries.every(result => result.response.status === 200 && result.data.resultReady), '종료 경기 중복 제출이 실패했습니다.');

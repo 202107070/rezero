@@ -1,6 +1,7 @@
 import { useServerDownChat } from '../../hooks/useServerDownChat';
+import { watchMatchCompletion } from '../../services/matchCompletionWatcher';
 import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
-import { closeDraftWriter, loadServerDraft, preserveDraft, readLocalDraft, rememberDraft } from '../../services/battleDraftClient';
+import { acknowledgeServerDraft, closeDraftWriter, loadServerDraft, preserveDraft, readLocalDraft, rememberDraft } from '../../services/battleDraftClient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BattleChatPanel, { type ChatMessage } from '../../components/battle/BattleChatPanel';
@@ -520,6 +521,7 @@ export default function BattlePage() {
         selectedOptions: selectedOptionByProblem,
         solveTimes,
         buildsUsed: buildsUsedByProblem,
+        problemStartedAtElapsed: problemStartedAtElapsedRef.current,
         problems,
         sessionSavedSnapshot,
         shouldCommit,
@@ -601,6 +603,7 @@ export default function BattlePage() {
             return;
           }
           const local = readLocalDraft(userId, matchId);
+          if (result.draft) acknowledgeServerDraft(userId, matchId, result.draft.version);
           const draft = local && local.version > (result.draft?.version || 0) ? local : result.draft;
           if (draft && draft === result.draft) rememberDraft(userId, { ...draft, localSavedAt: Date.now(), remaining: result.remainingSeconds });
           const loadedProblems = normalizeBattleProblems(result.match.problems);
@@ -625,6 +628,7 @@ export default function BattlePage() {
           setProblemSolved(submitted[index] !== undefined);
           setIngameScore(result.progress.score);
           setSolveTimes(draft?.solveTimes || {});
+          problemStartedAtElapsedRef.current = draft?.problemStartedAtElapsed ?? Object.values(draft?.solveTimes || {}).reduce((sum, value) => sum + value, 0);
           setBuildsUsedByProblem(Object.fromEntries(Object.entries(result.buildState.used).map(([key, value]) => [key, Number(value)])));
           setBuildBonusByProblem(Object.fromEntries(Object.entries(result.buildState.bonus).map(([key, value]) => [key, Number(value)])));
           if (result.progress.finished) {
@@ -634,7 +638,7 @@ export default function BattlePage() {
           const localRemaining = local && draft === local ? Math.max(0, local.remaining - Math.floor((Date.now() - local.localSavedAt) / 1000)) : result.remainingSeconds;
           setRemaining(Math.min(result.remainingSeconds, localRemaining));
           setElapsedSec(Math.max(0, result.match.roundSeconds - result.remainingSeconds));
-          const metadata = { ...getBattleSettings(), ...result.match, roundSeconds: result.match.roundSeconds, diff: result.match.difficulty, count: String(result.match.problemCount), roomRoster: result.roomRoster };
+          const metadata = { ...getBattleSettings(), ...result.match, roundSeconds: result.match.roundSeconds, diff: result.match.difficulty, count: String(result.match.problemCount), roomRoster: result.roomRoster, opponentProgress: result.opponentProgress };
           setBattleSettings(metadata);
           setBattleMeta(metadata);
           setSessionSavedSnapshot((draft?.codes || []).join('||'));
@@ -759,11 +763,17 @@ export default function BattlePage() {
       myUserId: myId || undefined,
     }).filter((bot) => !isDepartedBot(bot.id));
     if (isLiveMatch) {
+      const progress = battleMeta.opponentProgress as Array<{ userId: string; score: number; submittedProblems: number[]; finished: boolean }> | undefined;
+      const restoreProgress = (bot: DemoBot): DemoBot => {
+        const saved = progress?.find(player => bot.id === `player-${player.userId}` || bot.id === player.userId);
+        return saved ? { ...bot, score: saved.score, solvedProblems: saved.submittedProblems, status: saved.finished ? 'solved' : 'playing' } : bot;
+      };
       setBattleBots((prev) => {
         const alive = prev.filter((bot) => !isDepartedBot(bot.id));
         // 이미 구성된 상대 목록이 있으면 진행률을 유지한 채 이름/캐릭터만 갱신
         if (alive.length > 0) {
-          return alive.map((bot) => {
+          return alive.map((existing) => {
+            const bot = restoreProgress(existing);
             const next = roster.find((item) => item.id === bot.id);
             if (!next) return bot;
             return {
@@ -775,7 +785,7 @@ export default function BattlePage() {
             };
           });
         }
-        return roster.map((bot) => ({
+        return roster.map((bot) => restoreProgress({
           ...bot,
           solvedProblems: [],
           solveScheduleByProblem: problems.map(() => -1),
@@ -785,7 +795,7 @@ export default function BattlePage() {
       return;
     }
     setBattleBots(roster);
-  }, [problems.length, sessionId, roomMode, maxPlayersParam, langKey, totalBattleSeconds, roomRoster, isLiveMatch, problems]);
+  }, [problems.length, sessionId, roomMode, maxPlayersParam, langKey, totalBattleSeconds, roomRoster, isLiveMatch, problems, battleMeta.opponentProgress]);
 
   useEffect(() => {
     if (!demoIsVersusMany && battleBots.length === 1) {
@@ -1108,6 +1118,9 @@ export default function BattlePage() {
 
     void (async () => {
       try {
+        unsubs.push(onRoomEvent('connect', () => {
+          if (!cancelled) void joinRoomSocket(roomId).catch(() => undefined);
+        }));
         await joinRoomSocket(roomId);
         if (cancelled) return;
 
@@ -1514,6 +1527,19 @@ export default function BattlePage() {
     return () => window.clearInterval(timer);
   }, [isLiveMatch, roomId, sessionId, navigate]);
 
+  useEffect(() => {
+    if (!isLiveMatch || !matchId || !(demoSpectating || spectatorLocked || battleFinished)) return;
+    return watchMatchCompletion({
+      fetchPending: () => fetchMatchPending(matchId, { background: true }),
+      onReady: () => {
+        if (resultLeavingNavRef.current || leavingToLobbyRef.current) return;
+        resultLeavingNavRef.current = true;
+        setBattleSettings({ ...getBattleSettings(), matchSubmitResult: { ...(getBattleSettings().matchSubmitResult as object), resultReady: true } });
+        navigate(`${ROUTES.RESULT}?roomId=${encodeURIComponent(roomId)}&matchId=${encodeURIComponent(matchId)}`, { replace: true });
+      },
+    });
+  }, [isLiveMatch, matchId, roomId, demoSpectating, spectatorLocked, battleFinished, navigate]);
+
   // 라이브: 마지막 문제까지 제출(관전)하면 결과 제출만 하고, 상대 대기 (바로 결과창 X)
   useEffect(() => {
     if (!isLiveMatch || !matchId || showGameOver) return;
@@ -1595,7 +1621,7 @@ export default function BattlePage() {
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (isLiveMatch && initialSessionLoadedRef.current) preserveDraft(getCurrentUserId(), {
-        matchId, currentIndex, codes: answers, blankAnswers, selectedOptions: selectedOptionByProblem, remaining: remainingRef.current, solveTimes, buildsUsed: buildsUsedByProblem,
+        matchId, currentIndex, codes: answers, blankAnswers, selectedOptions: selectedOptionByProblem, remaining: remainingRef.current, solveTimes, buildsUsed: buildsUsedByProblem, problemStartedAtElapsed: problemStartedAtElapsedRef.current,
       });
     };
     window.addEventListener('beforeunload', handleBeforeUnload);

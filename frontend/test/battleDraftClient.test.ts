@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { preserveDraft, readLocalDraft, saveDraft, closeDraftWriter } from '../src/services/battleDraftClient';
+import { preserveDraft, readLocalDraft, saveDraft, closeDraftWriter, rememberDraft, acknowledgeServerDraft } from '../src/services/battleDraftClient';
 import { setAccessToken } from '../src/services/apiClient';
 
 const storage = new Map<string, string>();
@@ -57,10 +57,32 @@ test('transient storage failure retries and closed matches make no requests', as
   } finally { globalThis.fetch = original; }
 });
 
-test('local storage distinguishes matches and preserves selection after memory is lost', () => {
+test('local storage keeps separate match payloads including selection', () => {
   const draft = makeDraft('client-reload');
   const copy = JSON.parse(storage.get(`rezero:draft:v1:alice:${draft.matchId}`)!);
   assert.deepEqual(copy.blankAnswers, [['a']]);
   assert.deepEqual(copy.selectedOptions, { 0: 2 });
   assert.equal(readLocalDraft('alice', 'other-match'), null);
+});
+
+test('adopting a server-confirmed version avoids reuploading normalized restore data; edits still save', async () => {
+  const original = globalThis.fetch;
+  const draft = makeDraft('client-server-adoption');
+  const restored = { ...draft, remaining: 50, localSavedAt: Date.now() };
+  rememberDraft('alice', restored);
+  acknowledgeServerDraft('alice', draft.matchId, draft.version);
+  let calls = 0;
+  globalThis.fetch = async (_url, options) => {
+    calls++;
+    const body = JSON.parse(String(options?.body));
+    return new Response(JSON.stringify({ saved: true, version: body.version }));
+  };
+  try {
+    assert.equal(await saveDraft('alice', restored), true);
+    assert.equal(calls, 0);
+    const edited = preserveDraft('alice', { matchId: draft.matchId, currentIndex: 0, codes: ['edited'], blankAnswers: [['edited']], selectedOptions: {}, remaining: 49 });
+    assert.ok(edited.version > draft.version);
+    assert.equal(await saveDraft('alice', edited), true);
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = original; }
 });

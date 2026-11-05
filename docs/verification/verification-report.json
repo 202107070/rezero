@@ -1,0 +1,257 @@
+{
+  "recordedAt": "2026-11-05T12:13:18.062Z",
+  "environment": "school isolated 18082/16379/rezero_stability_20261105",
+  "httpSinceCppFinalStart": {
+    "startLine": 3514,
+    "counts": {
+      "200": 425,
+      "201": 32,
+      "401": 4
+    },
+    "errors": [
+      "DELETE /api/v1/build/session/battle-user_f0fc6625-8182-4891-9640-f9e32132007a-battle-49-d73fcec4-41b7-4a18-a158-4b1188723a84 401 0.180 ms - 77",
+      "DELETE /api/v1/build/session/battle-user_9d42c2a8-72fc-4c76-bfa7-911a346bf744-battle-49-d73fcec4-41b7-4a18-a158-4b1188723a84 401 0.151 ms - 77",
+      "DELETE /api/v1/build/session/battle-user_f0fc6625-8182-4891-9640-f9e32132007a-battle-50-7dcc5ff2-b5c2-46e6-8812-ebe8f4842a40 401 0.269 ms - 77",
+      "DELETE /api/v1/build/session/battle-user_9d42c2a8-72fc-4c76-bfa7-911a346bf744-battle-50-7dcc5ff2-b5c2-46e6-8812-ebe8f4842a40 401 0.191 ms - 77"
+    ]
+  },
+  "matches": [
+    {
+      "matchId": "battle-10-38b429db-5a07-4222-9bb8-eb4a6bb5830d",
+      "roomId": 10,
+      "language": "PYTHON",
+      "status": "FINISHED",
+      "username": "qa_flow_1105a",
+      "score": 300,
+      "completion": 129,
+      "solveTimes": {
+        "0": 52,
+        "1": 103,
+        "2": 26
+      },
+      "ratingDelta": 35
+    },
+    {
+      "matchId": "battle-10-38b429db-5a07-4222-9bb8-eb4a6bb5830d",
+      "roomId": 10,
+      "language": "PYTHON",
+      "status": "FINISHED",
+      "username": "qa_flow_1105b",
+      "score": 300,
+      "completion": 136,
+      "solveTimes": {
+        "0": 52,
+        "1": 51,
+        "2": 33
+      },
+      "ratingDelta": -33
+    },
+    {
+      "matchId": "battle-29-44b6124c-de14-4289-8a43-f2f1d1221577",
+      "roomId": 29,
+      "language": "PYTHON",
+      "status": "FINISHED",
+      "username": "qa_flow_1105a",
+      "score": 300,
+      "completion": 144,
+      "solveTimes": {
+        "0": 92,
+        "1": 27,
+        "2": 25
+      },
+      "ratingDelta": 35
+    },
+    {
+      "matchId": "battle-29-44b6124c-de14-4289-8a43-f2f1d1221577",
+      "roomId": 29,
+      "language": "PYTHON",
+      "status": "FINISHED",
+      "username": "qa_flow_1105b",
+      "score": 300,
+      "completion": 145,
+      "solveTimes": {
+        "0": 59,
+        "1": 42,
+        "2": 44
+      },
+      "ratingDelta": -33
+    },
+    {
+      "matchId": "battle-29-962d16ca-453f-4ccf-b0c7-c48353ef0ea5",
+      "roomId": 29,
+      "language": "PYTHON",
+      "status": "FINISHED",
+      "username": "qa_flow_1105a",
+      "score": 300,
+      "completion": 70,
+      "solveTimes": {
+        "0": 60,
+        "1": 9,
+        "2": 1
+      },
+      "ratingDelta": 35
+    },
+    {
+      "matchId": "battle-29-962d16ca-453f-4ccf-b0c7-c48353ef0ea5",
+      "roomId": 29,
+      "language": "PYTHON",
+      "status": "FINISHED",
+      "username": "qa_flow_1105b",
+      "score": 300,
+      "completion": 70,
+      "solveTimes": {
+        "0": 25,
+        "1": 44,
+        "2": 1
+      },
+      "ratingDelta": -33
+    },
+    {
+      "matchId": "battle-36-d5103b3b-5c9d-4d59-a0bf-09782acad6fc",
+      "roomId": 36,
+      "language": "JAVA",
+      "status": "FINISHED",
+      "username": "qa_flow_1105a",
+      "score": 300,
+      "completion": 39,
+      "solveTimes": {
+        "0": 25,
+        "1": 6,
+        "2": 8
+      },
+      "ratingDelta": 35
+    },
+    {
+      "matchId": "battle-36-d5103b3b-5c9d-4d59-a0bf-09782acad6fc",
+      "roomId": 36,
+      "language": "JAVA",
+      "status": "FINISHED",
+      "username": "qa_flow_1105b",
+      "score": 300,
+      "completion": 39,
+      "solveTimes": {
+        "0": 25,
+        "1": 6,
+        "2": 8
+      },
+      "ratingDelta": -33
+    },
+    {
+      "matchId": "battle-49-d73fcec4-41b7-4a18-a158-4b1188723a84",
+      "roomId": 49,
+      "language": "CPP",
+      "status": "FINISHED",
+      "username": "qa_flow_1105a",
+      "score": 300,
+      "completion": 26,
+      "solveTimes": {
+        "0": 16,
+        "1": 5,
+        "2": 5
+      },
+      "ratingDelta": 35
+    },
+    {
+      "matchId": "battle-49-d73fcec4-41b7-4a18-a158-4b1188723a84",
+      "roomId": 49,
+      "language": "CPP",
+      "status": "FINISHED",
+      "username": "qa_flow_1105b",
+      "score": 300,
+      "completion": 27,
+      "solveTimes": {
+        "0": 17,
+        "1": 5,
+        "2": 5
+      },
+      "ratingDelta": -33
+    },
+    {
+      "matchId": "battle-50-7dcc5ff2-b5c2-46e6-8812-ebe8f4842a40",
+      "roomId": 50,
+      "language": "HTML",
+      "status": "FINISHED",
+      "username": "qa_flow_1105a",
+      "score": 300,
+      "completion": 25,
+      "solveTimes": {
+        "0": 14,
+        "1": 5,
+        "2": 6
+      },
+      "ratingDelta": 35
+    },
+    {
+      "matchId": "battle-50-7dcc5ff2-b5c2-46e6-8812-ebe8f4842a40",
+      "roomId": 50,
+      "language": "HTML",
+      "status": "FINISHED",
+      "username": "qa_flow_1105b",
+      "score": 300,
+      "completion": 25,
+      "solveTimes": {
+        "0": 14,
+        "1": 5,
+        "2": 6
+      },
+      "ratingDelta": -33
+    },
+    {
+      "matchId": "battle-51-e0e3a4cf-9aa7-40bc-9e77-363a396c647e",
+      "roomId": 51,
+      "language": "CSS",
+      "status": "FINISHED",
+      "username": "qa_flow_1105a",
+      "score": 300,
+      "completion": 24,
+      "solveTimes": {
+        "0": 14,
+        "1": 5,
+        "2": 5
+      },
+      "ratingDelta": 35
+    },
+    {
+      "matchId": "battle-51-e0e3a4cf-9aa7-40bc-9e77-363a396c647e",
+      "roomId": 51,
+      "language": "CSS",
+      "status": "FINISHED",
+      "username": "qa_flow_1105b",
+      "score": 300,
+      "completion": 24,
+      "solveTimes": {
+        "0": 13,
+        "1": 6,
+        "2": 5
+      },
+      "ratingDelta": -33
+    }
+  ],
+  "currentProfiles": [
+    {
+      "username": "qa_flow_1105a",
+      "gold": 2170,
+      "rating": 1245
+    },
+    {
+      "username": "qa_flow_1105b",
+      "gold": 2100,
+      "rating": 769
+    }
+  ],
+  "fullIntegrationPassed": true,
+  "piRunnerBlocked": "kernel cgroup_disable=memory; no boot configuration changes performed",
+  "finalExitAfterLegacyDeleteRemoval": {
+    "startLine": 4100,
+    "counts": {
+      "200": 37,
+      "201": 6
+    },
+    "errors": []
+  },
+  "legacyDelete401Resolved": true,
+  "notes": [
+    "The four DELETE 401 entries in the earlier C++/HTML log were found and removed before the final exit check.",
+    "First two browser matches exposed and helped reproduce issues fixed before the final passes."
+  ]
+}

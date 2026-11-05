@@ -43,6 +43,7 @@ export async function persistBattleSession(params: {
   blankAnswers?: string[][];
   selectedOptions?: Record<number, number>;
   solveTimes?: Record<number, number>;
+  problemStartedAtElapsed?: number;
   buildsUsed?: Record<number, number>;
   problems: BattleProblem[];
   sessionSavedSnapshot: string;
@@ -79,7 +80,7 @@ export async function persistBattleSession(params: {
       const draft = preserveDraft(userId, {
         matchId: params.matchId, currentIndex: params.currentIndex, codes: params.answers,
         blankAnswers: params.problems.map((_, i) => params.blankAnswers?.[i] || []),
-        selectedOptions: params.selectedOptions || {}, remaining: params.remaining, solveTimes: params.solveTimes, buildsUsed: params.buildsUsed,
+        selectedOptions: params.selectedOptions || {}, remaining: params.remaining, solveTimes: params.solveTimes, buildsUsed: params.buildsUsed, problemStartedAtElapsed: params.problemStartedAtElapsed,
       });
       const saved = shouldSyncBackend() && await saveDraft(userId, draft);
       if (!isCurrentDraft(userId, draft)) return;
@@ -258,9 +259,7 @@ export function clearBattleAndLeave(sessionId: string, roomId: string): void {
     clearKickedCount(roomId);
   }
   clearBattleSessionForLeave(sessionId);
-  if (shouldSyncBackend()) {
-    fetch(`/api/v1/build/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }).catch(() => {});
-  }
+  // Server drafts expire by TTL. sessionId is a local cache key, not a match ID.
 }
 
 export function saveFinalRankingSnapshot(snapshot: FinalRankingSnapshot): void {

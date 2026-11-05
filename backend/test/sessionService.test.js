@@ -15,7 +15,11 @@ function fixture() {
     get: async k => values.get(k) || null,
     hGetAll: async () => ({}), hGet: async () => null,
     eval: async (_, { keys: [k], arguments: [json, version] }) => {
-      if (values.has(k) && JSON.parse(values.get(k)).version >= Number(version)) return 0;
+      if (values.has(k)) {
+        const previous = JSON.parse(values.get(k)), next = JSON.parse(json);
+        if (previous.version === Number(version) && previous.requestHash === next.requestHash) return [2, previous.savedAt];
+        if (previous.version >= Number(version)) return 0;
+      }
       values.set(k, json); return 1;
     },
   };
@@ -47,6 +51,16 @@ test('late writes cannot overwrite newer answers', async () => {
   await assert.rejects(service.save(draft, 'alice'), { code: 'DRAFT_VERSION_CONFLICT' });
   assert.deepEqual((await service.load(draft.matchId, 'alice')).draft.codes, ['new', 'answer']);
 });
+test('retry after a lost response acknowledges identical draft without restarting its remaining time', async () => {
+  const { service, draft, advance } = fixture();
+  const input = { ...draft, remaining: 40, solveTimes: { 0: 5 }, problemStartedAtElapsed: 5 };
+  const first = await service.save(input, 'alice');
+  advance(8000);
+  assert.deepEqual(await service.save(input, 'alice'), first);
+  assert.equal((await service.load(draft.matchId, 'alice')).remainingSeconds, 32);
+  assert.equal((await service.load(draft.matchId, 'alice')).draft.problemStartedAtElapsed, 5);
+  await assert.rejects(service.save({ ...input, codes: ['different', 'data'] }, 'alice'), { code: 'DRAFT_VERSION_CONFLICT' });
+});
 
 test('validates indices and payloads and reports storage failure', async () => {
   const { service, draft, redis } = fixture();
@@ -64,4 +78,13 @@ test('reconnect cannot refill reduced time and finalized players cannot edit dra
   assert.equal((await service.load(draft.matchId, 'alice')).remainingSeconds, 15);
   matches.findMatchSubmissions = async () => [{ userId: 'alice' }];
   await assert.rejects(service.save({ ...draft, version: 11 }, 'alice'), { code: 'MATCH_NOT_IN_PROGRESS' });
+});
+test('reconnect restores opponent progress without exposing their answers or drafts', async () => {
+  const { service, matches, redis } = fixture();
+  matches.findMatchParticipantsForResult = async () => [{ userId: 'alice' }, { userId: 'bob' }];
+  redis.hGetAll = async key => key === 'battle:written:match-1:bob' ? { 0: JSON.stringify({ answers: ['secret'], isCorrect: true }) } : {};
+  redis.hGet = async (_key, userId) => userId === 'bob' ? '100' : null;
+  const result = await service.load('match-1', 'alice');
+  assert.deepEqual(result.opponentProgress, [{ userId: 'bob', score: 100, submittedProblems: [0], finished: false }]);
+  assert.ok(!JSON.stringify(result).includes('secret'));
 });

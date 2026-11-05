@@ -167,6 +167,7 @@ const wording = {
     E11: '문자 한 글자를 포함한 문자열을 저장하는 자료형의 이름은? (예: c = _____("A"))',
     M01: '리스트 arr의 요소 개수를 구하는 표현식은? (함수 호출 전체 입력)',
     M15: '문자열 s의 0번째 문자를 가져오는 인덱싱 표현식은? (s 다음에 붙는 부분 입력)',
+    M18: '"cd" in "abcdef" 식을 평가한 Python의 불리언 결과는?',
     X03: 'Animal을 상속하는 class Dog_____: 선언에서 빈칸에 들어가는 부분은?',
     X08: '인스턴스 메서드에서 자기 자신을 받는 첫 매개변수의 관례적인 이름은?',
     X10: '아무 값도 반환하지 않는 함수의 호출 결과를 나타내는 값은?',
@@ -186,7 +187,9 @@ export function applyLanguageVariant(problem, language) {
     executionKind = 'program';
   }
   if (problem.id === 'LP03') { question = `score = 75\n${question}\nprint(status)`; executionKind = 'body'; }
-  return { ...problem, language, question, executionKind };
+  const booleanChoice = problem.id === 'M18' && language === 'PYTHON'
+    ? { answer: { ...problem.answer, PYTHON: ['True'] }, options: ['True', 'False', 'None', '오류'], correctIndex: 0 } : {};
+  return { ...problem, ...booleanChoice, language, question, executionKind };
 }
 
 export function wrapExecutionSource(source, language, kind = 'body') {

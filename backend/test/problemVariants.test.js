@@ -34,6 +34,9 @@ test('every supported language/difficulty can start minimum-size matches; shorta
   assert.throws(() => chooseProblems([], 'PYTHON', 3), { code: 'INSUFFICIENT_PROBLEMS' });
 });
 test('invalid language concepts are excluded and RANDOM chooses one consistent supported language', () => {
+  const boolean = applyLanguageVariant(problems.find(p => p.id === 'M18'), 'PYTHON');
+  assert.equal(boolean.options[boolean.correctIndex], 'True');
+  assert.equal(new Set(boolean.options.map(option => option.toLowerCase())).size, boolean.options.length);
   for (const id of ['E17', 'E18', 'X06', 'X09', 'X11', 'X27', 'H01', 'H04', 'H18']) {
     assert.equal(applyLanguageVariant(problems.find(p => p.id === id), 'PYTHON'), null);
   }

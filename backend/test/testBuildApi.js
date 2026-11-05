@@ -49,9 +49,14 @@ try {
   const bonus = await request(`/matches/${matchId}/items/use`, host.token, { problemIndex: 0, itemKey: 'buildCharge' });
   assert.equal(bonus.status, 200);
   const charged = await request('/build/execute', host.token, { ...input, requestId: 'charged' });
-  assert.equal(charged.data.success, true); assert.equal(charged.data.buildsUsed, 4); assert.equal(charged.data.buildsAllowed, 4);
+  assert.equal(charged.data.success, true); assert.equal(charged.data.buildsUsed, 4); assert.equal(charged.data.buildsAllowed, 6);
+  for (const count of [5, 6]) {
+    const extra = await request('/build/execute', host.token, { ...input, requestId: `bonus-${count}` });
+    assert.equal(extra.data.success, true); assert.equal(extra.data.buildsUsed, count);
+  }
+  assert.equal((await request('/build/execute', host.token, { ...input, requestId: 'bonus-over' })).data.error.code, 'BUILD_LIMIT_REACHED');
   const restored = await request(`/build/session/${matchId}`, host.token);
-  assert.equal(Number(restored.data.buildState.used[0]), 4); assert.equal(Number(restored.data.buildState.bonus[0]), 1);
+  assert.equal(Number(restored.data.buildState.used[0]), 6); assert.equal(Number(restored.data.buildState.bonus[0]), 3);
   const own = await request('/build/execute', guest.token, { ...input, requestId: 'guest' });
   assert.equal(own.data.buildsUsed, 1);
   await pool.query("UPDATE matches SET status='FINISHED', finished_at=CURRENT_TIMESTAMP WHERE id=?", [matchId]);

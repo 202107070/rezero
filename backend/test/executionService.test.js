@@ -65,6 +65,6 @@ test('three builds plus server-granted bonus; environment failures refund the re
   state.result = { success: false, status: 'COMPILE_ERROR', output: '', error: 'syntax' };
   for (let i = 1; i <= 3; i++) assert.equal((await service.execute({ ...input, requestId: `try-${i}` }, 'alice')).buildsUsed, i);
   await assert.rejects(service.execute({ ...input, requestId: 'over' }, 'alice'), { code: 'BUILD_LIMIT_REACHED' });
-  hashes.set('battle:buildBonus:match:alice', { 0: '1' });
-  assert.equal((await service.execute({ ...input, requestId: 'bonus' }, 'alice')).buildsAllowed, 4);
+  hashes.set('battle:buildBonus:match:alice', { 0: '3' });
+  assert.equal((await service.execute({ ...input, requestId: 'bonus' }, 'alice')).buildsAllowed, 6);
 });

@@ -398,6 +398,11 @@ function attachSubmissionAnswers(players, submissions) {
   });
 }
 
+function goldForRank(player, totalPlayers, noSolveDraw) {
+  const placeBonus = Math.max(0, (totalPlayers - player.rank) * 5);
+  return noSolveDraw ? 0 : numberOrZero(player.ingameScore) + placeBonus * 2;
+}
+
 async function getStoredRanking(matchId) {
   const ranking = await battleModel.findMatchRanking(matchId);
   if (!ranking) {
@@ -419,6 +424,12 @@ async function getStoredRanking(matchId) {
     roundSeconds: Number(ranking.roundSeconds),
     totalProblems: Number(ranking.totalProblems),
     players: attachSubmissionAnswers(players, submissions),
+    rewards: players.map(player => ({
+      userId: player.id,
+      earnedGold: typeof player.earnedGold === 'number' ? player.earnedGold : goldForRank(player, players.length, isNoSolveDraw(players)),
+      ratingDelta: typeof player.ratingDelta === 'number' ? player.ratingDelta : numberOrZero(submissions.find(row => String(row.userId) === String(player.id))?.ratingDelta),
+      newTitleIds: Array.isArray(player.newTitleIds) ? player.newTitleIds : [],
+    })),
   };
 }
 
@@ -474,7 +485,7 @@ async function finalizeSubmittedMatch(match, participants, submissions) {
 
     return {
       ...player,
-      earnedGold: noSolveDraw ? 0 : player.ingameScore + placeBonus * 2,
+      earnedGold: goldForRank(player, totalPlayers, noSolveDraw),
       ratingDelta: ratingAmount,
       titleData,
     };
@@ -495,6 +506,9 @@ async function finalizeSubmittedMatch(match, participants, submissions) {
       solvedProblems: player.solvedProblems,
       problemResults: player.problemResults,
       rank: player.rank,
+      earnedGold: player.earnedGold,
+      ratingDelta: player.ratingDelta,
+      newTitleIds: player.titleData.newTitleIds,
     };
   });
 
@@ -774,7 +788,7 @@ export async function useBattleItem(input) {
 
   if (input.itemKey === 'buildCharge') {
     const key = `battle:buildBonus:${input.matchId}:${input.userId}`;
-    await redisClient.hIncrBy(key, String(input.problemIndex), 1);
+    await redisClient.hIncrBy(key, String(input.problemIndex), 3);
     await redisClient.expire(key, 7200);
   }
 

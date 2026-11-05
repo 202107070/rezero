@@ -54,12 +54,10 @@ import {
 import { fetchMatchRanking, isMatchResultNotReady } from '../../services/matchService';
 import {
   addGold,
-  applyMatchRewards,
   getGold,
   getRatingScore,
   saveTitles,
   setNewTitleIds,
-  setRatingScore,
   getTitles,
 } from '../../services/userService';
 import {
@@ -652,59 +650,17 @@ export default function ResultPage() {
         setOpponentAnswers(packs);
         setApiRankingReady(true);
 
+        const mine = ranking.rewards?.find(reward => String(reward.userId || reward.id) === String(myUserId));
+        if (typeof mine?.earnedGold === 'number') setApiRewardGold(mine.earnedGold);
         if (!matchRewardsAppliedRef.current.applied) {
-          const mine =
-            (ranking.rewards || []).find(
-              (reward) => String(reward.userId || reward.id) === String(myUserId),
-            ) || null;
-          const earned =
-            typeof mine?.earnedGold === 'number'
-              ? mine.earnedGold
-              : typeof storedSubmit.earnedGold === 'number'
-                ? storedSubmit.earnedGold
-                : undefined;
-          const ratingDelta =
-            typeof mine?.ratingDelta === 'number'
-              ? mine.ratingDelta
-              : typeof storedSubmit.ratingDelta === 'number'
-                ? storedSubmit.ratingDelta
-                : undefined;
-          const newTitleIds = Array.isArray(mine?.newTitleIds)
-            ? mine.newTitleIds
-            : storedSubmit.newTitleIds;
-
-          if (earned !== undefined || ratingDelta !== undefined || newTitleIds?.length) {
-            const ratingBefore = getRatingScore();
-            applyMatchRewards({
-              earnedGold: earned,
-              ratingDelta,
-              newTitleIds,
-            });
-            const resolvedAfter =
-              typeof ratingDelta === 'number'
-                ? Math.max(0, ratingBefore + ratingDelta)
-                : getRatingScore();
-            setRatingScore(resolvedAfter);
-            if (typeof earned === 'number') setApiRewardGold(earned);
-            setTotalGold(getGold());
-            matchRewardsAppliedRef.current.applied = true;
-
-            void refreshMeProfile().then(() => {
-              const serverScore = getRatingScore();
-              const finalScore =
-                typeof ratingDelta === 'number' &&
-                ((ratingDelta < 0 && serverScore > resolvedAfter) ||
-                  (ratingDelta > 0 && serverScore < resolvedAfter))
-                  ? resolvedAfter
-                  : serverScore || resolvedAfter;
-              setRatingScore(finalScore);
-              void emitUpdateLocation({
-                location: 'result',
-                roomId: String(roomId || ''),
-                ratingScore: finalScore,
-              }).catch(() => undefined);
-            });
-          }
+          // Live rewards were already committed by the server. Refresh instead of adding them locally again.
+          await refreshMeProfile();
+          if (cancelled) return;
+          setTotalGold(getGold());
+          setLiveRatingScore(getRatingScore());
+          setLiveRatingTier(getTierByRating(getRatingScore()));
+          matchRewardsAppliedRef.current.applied = true;
+          void emitUpdateLocation({ location: 'result', roomId: String(roomId || ''), ratingScore: getRatingScore() }).catch(() => undefined);
         }
 
         if (timer) window.clearInterval(timer);
@@ -1367,6 +1323,10 @@ export default function ResultPage() {
     markLobbyChatReset();
     navigate(ROUTES.LOBBY);
   };
+
+  if (isLiveMatch && !apiRankingReady) {
+    return <div className="page-container result-page" role="status">경기 결과를 확인하고 있습니다...</div>;
+  }
 
   return (
     <div className="page-container result-page">
