@@ -101,7 +101,12 @@ export function hasProblemAnswerAttempted(params: {
     if (blankCount === 0) return false;
     const user = blankAnswers[problemIndex] || [];
     for (let i = 0; i < blankCount; i++) {
-      if (!isUserBlankFilled(user[i], correct[i])) return false;
+      // Live snapshots hide answers. A space can be meaningful source code;
+      // only the server can decide whether a non-empty code blank is correct.
+      const filled = correct[i] === undefined
+        ? String(user[i] ?? '').length > 0
+        : isUserBlankFilled(user[i], correct[i]);
+      if (!filled) return false;
     }
     return true;
   }
