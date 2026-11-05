@@ -2,6 +2,10 @@
 
 수정 브랜치: `fix/backend-integration-stability`. 이 문서는 운영 적용 명령의 검토 자료다. 현재 운영 DB/서버/방화벽에는 적용하지 않았다.
 
+## 최종 배포 대상 — 2026-11-06 확정
+
+최종 게임 서버는 학교 컴퓨터 `100.75.215.11`이다. 운영 적용과 완료 판정은 학교 서버를 기준으로 한다. Pi는 비교 검증 대상이며 배포 대상이 아니다. 아래 Pi 진단·적용 제안은 참고 기록으로만 남기고 실행하지 않는다. Pi의 cgroup 문제는 학교 배포를 막는 조건이 아니다.
+
 ## 분리된 검증 환경
 
 | 서버 | 테스트 경로 | 백엔드 | DB | Valkey |
@@ -15,7 +19,7 @@
 
 1. 현재 커밋·실행 경로·DB 백업과 복구 위치를 기록한다. 진행 중 경기가 없을 때 적용한다. 기존 경기 스냅샷은 새 템플릿으로 자동 변경하지 않는다.
 2. 브랜치를 검토하고 운영 대상 커밋을 고정한다. 운영 환경값을 유지하면서 `.env.example`의 실행기 설정만 별도로 검토한다. 기존 compose는 실행기 연결이 완성된 운영 경로가 아니므로 이번 적용에 사용하지 않는다.
-3. rootless Podman을 실행하는 백엔드 계정으로 저장소 **루트**에서 이미지를 준비한다. amd64와 arm64는 각 서버에서 빌드한다.
+3. rootless Podman을 실행하는 백엔드 계정으로 저장소 **루트**에서 이미지를 준비한다. 최종 배포용 이미지는 학교 amd64 서버에서 빌드한다.
 
 ```sh
 podman build -f backend/src/infra/docker/dockerimage/runner.Dockerfile -t localhost/rezero-runner:1 .
@@ -25,7 +29,7 @@ node backend/scripts/gamePreflight.js
 
 실행기는 네트워크 없는 비루트 컨테이너, 1 CPU/384MB/64 PID, 읽기 전용 루트·소스, 64MB 임시 작업 공간을 사용한다. 컨테이너 엔진 소켓을 게임 컨테이너에 노출하지 않는다. 백엔드는 해당 계정에서 rootless Podman CLI를 호출한다. 실행기 검증이 실패하면 게임 시작이 차단된다.
 
-4. 닉네임 제약을 조회한다. 중복이 있으면 적용을 중단한다. 기존 데이터는 삭제/개명하지 않는다. Pi의 제약 추가는 데이터 확인과 운영 승인 후 수행한다.
+4. 닉네임 제약을 조회한다. 중복이 있으면 적용을 중단한다. 기존 데이터는 삭제/개명하지 않는다. Pi 제약 추가는 현재 운영 적용 범위에 포함하지 않는다.
 
 ```sh
 node backend/scripts/nicknameUnique.js
@@ -37,7 +41,7 @@ node backend/scripts/nicknameUnique.js --apply
 
 ## 프론트 대상과 원격 접근
 
-Vite 개발 서버는 API와 Socket을 같은 `VITE_API_PROXY_TARGET`으로 전달한다. Electron 개발 실행도 같은 Vite 구성을 사용한다. Pi가 기본 대상이므로 학교를 검증할 때 주소를 반드시 지정한다.
+Vite 개발 서버는 API와 Socket을 같은 `VITE_API_PROXY_TARGET`으로 전달한다. Electron 개발 실행도 같은 Vite 구성을 사용한다. 기본 대상은 최종 서버인 학교 `http://100.75.215.11:8080`이다. 별도 테스트 환경에서는 주소를 명시적으로 지정한다.
 
 학교에서 별도 프론트 실행:
 
@@ -77,13 +81,13 @@ sudo firewall-cmd --permanent --zone="$ZONE" --remove-rich-rule="rule family=ipv
 - 두 테스트 계정으로 준비/시작, 언어별 문제, 실제 빌드, 초안 저장/새로고침, 제출/관전, 결과/보상까지 확인한다. 예상한 문법 오류 검증 요청 외의 4xx/5xx를 별도로 확인한다.
 - 문제 발생 시 새 경기 시작을 멈추고 프론트·백엔드를 기록한 이전 커밋으로 함께 복구한다. 운영 DB 행을 삭제해 복구하지 않는다. 닉네임 unique는 중복 금지 정책이므로 일반 코드 롤백과 함께 제거하지 않는다.
 
-## Pi에서 발견된 적용 차단 사항
+## Pi 비교 검증 기록 — 학교 배포의 차단 조건 아님
 
 2026-11-05 별도 테스트에서 arm64 실행 이미지 빌드/DB/Valkey는 정상이다. 커널 부팅 옵션의 `cgroup_disable=memory` 때문에 `/sys/fs/cgroup/cgroup.controllers`에 memory가 없고 `/proc/cgroups`에서 memory enabled=0이다. 메모리 제한 컨테이너가 시작되지 않는다. 이 상태에서 실행기는 준비 실패를 반환하고 코드 경기 시작을 차단한다.
 
 해결에는 현재 커널에 맞는 부팅 옵션으로 memory cgroup을 활성화하고 재부팅한 뒤 실제 적용을 확인해야 한다. 운영 부팅 설정과 재부팅은 실행하지 않았다. 원본 설정 백업·실제 부팅 파일 확인·재부팅 시점 검토 후 별도로 적용해야 한다. 이후 controllers에 memory가 나타나는지 확인하고 `gamePreflight.js`, `testIsolatedRunner.js`, 전체 통합 테스트를 다시 실행한다. 제한을 제거한 컨테이너를 사용자 코드 실행에 사용하지 않는다.
 
-### Pi 적용 제안 — 아직 실행하지 않음
+### Pi 적용 제안 — 참고용, 현재 실행 범위에서 제외
 
 - 확인한 커널: `6.6.77-8.el10.altarch.aarch64+4k`. 확인한 파일: `/boot/efi/cmdline.txt`. 여기에 cgroup 관련 인자는 없다. `/proc/cmdline`에 비활성화 인자가 나타나므로 파일에서 해당 문자열을 삭제하는 방식은 맞지 않는다.
 - 제안: 이 파일을 별도 이름으로 백업하고, 기존 한 줄의 인자를 유지하면서 끝에 `cgroup_enable=memory`를 추가한 뒤 재부팅한다. Raspberry Pi 측은 DT 기본 비활성화를 이 인자로 덮어쓰는 방식을 설명한다. 적용 가능 여부는 이 호스트의 재부팅 후 검사해야 한다. [Raspberry Pi 커널 유지보수자 설명](https://github.com/raspberrypi/linux/issues/6980), [해당 인자 처리 소스](https://raw.githubusercontent.com/raspberrypi/linux/rpi-6.6.y/kernel/cgroup/cgroup.c).
