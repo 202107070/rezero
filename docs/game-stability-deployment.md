@@ -1,6 +1,6 @@
 # 게임 정상화 브랜치 적용 절차
 
-수정 브랜치: `fix/backend-integration-stability`. 이 문서는 운영 적용 명령의 검토 자료다. 현재 운영 DB/서버/방화벽에는 적용하지 않았다.
+수정 브랜치: `fix/backend-integration-stability`. 2026-11-06 사용자 진행 승인 후 학교 운영 서버에 `28ea8f6`을 적용했다. 현재 실행·백업·복구·실제 게임 결과는 [학교 운영 적용 기록](verification/school-production-deployment-20261106.md)에 정리했다. 아래 초기 준비 절차와 Pi 기록은 당시 범위를 구분해 읽는다.
 
 ## 최종 배포 대상 — 2026-11-06 확정
 
@@ -77,7 +77,7 @@ sudo firewall-cmd --zone="$ZONE" --remove-rich-rule="rule family=ipv4 source add
 sudo firewall-cmd --permanent --zone="$ZONE" --remove-rich-rule="rule family=ipv4 source address=$TEAM_IP/32 port port=8080 protocol=tcp accept"
 ```
 
-이번 검증에서는 운영 방화벽 명령을 실행하지 않는다.
+초기 분리 검증에서는 운영 방화벽을 변경하지 않았다. 이후 승인된 학교 운영 적용에서 검증용 `100.110.242.15/32`의 8080 규칙만 runtime/permanent에 추가했다. 팀원 IP는 확인되지 않아 추가하지 않았다.
 
 ## 적용 후 확인과 복구
 
