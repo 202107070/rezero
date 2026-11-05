@@ -5,7 +5,7 @@ import { emitUpdateLocation } from '../../services/roomSocket';
 import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { BuildBGM, LobbyBGM } from '../../utils/audio/gameAudio';
 import { DEFAULT_TEMPLATE } from '../../utils/battle/codeUtils';
-import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSimulator';
+import { runCodeBuild, type BuildLogLine } from '../../services/buildExecutionClient';
 import { BuildCodeEditor } from '../../components/build/BuildCodeEditor';
 import './build.css';
 
@@ -55,13 +55,13 @@ export default function BuildPage() {
 
     const signal = { cancelled: () => buildTokenRef.current !== token };
 
-    const result = await runBuildSimulation(code, lang, (line) => {
+    const result = await runCodeBuild(code, lang, (line) => {
       if (signal.cancelled()) return;
       setLogs((prev) => [...prev, line]);
     }, signal);
 
     if (signal.cancelled()) return;
-    setStatus(result);
+    setStatus(result?.success ? 'success' : 'error');
   }, [code, lang]);
 
   useEffect(() => {

@@ -112,7 +112,7 @@ import {
   normalizeBattleProblems,
   type ProblemResultsMap,
 } from '../../utils/battle/problemResultUtils';
-import { runBuildSimulation, type BuildLogLine } from '../../utils/build/buildSimulator';
+import { runCodeBuild, type BuildLogLine } from '../../services/buildExecutionClient';
 import {
   getProblemAnswersForLang,
   isCodeBlankBuildProblem,
@@ -277,7 +277,7 @@ export default function BattlePage() {
   const [buildPanelCollapsed, setBuildPanelCollapsed] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const assembledBuildCodeRef = useRef('');
-  const buildCancelledRef = useRef(false);
+  const buildTokenRef = useRef(0);
   const advanceQueuedRef = useRef(false);
   const itemTargetBotIdRef = useRef<string | null>(null);
   const gameOverNavRef = useRef(false);
@@ -346,7 +346,7 @@ export default function BattlePage() {
 
   const buildLangKey = getLangKey(langKey);
   const buildLangLabel = getLangLabel(buildLangKey);
-  const showBuildPanel = currentCaps.showCodePanel && isCodeBlankBuildProblem(currentProblem, buildLangKey);
+  const showBuildPanel = currentCaps.showCodePanel && Boolean(currentProblem?.executionKind || (!isLiveMatch && isCodeBlankBuildProblem(currentProblem, buildLangKey)));
   const buildsAllowed = BATTLE_BUILD_LIMIT + (buildBonusByProblem[currentIndex] || 0);
   const buildsUsed = buildsUsedByProblem[currentIndex] || 0;
   const currentBuildCode = buildCodeByProblem[currentIndex] ?? '';
@@ -365,7 +365,7 @@ export default function BattlePage() {
 
   useEffect(() => {
     assembledBuildCodeRef.current = '';
-    buildCancelledRef.current = true;
+    buildTokenRef.current += 1;
     setIsBuilding(false);
   }, [currentIndex]);
 
@@ -380,14 +380,14 @@ export default function BattlePage() {
     if (!showBuildPanel || isBuilding) return;
     if (buildsUsed >= buildsAllowed) return;
 
-    buildCancelledRef.current = false;
+    const token = ++buildTokenRef.current;
+    const cancelled = () => token !== buildTokenRef.current;
     setIsBuilding(true);
-    setBuildsUsedByProblem((prev) => ({ ...prev, [currentIndex]: (prev[currentIndex] || 0) + 1 }));
     setBuildLogsByProblem((prev) => ({ ...prev, [currentIndex]: [] }));
 
     const code = buildCodeByProblem[currentIndex] ?? assembledBuildCodeRef.current;
     const appendLog = (line: BuildLogLine) => {
-      if (buildCancelledRef.current) return;
+      if (cancelled()) return;
       setBuildLogsByProblem((prev) => ({
         ...prev,
         [currentIndex]: [...(prev[currentIndex] || []), line],
@@ -395,12 +395,18 @@ export default function BattlePage() {
     };
 
     try {
-      await runBuildSimulation(code, buildLangKey, appendLog, { cancelled: () => buildCancelledRef.current });
+      const result = await runCodeBuild(code, buildLangKey, appendLog, { cancelled }, isLiveMatch ? { matchId, problemIndex: currentIndex } : undefined);
+      if (result && !cancelled() && isLiveMatch) {
+        setBuildsUsedByProblem(prev => ({ ...prev, [currentIndex]: result.buildsUsed }));
+        setBuildBonusByProblem(prev => ({ ...prev, [currentIndex]: Math.max(0, result.buildsAllowed - BATTLE_BUILD_LIMIT) }));
+      }
     } finally {
-      if (!buildCancelledRef.current) setIsBuilding(false);
+      if (!cancelled()) setIsBuilding(false);
     }
   }, [
     showBuildPanel,
+    isLiveMatch,
+    matchId,
     isBuilding,
     buildsUsed,
     buildsAllowed,
@@ -618,7 +624,8 @@ export default function BattlePage() {
           setProblemSolved(submitted[index] !== undefined);
           setIngameScore(result.progress.score);
           setSolveTimes(draft?.solveTimes || {});
-          setBuildsUsedByProblem(draft?.buildsUsed || {});
+          setBuildsUsedByProblem(Object.fromEntries(Object.entries(result.buildState.used).map(([key, value]) => [key, Number(value)])));
+          setBuildBonusByProblem(Object.fromEntries(Object.entries(result.buildState.bonus).map(([key, value]) => [key, Number(value)])));
           if (result.progress.finished) {
             setDemoSpectating(true);
             setSpectatorLocked(true);
@@ -2111,7 +2118,7 @@ export default function BattlePage() {
     if (!isItemMode || !selectedItemKeys.has(type)) return;
     if (itemInventory[type] <= 0) return;
     if (!canUseItem(currentCaps, type)) return;
-    if (type === 'buildCharge' && !isCodeBlankBuildProblem(currentProblem, buildLangKey)) return;
+    if (type === 'buildCharge' && !showBuildPanel) return;
 
     const correct = resolveProblemAnswersWithFallback(currentProblem, langKey);
     let serverEffect: Awaited<ReturnType<typeof useMatchItem>>['effect'] | null = null;
@@ -2644,7 +2651,7 @@ export default function BattlePage() {
                     {selectedSelfItems.map((type) => {
                       const meta = SELF_ITEM_META[type] || { icon: '?', name: type };
                       const buildUnavailable =
-                        type === 'buildCharge' && !isCodeBlankBuildProblem(currentProblem, buildLangKey);
+                        type === 'buildCharge' && !showBuildPanel;
                       const disabled =
                         !canUseItem(currentCaps, type) ||
                         itemInventory[type] <= 0 ||

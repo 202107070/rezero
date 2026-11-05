@@ -15,6 +15,7 @@ export interface BattleDraft {
 }
 
 export interface DraftResponse {
+  buildState: { used: Record<number, string>; bonus: Record<number, string> };
   roomRoster: Array<{ id: number; userId: string; name: string; character: string; isHost: boolean; ratingScore: number }>;
   match: MatchStartResponse;
   draft: BattleDraft | null;

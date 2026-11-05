@@ -7,6 +7,8 @@ import roomRouter from "./src/api/room/router.js";
 import userRouter from "./src/api/user/router.js";
 import { createBuildRouter } from './src/api/build/router.js';
 import { createSessionService } from './src/api/build/sessionService.js';
+import { createExecutionService } from './src/api/build/executionService.js';
+import { isolatedRunner } from './src/infra/docker/worker/isolatedRunner.js';
 import * as battleModel from './src/api/battle/model.js';
 import { redisClient } from './src/config/redisConfig.js';
 import { authenticate } from './src/middleware/authMiddleware.js';
@@ -29,7 +31,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use("/health", healthRouter);
 app.use("/api/v1/health", healthRouter);
 app.use("/api/v1", userRouter);
-app.use('/api/v1', createBuildRouter({ sessions: createSessionService({ matches: battleModel, redis: redisClient }), authenticate }));
+app.use('/api/v1', createBuildRouter({ sessions: createSessionService({ matches: battleModel, redis: redisClient }), executions: createExecutionService({ matches: battleModel, redis: redisClient, runner: isolatedRunner }), authenticate }));
 app.use("/api/v1", roomRouter);
 app.use("/api/v1", battleRouter);
 

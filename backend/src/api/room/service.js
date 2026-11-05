@@ -1,4 +1,5 @@
 import { selectProblems } from "../problem/service.js";
+import { isolatedRunner } from '../../infra/docker/worker/isolatedRunner.js';
 import * as roomModel from "./model.js";
 import { toRoomResponse } from "./dto/roomResponseDto.js";
 import { redisClient } from "#config/redisConfig.js";
@@ -638,6 +639,9 @@ export async function startRoom(roomId, userId) {
   }
 
   await selectProblems({ difficulty: room.difficulty, language: room.language, count: Number(room.problemCount) });
+  if (!["HTML", "CSS"].includes(room.language) && !await isolatedRunner.ready()) {
+    throw new AppError(503, 'BUILD_UNAVAILABLE', '코드 실행 환경이 준비되지 않았습니다. 서버 실행기 설정을 확인해 주세요.');
+  }
 
   const started = await roomModel.markRoomStarted(roomId);
 

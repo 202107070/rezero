@@ -88,10 +88,12 @@ export function createSessionService({ matches, redis, now = Date.now }) {
       const submissions = Object.entries(written || {}).map(([index, value]) => ({ index: Number(index), ...JSON.parse(value) }));
       const finalized = matches.findMatchSubmissions ? await matches.findMatchSubmissions(matchId) : [];
       const players = matches.findMatchParticipantsForResult ? await matches.findMatchParticipantsForResult(matchId) : [];
+      const buildsUsed = await storage(() => redis.hGetAll(`battle:buildUsed:${matchId}:${userId}`));
+      const buildBonus = await storage(() => redis.hGetAll(`battle:buildBonus:${matchId}:${userId}`));
       const roomRoster = players.map(player => ({ id: Number(player.slotIndex), userId: player.userId, name: player.displayName || player.username, character: player.avatar, isHost: Number(player.isHost) === 1, ratingScore: Number(player.ratingScore) }));
       const draftRemaining = draft && Number.isFinite(draft.remaining) ? Math.max(0, draft.remaining - Math.floor((now() - draft.savedAt) / 1000)) : remaining(match);
       return { match: { ...match, problems: await matches.findMatchProblems(matchId) }, draft, progress: { submissions, score, finished: finalized.some(row => String(row.userId) === String(userId)) },
-        roomRoster, remainingSeconds: match.status === 'IN_PROGRESS' ? Math.min(remaining(match), draftRemaining) : 0, serverTime: now() };
+        roomRoster, buildState: { used: buildsUsed, bonus: buildBonus }, remainingSeconds: match.status === 'IN_PROGRESS' ? Math.min(remaining(match), draftRemaining) : 0, serverTime: now() };
     },
   };
 }

@@ -772,6 +772,12 @@ export async function useBattleItem(input) {
     throw new AppError(409, "ITEM_NOT_AVAILABLE", "보유한 아이템이 없습니다.");
   }
 
+  if (input.itemKey === 'buildCharge') {
+    const key = `battle:buildBonus:${input.matchId}:${input.userId}`;
+    await redisClient.hIncrBy(key, String(input.problemIndex), 1);
+    await redisClient.expire(key, 7200);
+  }
+
   return {
     matchId: input.matchId,
     problemIndex: input.problemIndex,
