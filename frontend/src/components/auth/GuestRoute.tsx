@@ -37,18 +37,19 @@ function SignedInDestination() {
   }, [attempt]);
 
   if (destination) return <Navigate to={destination} replace />;
-  return (
-    <div className="login-page page-container">
-      {failed ? (
+  if (failed) {
+    return (
+      <div className="login-page page-container">
         <div className="login-card">
           <p role="alert">이어서 볼 경기를 확인할 수 없습니다.</p>
-          <button type="button" onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>
+          <button type="button" onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}>
             다시 시도
           </button>
         </div>
-      ) : <p role="status">이어서 볼 경기를 확인하고 있습니다...</p>}
-    </div>
-  );
+      </div>
+    );
+  }
+  return null;
 }
 
 export function GuestRoute({ children }: { children: React.ReactNode }) {
