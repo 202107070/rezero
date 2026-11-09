@@ -32,6 +32,7 @@ import {
   emitFriendRequestResult,
   emitUpdateLocation,
   getActiveRoomId,
+  getRoomSocket,
   joinRoomSocket,
   onRoomEvent,
   ROOM_SOCKET_EVENTS,
@@ -322,7 +323,8 @@ export default function ResultPage() {
   }>({ open: false, x: 0, y: 0, player: null });
   const botAcceptTimerRef = useRef<(() => void) | null>(null);
   const [incomingReviewInvite, setIncomingReviewInvite] = useState<ReviewInviteSocketPayload | null>(null);
-  const pendingInviteIdRef = useRef<string | null>(null);
+  const pendingReviewRef = useRef<{ id: string; targets: Set<string>; timer: number; accepted: boolean } | null>(null);
+  const respondingReviewRef = useRef(false);
   const [pendingFriendRequest, setPendingFriendRequest] = useState<{
     fromUserId: string;
     fromUserName: string;
@@ -342,18 +344,16 @@ export default function ResultPage() {
     if (!roomId) return;
     let cancelled = false;
     const unsubs: Array<() => void> = [];
+    const syncResultRoom = async () => {
+      if (cancelled) return;
+      await Promise.allSettled([
+        emitUpdateLocation({ location: 'result', roomId, ratingScore: getRatingScore() }),
+        joinRoomSocket(roomId),
+      ]);
+    };
 
     void (async () => {
       try {
-        // join 전에 result 위치를 먼저 올려 room 오탐을 막음
-        await emitUpdateLocation({
-          location: 'result',
-          roomId: String(roomId || ''),
-          ratingScore: getRatingScore(),
-        }).catch(() => undefined);
-        await joinRoomSocket(roomId);
-        if (cancelled) return;
-
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
             const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
@@ -459,7 +459,7 @@ export default function ResultPage() {
               if (!remote) {
                 if (prev === 'result' || prev === 'battle') {
                   if (!awayStayRef.current.has(pid)) {
-                    notices.push(`${name} 유저가 로비로 이동하였습니다.`);
+                    notices.push(`${name} 유저의 연결이 끊겼습니다.`);
                   }
                   awayStayRef.current.add(pid);
                   seenLocationRef.current.set(pid, 'offline');
@@ -541,7 +541,7 @@ export default function ResultPage() {
 
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.REVIEW_INVITE, (payload: ReviewInviteSocketPayload) => {
-            if (String(payload.fromUserId) === String(myUserId)) return;
+            if (payload.roomId !== roomId || payload.matchId !== matchId) return;
             if (!payload.toUserIds?.map(String).includes(String(myUserId))) return;
             setIncomingReviewInvite(payload);
           }),
@@ -549,19 +549,26 @@ export default function ResultPage() {
 
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, (payload: ReviewInviteResponsePayload) => {
-            // 내가 보낸 초대에 대한 응답만 처리
-            if (String(payload.fromUserId || '') !== String(myUserId)) return;
-            if (payload.accepted) {
+            const pending = pendingReviewRef.current;
+            if (!pending || payload.roomId !== roomId || payload.matchId !== matchId ||
+                payload.inviteId !== pending.id || String(payload.fromUserId) !== String(myUserId) ||
+                !pending.targets.delete(String(payload.toUserId))) return;
+            if (pending.targets.size === 0) {
+              window.clearTimeout(pending.timer);
+              pendingReviewRef.current = null;
               setInviteWaiting(false);
               setShowInviteModal(false);
-              setReviewPartnerIds([String(payload.toUserId)]);
+            }
+            if (payload.accepted) {
+              pending.accepted = true;
+              setInviteWaiting(false);
+              setShowInviteModal(false);
+              setReviewPartnerIds((prev) => [...new Set([...prev, String(payload.toUserId)])]);
               if (Array.isArray(payload.problemIndices) && payload.problemIndices.length > 0) {
                 setSelectedReviewProblems(new Set(payload.problemIndices));
               }
               setReviewPhase('reviewing');
             } else {
-              setInviteWaiting(false);
-              setShowInviteModal(false);
               setChatMessages((prev) => [
                 ...prev,
                 {
@@ -573,6 +580,8 @@ export default function ResultPage() {
             }
           }),
         );
+        unsubs.push(onRoomEvent('connect', () => { void syncResultRoom().catch(() => undefined); }));
+        if (getRoomSocket().connected) await syncResultRoom();
       } catch {
         // ignore
       }
@@ -580,6 +589,8 @@ export default function ResultPage() {
 
     return () => {
       cancelled = true;
+      if (pendingReviewRef.current) window.clearTimeout(pendingReviewRef.current.timer);
+      pendingReviewRef.current = null;
       unsubs.forEach((unsub) => {
         try {
           unsub();
@@ -588,7 +599,7 @@ export default function ResultPage() {
         }
       });
     };
-  }, [roomId, myUserId]);
+  }, [roomId, matchId, myUserId]);
 
   useEffect(() => {
     if (!matchId) return;
@@ -881,14 +892,6 @@ export default function ResultPage() {
   }, [roomId, submission, mySubmissionCodes, myBlankAnswers, mySelectedOptions, langKey, myPlayer?.problemResults, isLiveMatch, apiRankingReady]);
 
   useEffect(() => {
-    void emitUpdateLocation({
-      location: 'result',
-      roomId: String(roomId || ''),
-      ratingScore: getRatingScore(),
-    }).catch(() => undefined);
-  }, [roomId]);
-
-  useEffect(() => {
     const onBeforeUnload = () => removeMyPresence(myUserId);
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
@@ -986,7 +989,7 @@ export default function ResultPage() {
     });
   };
 
-  const handleInvite = () => {
+  const handleInvite = async () => {
     const targets = [...inviteTargetIds];
     if (targets.length === 0 || selectedReviewProblems.size === 0) return;
     const moved = targets.filter((id) => {
@@ -1021,14 +1024,17 @@ export default function ResultPage() {
       status: 'pending' as const,
       createdAt: Date.now(),
     };
-    persistReviewInvite(invite);
-    pendingInviteIdRef.current = invite.id;
-    setInviteWaiting(true);
-
     const botTargets = targets.filter((id) => shouldAutoAcceptReviewInvite(id));
     const humanTargets = targets.filter((id) => !shouldAutoAcceptReviewInvite(id));
+    if (humanTargets.length > 0 && (!roomId || !matchId)) {
+      setShowInviteModal(false);
+      appendSystemChat('리뷰할 경기 정보를 찾을 수 없습니다.');
+      return;
+    }
+    persistReviewInvite(invite);
+    setInviteWaiting(true);
 
-    if (humanTargets.length > 0 && roomId) {
+    if (humanTargets.length > 0) {
       const problemPreviews = invite.problemIndices.map((index) => {
         const problem = resultProblems[index];
         return {
@@ -1037,14 +1043,36 @@ export default function ResultPage() {
           question: problem?.question || '',
         };
       });
-      void emitReviewInvite(roomId, {
+      const finishWaiting = (message: string) => {
+        const pending = pendingReviewRef.current;
+        if (pending?.id !== invite.id) return;
+        window.clearTimeout(pending.timer);
+        pendingReviewRef.current = null;
+        if (!pending.accepted) {
+          setInviteWaiting(false);
+          setShowInviteModal(false);
+          appendSystemChat(message);
+        }
+      };
+      pendingReviewRef.current = {
         id: invite.id,
-        sessionId,
-        matchId: matchId || undefined,
-        toUserIds: humanTargets,
-        problemIndices: invite.problemIndices,
-        problems: problemPreviews,
-      }).catch(() => undefined);
+        targets: new Set(humanTargets.map(id => id.replace(/^player-/, ''))),
+        timer: window.setTimeout(() => finishWaiting('리뷰 초대 응답 시간이 지났습니다.'), 45000),
+        accepted: false,
+      };
+      try {
+        const result = await emitReviewInvite(roomId, {
+          id: invite.id,
+          sessionId,
+          matchId,
+          toUserIds: humanTargets,
+          problemIndices: invite.problemIndices,
+          problems: problemPreviews,
+        });
+        if (!result.success) finishWaiting(result.message || '리뷰 초대를 보낼 수 없습니다.');
+      } catch {
+        finishWaiting('리뷰 초대를 보낼 수 없습니다. 다시 시도해 주세요.');
+      }
     }
 
     if (botTargets.length > 0 && humanTargets.length === 0) {
@@ -1067,34 +1095,36 @@ export default function ResultPage() {
     }
   };
 
-  const handleAcceptIncomingReview = () => {
-    if (!incomingReviewInvite || !roomId) return;
-    void emitReviewInviteResponse(roomId, {
-      inviteId: incomingReviewInvite.id,
-      fromUserId: incomingReviewInvite.fromUserId,
-      accepted: true,
-      problemIndices: incomingReviewInvite.problemIndices,
-    });
-    setSelectedReviewProblems(new Set(incomingReviewInvite.problemIndices || []));
-    setReviewPartnerIds([incomingReviewInvite.fromUserId]);
-    setReviewPhase('reviewing');
-    setIncomingReviewInvite(null);
-  };
-
-  const handleRejectIncomingReview = () => {
-    if (!incomingReviewInvite || !roomId) return;
-    void emitReviewInviteResponse(roomId, {
-      inviteId: incomingReviewInvite.id,
-      fromUserId: incomingReviewInvite.fromUserId,
-      accepted: false,
-      problemIndices: incomingReviewInvite.problemIndices,
-    });
-    setIncomingReviewInvite(null);
+  const respondToReviewInvite = async (accepted: boolean) => {
+    if (!incomingReviewInvite || !roomId || respondingReviewRef.current) return;
+    const invite = incomingReviewInvite;
+    respondingReviewRef.current = true;
+    try {
+      const result = await emitReviewInviteResponse(roomId, {
+        inviteId: invite.id,
+        fromUserId: invite.fromUserId,
+        accepted,
+      });
+      if (!result.success) {
+        appendSystemChat(result.message || '리뷰 초대에 응답할 수 없습니다.');
+      } else if (accepted) {
+        setSelectedReviewProblems(new Set(invite.problemIndices));
+        setReviewPartnerIds([invite.fromUserId]);
+        setReviewPhase('reviewing');
+      }
+      setIncomingReviewInvite(current => current?.id === invite.id ? null : current);
+    } catch {
+      appendSystemChat('리뷰 초대에 응답할 수 없습니다. 다시 시도해 주세요.');
+    } finally {
+      respondingReviewRef.current = false;
+    }
   };
 
   const handleExitReview = () => {
     botAcceptTimerRef.current?.();
     botAcceptTimerRef.current = null;
+    if (pendingReviewRef.current) window.clearTimeout(pendingReviewRef.current.timer);
+    pendingReviewRef.current = null;
     setReviewPhase('idle');
     setSelectedReviewProblems(new Set());
     setReviewPartnerIds([]);
@@ -1503,8 +1533,8 @@ export default function ResultPage() {
                 question: resultProblems[index]?.question || '',
               }))
         }
-        onAccept={handleAcceptIncomingReview}
-        onReject={handleRejectIncomingReview}
+        onAccept={() => { void respondToReviewInvite(true); }}
+        onReject={() => { void respondToReviewInvite(false); }}
       />
 
       {pendingFriendRequest && (

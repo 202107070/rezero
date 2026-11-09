@@ -41,17 +41,12 @@ export function validateSendMessage(data) {
       ? rawMode
       : "ALL";
 
-  const friendUserIds = Array.isArray(data.friendUserIds)
-    ? data.friendUserIds.map(String).filter(Boolean)
-    : [];
-
   return {
     roomId: String(data.roomId).trim(),
     message: trimmedMessage,
     mode,
     targetUserId: data.targetUserId ? String(data.targetUserId) : null,
     targetUserName: data.targetUserName ? String(data.targetUserName) : "",
-    friendUserIds,
     messageId: data.messageId ? String(data.messageId).slice(0, 64) : "",
   };
 }

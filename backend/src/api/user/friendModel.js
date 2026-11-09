@@ -55,22 +55,34 @@ export async function listPendingFriendRequests(userId) {
 
 export async function acceptFriendRequest(fromUserId, toUserId) {
   await ensureFriendTables();
-  await pool.query(
-    `INSERT INTO friends (user_id, friend_user_id) VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE added_at = added_at`,
-    [fromUserId, toUserId],
-  );
-  await pool.query(
-    `INSERT INTO friends (user_id, friend_user_id) VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE added_at = added_at`,
-    [toUserId, fromUserId],
-  );
-  await pool.query(
-    `DELETE FROM friend_requests
-     WHERE (from_user_id = ? AND to_user_id = ?)
-        OR (from_user_id = ? AND to_user_id = ?)`,
-    [fromUserId, toUserId, toUserId, fromUserId],
-  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const result = await connection.query(
+      "DELETE FROM friend_requests WHERE from_user_id = ? AND to_user_id = ?",
+      [fromUserId, toUserId],
+    );
+    if (result.affectedRows !== 1) {
+      await connection.rollback();
+      return false;
+    }
+    await connection.query(
+      `INSERT INTO friends (user_id, friend_user_id) VALUES (?, ?), (?, ?)
+       ON DUPLICATE KEY UPDATE added_at = added_at`,
+      [fromUserId, toUserId, toUserId, fromUserId],
+    );
+    await connection.query(
+      "DELETE FROM friend_requests WHERE from_user_id = ? AND to_user_id = ?",
+      [toUserId, fromUserId],
+    );
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function declineFriendRequest(fromUserId, toUserId) {

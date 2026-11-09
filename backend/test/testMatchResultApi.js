@@ -1,4 +1,5 @@
 import { assertIsolatedTestTarget } from "./isolatedTestGuard.js";
+import { once } from "node:events";
 import { pool } from "#config/dbConfig.js";
 import { connectRedis, redisClient } from "#config/redisConfig.js";
 import { io } from "socket.io-client";
@@ -288,6 +289,45 @@ async function runTest() {
   const rows = await pool.query('SELECT COUNT(*) AS count FROM match_rankings WHERE match_id=?', [createdMatchId]);
   assert(Number(rows[0].count) === 1, '순위가 중복 저장됐습니다.');
   console.log('PASS: 반복·동시 재제출에도 골드/레이팅/순위 1회 저장');
+
+  hostSocket.disconnect();
+  const restored = await request("/api/v1/matches/reconnect", { token: host.token });
+  assert(restored.data.match?.matchId === createdMatchId, "재접속할 종료 경기가 복원되지 않았습니다.");
+  const reconnected = await connectSocket(host.token);
+  const outsider = await signup("outside");
+  const outsideSocket = await connectSocket(outsider.token);
+  const roomId = String(createdRoomId);
+  const emit = (socket, event, data) => socket.timeout(5000).emitWithAck(event, data);
+  for (const socket of [reconnected, guestSocket]) {
+    const result = await emit(socket, "update_location", { location: "result", roomId });
+    assert(result.success, "결과 화면 위치를 등록하지 못했습니다.");
+  }
+  const invitation = {
+    id: "review-" + Date.now(),
+    roomId,
+    matchId: createdMatchId,
+    toUserIds: [guest.id],
+    problemIndices: [0],
+  };
+  assert(!(await emit(outsideSocket, "review_invite", invitation)).success, "외부자가 리뷰 초대를 보냈습니다.");
+  const incoming = once(guestSocket, "review_invite", { signal: AbortSignal.timeout(5000) });
+  const sent = await emit(reconnected, "review_invite", invitation);
+  assert(sent.success, sent.message || "재접속 참가자의 리뷰 초대가 실패했습니다.");
+  const [received] = await incoming;
+  assert(received.id === invitation.id, "상대에게 리뷰 초대가 전달되지 않았습니다.");
+  const response = { roomId, inviteId: received.id, fromUserId: host.id, accepted: true };
+  assert(!(await emit(outsideSocket, "review_invite_response", response)).success, "외부자가 리뷰 초대에 응답했습니다.");
+  const reply = once(reconnected, "review_invite_response", { signal: AbortSignal.timeout(5000) });
+  assert((await emit(guestSocket, "review_invite_response", response)).success, "리뷰 수락에 실패했습니다.");
+  const [accepted] = await reply;
+  assert(
+    accepted.inviteId === invitation.id && accepted.matchId === createdMatchId &&
+    accepted.accepted && accepted.toUserId === guest.id && accepted.problemIndices[0] === 0,
+    "방 소켓을 아직 구독하지 않은 요청자에게 수락이 전달되지 않았습니다.",
+  );
+  assert(!(await emit(guestSocket, "review_invite_response", { ...response, accepted: false })).success,
+    "이미 수락한 초대를 거절할 수 있었습니다.");
+  console.log("PASS: 재접속 뒤 공동 리뷰 및 외부자의 초대·응답 차단");
   console.log("--- 경기 결과 API 통합 테스트 완료 ---");
 }
 

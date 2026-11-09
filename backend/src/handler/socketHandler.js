@@ -1,5 +1,6 @@
 // src/handler/socketHandler.js
 
+import { randomUUID } from "node:crypto";
 import {
   validateJoinRoom,
   validateSendMessage,
@@ -26,6 +27,23 @@ import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { pool as dbPool } from "#config/dbConfig.js";
 import { redisClient } from "#config/redisConfig.js";
 import * as roomModel from "../api/room/model.js";
+import { findMatchById, findMatchParticipantsForResult } from "../api/battle/model.js";
+import { listFriendsForUser } from "../api/user/friendModel.js";
+
+function isGameRoomId(roomId) {
+  return /^[1-9]\d{0,9}$/.test(roomId);
+}
+
+function findSocketRoomStatus(roomId, userId) {
+  return isGameRoomId(roomId) ? roomModel.findParticipantRoomStatus(roomId, userId) : null;
+}
+
+function reviewInviteKey(userId, inviteId) {
+  if (!userId || !/^[\w-]{1,96}$/.test(inviteId)) {
+    throw new Error("유효한 리뷰 초대가 필요합니다.");
+  }
+  return `review:invite:${userId}:${inviteId}`;
+}
 
 function userLabel(user) {
   const display = String(user?.displayName || "").trim();
@@ -40,7 +58,8 @@ export function registerSocketHandlers(io, socket) {
   console.log("[Socket 연결 완료] " + userLabel(socket.user) + " (" + socket.id + ")");
   // 개인 룸: 친구 요청 등 1:1 이벤트용
   socket.join("user:" + String(socket.user.id));
-  void markUserOnline(socket.user).then(function () {
+  const presenceReady = markUserOnline(socket.user);
+  void presenceReady.then(function () {
     return broadcastLobbyPresence(io);
   });
   void (async function () {
@@ -99,6 +118,9 @@ export function registerSocketHandlers(io, socket) {
           }
         }
       } else {
+        if (!await findSocketRoomStatus(roomId, socket.user.id)) {
+          throw new Error("참가 중인 방에만 입장할 수 있습니다.");
+        }
         for (const joined of socket.rooms) {
           if (joined !== roomId && (joined === LOBBY_ROOM_ID || /^\d+$/.test(joined))) socket.leave(joined);
         }
@@ -201,6 +223,14 @@ export function registerSocketHandlers(io, socket) {
   socket.on(SOCKET_EVENTS.SEND_MESSAGE, async function (data, callback) {
     try {
       const validatedData = validateSendMessage(data);
+      const { roomId, mode, targetUserId } = validatedData;
+      if (!socket.rooms.has(roomId) ||
+          (roomId !== LOBBY_ROOM_ID && !await findSocketRoomStatus(roomId, socket.user.id))) {
+        throw new Error("참가 중인 채팅에서만 메시지를 보낼 수 있습니다.");
+      }
+      if (mode === "WHISPER" && !targetUserId) {
+        throw new Error("귓속말 대상을 선택해 주세요.");
+      }
 
       const chatMessage = formatChatMessage({
         roomId: validatedData.roomId,
@@ -212,21 +242,12 @@ export function registerSocketHandlers(io, socket) {
         messageId: validatedData.messageId,
       });
 
-      if (validatedData.mode === "WHISPER" && validatedData.targetUserId) {
-        const targetRoom = "user:" + String(validatedData.targetUserId);
-        io.to(targetRoom).emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
-        socket.emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
-      } else if (validatedData.mode === "FRIEND") {
-        const friendIds = validatedData.friendUserIds || [];
-        const delivered = new Set();
-        for (let i = 0; i < friendIds.length; i++) {
-          const fid = String(friendIds[i]);
-          if (delivered.has(fid)) continue;
-          delivered.add(fid);
-          io.to("user:" + fid).emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
-        }
-        // 방 전체 브로드캐스트 금지 — 친구 목록 대상에게만 전달
-        socket.emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
+      if (mode === "WHISPER") {
+        io.to(["user:" + targetUserId, socket.id]).emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
+      } else if (mode === "FRIEND") {
+        const friends = await listFriendsForUser(socket.user.id);
+        const recipients = friends.map(friend => "user:" + friend.userId);
+        io.to([...recipients, socket.id]).emit(SOCKET_EVENTS.RECEIVE_MESSAGE, chatMessage);
       } else {
         io.to(validatedData.roomId).emit(
           SOCKET_EVENTS.RECEIVE_MESSAGE,
@@ -488,36 +509,51 @@ export function registerSocketHandlers(io, socket) {
 
   socket.on(SOCKET_EVENTS.REVIEW_INVITE, async function (data, callback) {
     try {
-      const roomId = data?.roomId ? String(data.roomId) : "";
-      const toUserIds = Array.isArray(data?.toUserIds)
-        ? data.toUserIds.map(String)
-        : data?.toUserId
-          ? [String(data.toUserId)]
-          : [];
-      if (!roomId || toUserIds.length === 0) {
-        throw new Error("리뷰 초대 대상이 없습니다.");
+      const roomId = String(data?.roomId || "");
+      const matchId = String(data?.matchId || "");
+      const fromUserId = String(socket.user.id);
+      const id = String(data?.id || "");
+      const key = reviewInviteKey(fromUserId, id);
+      const targets = Array.isArray(data?.toUserIds) ? data.toUserIds : [data?.toUserId];
+      const toUserIds = [...new Set(targets.filter(Boolean).map(value => String(value).replace(/^player-/, "")))];
+      if (!matchId || !isGameRoomId(roomId) || !toUserIds.length || toUserIds.length > 7) {
+        throw new Error("리뷰할 경기와 초대 대상을 확인해 주세요.");
       }
-      for (let i = 0; i < toUserIds.length; i++) {
-        const targetId = String(toUserIds[i] || "").replace(/^player-/, "");
-        if (!targetId || targetId.startsWith("bot-") || targetId.includes("demo-bot")) continue;
-        const location = await getUserLocation(targetId);
-        if (location === "lobby" || location === "room" || location === "offline") {
-          throw new Error("상대가 이미 대기방이나 로비로 이동하여 리뷰할 수 없습니다.");
-        }
+      const match = await findMatchById(matchId);
+      if (match?.status !== "FINISHED" || String(match.roomId) !== roomId) {
+        throw new Error("종료된 경기에서만 리뷰할 수 있습니다.");
+      }
+      const players = await findMatchParticipantsForResult(matchId);
+      const playerIds = new Set(players.map(player => String(player.userId)));
+      if (!playerIds.has(fromUserId) || toUserIds.some(id => id === fromUserId || !playerIds.has(id))) {
+        throw new Error("같은 경기의 참가자만 리뷰에 초대할 수 있습니다.");
+      }
+      const locations = await Promise.all(toUserIds.map(getUserLocation));
+      if (locations.some(location => location !== "result")) {
+        throw new Error("상대가 결과 화면에 있어야 리뷰에 초대할 수 있습니다.");
+      }
+      const problemIndices = Array.isArray(data?.problemIndices) ? [...new Set(data.problemIndices)] : [];
+      if (!problemIndices.length || problemIndices.some(index =>
+        !Number.isInteger(index) || index < 0 || index >= match.problemCount)) {
+        throw new Error("리뷰할 문제를 선택해 주세요.");
       }
       const payload = {
-        id: data.id || "review-" + Date.now(),
+        id,
         roomId,
-        matchId: data.matchId || null,
+        matchId,
         sessionId: data.sessionId || null,
-        fromUserId: String(socket.user.id),
+        fromUserId,
         fromUserName: userLabel(socket.user),
         toUserIds,
-        problemIndices: Array.isArray(data.problemIndices) ? data.problemIndices : [],
+        problemIndices,
         problems: Array.isArray(data.problems) ? data.problems : [],
         createdAt: Date.now(),
       };
-      io.to(roomId).emit(SOCKET_EVENTS.REVIEW_INVITE, payload);
+      const saved = await redisClient.set(
+        key, JSON.stringify({ roomId, matchId, problemIndices, toUserIds }), { NX: true, EX: 45 },
+      );
+      if (!saved) throw new Error("이미 보낸 리뷰 초대입니다.");
+      io.to(toUserIds.map(userId => "user:" + userId)).emit(SOCKET_EVENTS.REVIEW_INVITE, payload);
       if (typeof callback === "function") {
         callback({ success: true, invite: payload });
       }
@@ -528,20 +564,39 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
-  socket.on(SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, function (data, callback) {
+  socket.on(SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, async function (data, callback) {
     try {
-      const roomId = data?.roomId ? String(data.roomId) : "";
-      if (!roomId) throw new Error("roomId가 필요합니다.");
+      const fromUserId = String(data?.fromUserId || "");
+      const inviteId = String(data?.inviteId || "");
+      const toUserId = String(socket.user.id);
+      const key = reviewInviteKey(fromUserId, inviteId);
+      const raw = await redisClient.get(key);
+      const invite = raw && JSON.parse(raw);
+      if (!invite?.toUserIds.includes(toUserId) || invite.roomId !== String(data?.roomId || "")) {
+        throw new Error("리뷰 초대가 만료되었거나 유효하지 않습니다.");
+      }
+      if (!io.sockets.adapter.rooms.get("user:" + fromUserId)?.size ||
+          await getUserLocation(fromUserId) !== "result") {
+        throw new Error("초대한 상대가 결과 화면에 없습니다.");
+      }
+      const accepted = Boolean(data.accepted);
+      const responseKey = key + ":response:" + toUserId;
+      const savedResponse = String(accepted);
+      if (!await redisClient.set(responseKey, savedResponse, { NX: true, EX: 45 }) &&
+          await redisClient.get(responseKey) !== savedResponse) {
+        throw new Error("이미 이 리뷰 초대에 응답했습니다.");
+      }
       const payload = {
-        inviteId: data.inviteId || data.id,
-        roomId,
-        fromUserId: data.fromUserId,
-        toUserId: String(socket.user.id),
+        inviteId,
+        roomId: invite.roomId,
+        matchId: invite.matchId,
+        problemIndices: invite.problemIndices,
+        fromUserId,
+        toUserId,
         toUserName: userLabel(socket.user),
-        accepted: Boolean(data.accepted),
-        problemIndices: Array.isArray(data.problemIndices) ? data.problemIndices : [],
+        accepted,
       };
-      io.to(roomId).emit(SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, payload);
+      io.to("user:" + fromUserId).emit(SOCKET_EVENTS.REVIEW_INVITE_RESPONSE, payload);
       if (typeof callback === "function") {
         callback({ success: true });
       }
@@ -629,7 +684,9 @@ export function registerSocketHandlers(io, socket) {
       if (!toUserId) throw new Error("응답 대상이 없습니다.");
       const accepted = Boolean(data?.accepted);
       if (accepted) {
-        await acceptFriendRequest(toUserId, String(socket.user.id));
+        if (!await acceptFriendRequest(toUserId, String(socket.user.id))) {
+          throw new Error("받은 친구 요청이 없습니다.");
+        }
       } else {
         await declineFriendRequest(toUserId, String(socket.user.id));
       }
@@ -689,11 +746,15 @@ export function registerSocketHandlers(io, socket) {
       const roomId = data?.roomId != null ? String(data.roomId) : "";
       if (!toUserId) throw new Error("초대 대상이 없습니다.");
       if (!roomId) throw new Error("방 정보가 없습니다.");
+      if (toUserId === String(socket.user.id) ||
+          await findSocketRoomStatus(roomId, socket.user.id) !== "WAITING") {
+        throw new Error("참가 중인 대기방에서만 다른 사용자에게 초대를 보낼 수 있습니다.");
+      }
       const targetRoom = io.sockets.adapter.rooms.get("user:" + toUserId);
       if (!targetRoom || targetRoom.size === 0) {
         throw new Error("상대가 현재 접속 중이 아닙니다.");
       }
-      const inviteToken = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const inviteToken = `inv_${randomUUID()}`;
       await redisClient.set(
         `room:invite:${inviteToken}`,
         JSON.stringify({
@@ -728,6 +789,7 @@ export function registerSocketHandlers(io, socket) {
 
   socket.on(SOCKET_EVENTS.UPDATE_LOCATION, async function (data, callback) {
     try {
+      await presenceReady;
       const location = data?.location ? String(data.location) : "lobby";
       const roomId = data?.roomId != null ? String(data.roomId) : "";
       const roomTitle = data?.roomTitle != null ? String(data.roomTitle) : "";
