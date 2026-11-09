@@ -192,8 +192,6 @@ export default function RoomPage() {
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
   const roomRosterReadyRef = useRef(false);
   const roomFetchGenRef = useRef(0);
-  const rosterLockRef = useRef<Set<string> | null>(null);
-  const bannedRosterIdsRef = useRef<Set<string>>(new Set());
   const playersRef = useRef(players);
   const roomMetaRef = useRef({ roomId: '', roomTitle: '', roomQuery: '' });
   const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
@@ -262,31 +260,9 @@ export default function RoomPage() {
   isItemModeRef.current = isItemMode;
 
   const applyRoom = useCallback((room: Room, options?: { resetChat?: boolean }) => {
-    const rosterId = (value: string | number | null | undefined) =>
-      String(value || '').replace(/^player-/, '');
-    let participants = room.participants || [];
-    participants = participants.filter(
-      (participant) => !bannedRosterIdsRef.current.has(rosterId(participant.userId)),
-    );
-    if (rosterLockRef.current) {
-      const allowed = rosterLockRef.current;
-      participants = participants.filter((participant) => allowed.has(rosterId(participant.userId)));
-    } else if (participants.length > 0) {
-      rosterLockRef.current = new Set(participants.map((participant) => rosterId(participant.userId)));
-    }
-    const lockedRoom: Room =
-      participants.length === (room.participants || []).length
-        ? room
-        : {
-            ...room,
-            participants,
-            currentPlayers: participants.length,
-            players: `${participants.length}/${room.maxPlayers || 8}`,
-          };
-
-    setRoomDetail(lockedRoom);
+    setRoomDetail(room);
     const myId = getCurrentUserId();
-    const myParticipant = (lockedRoom.participants || []).find(
+    const myParticipant = (room.participants || []).find(
       (participant) => String(participant.userId) === String(myId),
     );
     if (myParticipant?.character) {
@@ -297,7 +273,7 @@ export default function RoomPage() {
       if (matched) setMyCharacter(matched);
     }
 
-    const mapped = mapParticipantsToPlayers(lockedRoom).map((player) => {
+    const mapped = mapParticipantsToPlayers(room).map((player) => {
       if (!player) return player;
       if (String(player.userId) === String(myId)) {
         const selfName = getCurrentDisplayName() || getCurrentUserName();
@@ -329,16 +305,16 @@ export default function RoomPage() {
       // rematch → WAITING: backend clears is_ready; trust participant payload
       setIsReady(Boolean(myParticipant.isReady));
     }
-    setMyLanguage(LANG_MAP[lockedRoom.lang] || 'java');
+    setMyLanguage(LANG_MAP[room.lang] || 'java');
     setSettings({
       time: urlTimeRaw,
-      diff: DIFF_MAP[lockedRoom.diff] || 'NORMAL',
+      diff: DIFF_MAP[room.diff] || 'NORMAL',
       theme: 'ALGORITHM: DP',
-      count: lockedRoom.count || '5',
-      maxPlayers: Math.max(2, Math.min(8, lockedRoom.maxPlayers || parsedMaxPlayers)),
+      count: room.count || '5',
+      maxPlayers: Math.max(2, Math.min(8, room.maxPlayers || parsedMaxPlayers)),
     });
     if (options?.resetChat) {
-      setMessages(buildInitialMessages(lockedRoom.mode || '1/1', lockedRoom.maxPlayers || parsedMaxPlayers, mapped));
+      setMessages(buildInitialMessages(room.mode || '1/1', room.maxPlayers || parsedMaxPlayers, mapped));
     } else if (arrivals.length > 0) {
       setMessages((prev) => [
         ...prev,
@@ -565,14 +541,12 @@ export default function RoomPage() {
           clearPendingInviteToken();
         }
 
-        if (!cancelled && enterGen === roomFetchGenRef.current) {
-          applyRoom(room, { resetChat: true });
+        if (!cancelled) {
+          if (enterGen === roomFetchGenRef.current) applyRoom(room, { resetChat: true });
           try {
-            const joined = await joinRoomSocket(numericRoomId);
-            if (cancelled || !joined.success) return;
             const enterBattleFromMatch = (matchLike: GameStartedPayload) => {
               if (battleNavLockRef.current || cancelled) return;
-              if (!matchLike?.matchId || !Array.isArray(matchLike.problems)) return;
+              if (!matchLike?.matchId || String(matchLike.roomId) !== String(numericRoomId) || !Array.isArray(matchLike.problems)) return;
               battleNavLockRef.current = true;
               leavingToGameRef.current = true;
               const match = matchLike as unknown as MatchStartResponse;
@@ -650,10 +624,6 @@ export default function RoomPage() {
                   return;
                 }
                 const leftId = payload.userId ? String(payload.userId).replace(/^player-/, '') : '';
-                if (leftId) {
-                  bannedRosterIdsRef.current.add(leftId);
-                  rosterLockRef.current?.delete(leftId);
-                }
                 const leftName =
                   payload.displayName ||
                   playersRef.current.find((player) => player && String(player.userId).replace(/^player-/, '') === leftId)?.name ||
@@ -697,11 +667,7 @@ export default function RoomPage() {
                 if (String(payload?.roomId || '') !== String(numericRoomId)) return;
                 if (Array.isArray(payload.participantIds)) {
                   const ids = payload.participantIds.map((id) => String(id).replace(/^player-/, ''));
-                  rosterLockRef.current = new Set(ids);
-                  const allowed = rosterLockRef.current;
-                  ids.forEach((id) => bannedRosterIdsRef.current.delete(id));
-                  const leftId = payload.leftUserId ? String(payload.leftUserId).replace(/^player-/, '') : '';
-                  if (leftId && !allowed.has(leftId)) bannedRosterIdsRef.current.add(leftId);
+                  const allowed = new Set(ids);
                   setPlayers((prev) =>
                     prev.map((player) => {
                       if (!player?.userId) return player;
@@ -879,6 +845,11 @@ export default function RoomPage() {
               ),
             );
 
+            const joinSocket = () => {
+              if (!cancelled) void joinRoomSocket(numericRoomId).catch(() => undefined);
+            };
+            unsubs.push(onRoomEvent('connect', joinSocket));
+            joinSocket();
           } catch {
             // 소켓 연결 실패 시에도 REST 입장 상태는 유지
           }
@@ -924,16 +895,20 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (!Number.isInteger(numericRoomId) || numericRoomId <= 0) return;
+    let cancelled = false;
     const timer = window.setInterval(() => {
       if (!roomRosterReadyRef.current) return;
       const gen = ++roomFetchGenRef.current;
       void fetchRoom(numericRoomId)
         .then((nextRoom) => {
-          if (gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
+          if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
         })
         .catch(() => undefined);
     }, 3000);
-    return () => window.clearInterval(timer);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [applyRoom, numericRoomId]);
 
   const handleSelectCharacter = (characterId: string) => {
