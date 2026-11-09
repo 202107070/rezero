@@ -537,8 +537,8 @@ export const socketGameService = {
   },
 
   async broadcastGameEnded(io, roomId, resultData) {
-    io.to(String(roomId)).emit(SOCKET_EVENTS.GAME_ENDED, resultData);
     await resetRoomAfterMatch(roomId);
+    io.to(String(roomId)).emit(SOCKET_EVENTS.GAME_ENDED, resultData);
     // 다시하기 시 전원 ready 해제 동기화
     try {
       const participants = await roomModel.findRoomParticipants(roomId);

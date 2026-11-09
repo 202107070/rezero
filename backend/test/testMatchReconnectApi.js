@@ -159,6 +159,39 @@ try {
   await expect(200, `/matches/${item.matchId}/submit`, itemHost.token, {});
   assert.equal((await target(itemGuest.token)).status, 'FINISHED');
   console.log('PASS item deadline: applied during disconnect, individual spectator recovery, late answer rejected');
+
+  const [exitHost, exitGuest] = await Promise.all([signup('ea'), signup('eb')]);
+  const exit = await start(exitHost, exitGuest);
+  const exitPath = `/rooms/${exit.roomId}/leave`;
+  const abandoned = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('guest did not receive abandon event')), 5000);
+    exit.guestSocket.once('game_ended', event => { clearTimeout(timer); resolve(event); });
+  });
+  assert.equal((await expect(200, exitPath, exitHost.token, { matchId: exit.matchId })).remainingPlayers, 1);
+  assert.equal((await abandoned).matchId, exit.matchId);
+  assert.equal((await expect(200, exitPath, exitHost.token, { matchId: exit.matchId })).alreadyLeft, true);
+  assert.equal((await expect(200, `/rooms/${exit.roomId}`, exitGuest.token)).status, 'WAITING');
+  const guestStatus = await expect(200, `/matches/${exit.matchId}/pending`, exitGuest.token);
+  assert.equal(guestStatus.abandoned, true);
+  assert.equal(guestStatus.canReturnToRoom, true);
+  const hostStatus = await expect(200, `/matches/${exit.matchId}/pending`, exitHost.token);
+  assert.equal(hostStatus.canReturnToRoom, false);
+  assert.equal(await target(exitHost.token), null);
+  assert.equal(await target(exitGuest.token), null);
+  await expect(404, `/matches/active/${exit.roomId}`, exitGuest.token);
+  await expect(409, `/matches/${exit.matchId}/submit`, exitGuest.token, {});
+
+  await expect(200, `/rooms/${exit.roomId}/join`, exitHost.token, { language: 'PYTHON', character: 'char2', explicitRejoin: true });
+  assert.equal((await exit.hostSocket.timeout(5000).emitWithAck('toggle_ready', { roomId: exit.roomId, isReady: true })).success, true);
+  await expect(200, `/rooms/${exit.roomId}/start`, exitGuest.token, {});
+  const next = await expect(201, '/matches/start', exitGuest.token, { roomId: exit.roomId, roundSeconds: 60 });
+  assert.notEqual(next.matchId, exit.matchId);
+  assert.equal((await expect(200, exitPath, exitHost.token, { matchId: exit.matchId })).alreadyLeft, true);
+  assert.equal((await target(exitHost.token)).matchId, next.matchId);
+  assert.equal((await expect(200, `/matches/active/${exit.roomId}`, exitHost.token)).matchId, next.matchId);
+  await expect(200, `/matches/${next.matchId}/submit`, exitGuest.token, {});
+  assert.equal((await expect(200, `/matches/${next.matchId}/submit`, exitHost.token, {})).resultReady, true);
+  console.log('PASS leave: atomic abandon, repeat leave, stale leave after rematch, next match finishes');
 } finally {
   for (const socket of sockets) socket.disconnect();
   await pool.end();

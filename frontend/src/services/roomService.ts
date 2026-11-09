@@ -26,8 +26,9 @@ export interface JoinRoomParams {
 
 export interface LeaveRoomResult {
   roomId?: number;
-  roomClosed: boolean;
-  newHostUserId: string | null;
+  roomClosed?: boolean;
+  newHostUserId?: string | null;
+  alreadyLeft?: boolean;
   remainingPlayers?: number;
   room?: Room;
 }
@@ -318,8 +319,11 @@ export async function joinRoom(roomId: number | string, params: JoinRoomParams =
   return joinInFlight;
 }
 
-export async function leaveRoom(roomId: number | string): Promise<LeaveRoomResult> {
-  return apiRequest<LeaveRoomResult>(`/rooms/${roomId}/leave`, { method: 'POST' });
+export async function leaveRoom(roomId: number | string, matchId?: string): Promise<LeaveRoomResult> {
+  return apiRequest<LeaveRoomResult>(`/rooms/${roomId}/leave`, {
+    method: 'POST',
+    body: matchId ? JSON.stringify({ matchId }) : undefined,
+  });
 }
 
 export async function startRoom(roomId: number | string): Promise<StartRoomResult> {

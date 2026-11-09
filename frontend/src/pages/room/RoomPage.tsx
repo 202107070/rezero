@@ -194,7 +194,6 @@ export default function RoomPage() {
   const roomFetchGenRef = useRef(0);
   const rosterLockRef = useRef<Set<string> | null>(null);
   const bannedRosterIdsRef = useRef<Set<string>>(new Set());
-  const socketUnsubsRef = useRef<Array<() => void>>([]);
   const playersRef = useRef(players);
   const roomMetaRef = useRef({ roomId: '', roomTitle: '', roomQuery: '' });
   const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
@@ -494,6 +493,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const unsubs: Array<() => void> = [];
 
     async function enterRoom() {
       if (!Number.isInteger(numericRoomId) || numericRoomId < 1) {
@@ -513,6 +513,7 @@ export default function RoomPage() {
       const enterGen = ++roomFetchGenRef.current;
       try {
         let room = await fetchRoom(numericRoomId);
+        if (cancelled) return;
         const myId = getCurrentUserId();
         const alreadyIn =
           String(room.hostUserId) === String(myId) ||
@@ -527,6 +528,7 @@ export default function RoomPage() {
               character: myCharacter || 'char1',
               explicitRejoin,
             });
+            if (cancelled) return;
             joinedThisAttempt = true;
             clearExplicitRejoin(numericRoomId);
             clearPendingJoinPassword();
@@ -566,9 +568,8 @@ export default function RoomPage() {
         if (!cancelled && enterGen === roomFetchGenRef.current) {
           applyRoom(room, { resetChat: true });
           try {
-            await joinRoomSocket(numericRoomId);
-
-            const unsubs: Array<() => void> = [];
+            const joined = await joinRoomSocket(numericRoomId);
+            if (cancelled || !joined.success) return;
             const enterBattleFromMatch = (matchLike: GameStartedPayload) => {
               if (battleNavLockRef.current || cancelled) return;
               if (!matchLike?.matchId || !Array.isArray(matchLike.problems)) return;
@@ -625,9 +626,10 @@ export default function RoomPage() {
               onRoomEvent(
                 ROOM_SOCKET_EVENTS.USER_JOINED,
                 (payload?: {
+                  roomId?: string | number;
                   user?: { id?: string; displayName?: string; username?: string };
                 }) => {
-                  if (!payload?.user) return;
+                  if (cancelled || !payload?.user || String(payload.roomId) !== String(numericRoomId)) return;
                   const gen = ++roomFetchGenRef.current;
                   void fetchRoom(numericRoomId)
                     .then((nextRoom) => {
@@ -640,6 +642,7 @@ export default function RoomPage() {
 
             unsubs.push(
               onRoomEvent(ROOM_SOCKET_EVENTS.USER_LEFT, (payload: UserLeftPayload) => {
+                if (cancelled || String(payload.roomId) !== String(numericRoomId)) return;
                 if (payload.roomClosed) {
                   setAlertMessage('방이 종료되었습니다.');
                   setShowAlertModal(true);
@@ -876,8 +879,6 @@ export default function RoomPage() {
               ),
             );
 
-            socketUnsubsRef.current = unsubs;
-            setActiveRoomId(numericRoomId);
           } catch {
             // 소켓 연결 실패 시에도 REST 입장 상태는 유지
           }
@@ -910,14 +911,13 @@ export default function RoomPage() {
     void enterRoom();
     return () => {
       cancelled = true;
-      socketUnsubsRef.current.forEach((unsub) => {
+      unsubs.forEach((unsub) => {
         try {
           unsub();
         } catch {
           // ignore
         }
       });
-      socketUnsubsRef.current = [];
       // Room→Battle 이동 시 소켓 유지 (로비 퇴장 시에만 force disconnect)
     };
   }, [applyRoom, navigate, numericRoomId, roomId, roomMode, gameMode, parsedMaxPlayers]);

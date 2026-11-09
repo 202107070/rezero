@@ -98,8 +98,10 @@ export function registerSocketHandlers(io, socket) {
             socket.leave(joined);
           }
         }
-      } else if (roomId !== LOBBY_ROOM_ID) {
-        socket.leave(LOBBY_ROOM_ID);
+      } else {
+        for (const joined of socket.rooms) {
+          if (joined !== roomId && (joined === LOBBY_ROOM_ID || /^\d+$/.test(joined))) socket.leave(joined);
+        }
       }
 
       socket.join(roomId);
@@ -176,6 +178,7 @@ export function registerSocketHandlers(io, socket) {
 
       const joinedAt = Date.now();
       io.to(roomId).emit(SOCKET_EVENTS.USER_JOINED, {
+        roomId,
         message: userLabel(socket.user) + " 님이 입장하셨습니다.",
         joinedAt: joinedAt,
         user: {

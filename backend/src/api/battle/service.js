@@ -1041,6 +1041,19 @@ export async function getMatchPendingUsers(matchId, userId) {
     await getAuthorizedRanking(matchId, userId);
     return { roomId: match.roomId, submitted: true, resultReady: true, waitingForUserIds: [] };
   }
+  if (match.status === "ABANDONED") {
+    const member = await battleModel.findMatchMembership(matchId, userId);
+    if (member) {
+      return {
+        roomId: match.roomId,
+        abandoned: true,
+        canReturnToRoom: Number(member.canReturnToRoom) === 1,
+        submitted: false,
+        resultReady: false,
+        waitingForUserIds: [],
+      };
+    }
+  }
   if (!await battleModel.isMatchParticipant(matchId, userId)) {
     throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
   }
@@ -1048,8 +1061,10 @@ export async function getMatchPendingUsers(matchId, userId) {
     battleModel.findMatchParticipantsForResult(matchId),
     battleModel.findMatchSubmissions(matchId),
   ]);
+  const player = participants.find(member => String(member.userId) === String(userId));
   return {
     roomId: match.roomId,
+    remainingSeconds: Math.max(0, Math.ceil((matchDeadline(match, player?.timePenalty) - Date.now()) / 1000)),
     submitted: submissions.some(row => String(row.userId) === String(userId)),
     resultReady: false,
     waitingForUserIds: waitingUsers(participants, submissions),

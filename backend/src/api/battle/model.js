@@ -161,11 +161,13 @@ export async function findActiveMatchByRoomId(roomId) {
        game_mode AS gameMode,
        round_seconds AS roundSeconds,
        started_at AS startedAt,
-       finished_at AS finishedAt
-     FROM matches
+       finished_at AS finishedAt,
+       EXISTS (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id) AS tracked
+     FROM matches m
      WHERE room_id = ?
        AND status = 'IN_PROGRESS'
-     ORDER BY started_at DESC
+     ORDER BY EXISTS (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id) DESC,
+       started_at DESC, id DESC
      LIMIT 1`,
     [roomId],
   );
@@ -261,7 +263,12 @@ const currentParticipant = `
     EXISTS (SELECT 1 FROM match_participants mp
       WHERE mp.match_id = m.id AND mp.room_participant_id = rp.id AND mp.departed_at IS NULL)
     OR (rp.joined_at <= m.started_at AND NOT EXISTS
-      (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id))
+      (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id)
+      AND (m.status = 'FINISHED' OR (
+        TIMESTAMPADD(SECOND, m.round_seconds, m.started_at) > CURRENT_TIMESTAMP
+        AND NOT EXISTS (SELECT 1 FROM matches newer WHERE newer.room_id = m.room_id
+          AND newer.id <> m.id AND newer.started_at >= m.started_at)
+      )))
   )`;
 
 export async function isMatchParticipant(matchId, userId) {
@@ -276,6 +283,20 @@ export async function isMatchParticipant(matchId, userId) {
     [matchId, userId],
   );
   return Boolean(row);
+}
+
+export async function findMatchMembership(matchId, userId) {
+  const [member] = await pool.query(
+    `SELECT (mp.departed_at IS NULL AND rp.id IS NOT NULL AND rp.left_at IS NULL
+       AND r.status IN ('WAITING', 'STARTED')) AS canReturnToRoom
+     FROM match_participants mp
+     JOIN matches m ON m.id = mp.match_id
+     LEFT JOIN room_participants rp ON rp.id = mp.room_participant_id
+     LEFT JOIN rooms r ON r.id = m.room_id
+     WHERE mp.match_id = ? AND mp.user_id = ?`,
+    [matchId, userId],
+  );
+  return member || null;
 }
 
 export async function consumeUserItem(userId, itemKey) {

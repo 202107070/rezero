@@ -237,6 +237,7 @@ type AnyHandler = (...args: any[]) => void;
 let socket: Socket | null = null;
 let intentionalDisconnect = false;
 let activeRoomId: string | null = null;
+let roomJoinAttempt = 0;
 let serverDownTimer = 0;
 
 function scheduleServerDownCheck() {
@@ -258,6 +259,7 @@ function clearServerDownCheck() {
 const ACTIVE_ROOM_KEY = 'rezero_active_room_id';
 
 export function setActiveRoomId(roomId: string | number | null): void {
+  roomJoinAttempt++;
   activeRoomId = roomId == null ? null : String(roomId);
   try {
     if (activeRoomId) sessionStorage.setItem(ACTIVE_ROOM_KEY, activeRoomId);
@@ -414,18 +416,22 @@ export function joinRoomSocket(
 }> {
   const client = getRoomSocket();
   const id = String(roomId);
-  // 숫자 방만 activeRoom 으로 추적 (lobby 는 leaveRoom 대상 아님)
-  if (/^\d+$/.test(id)) setActiveRoomId(id);
-  return new Promise((resolve) => {
-    client.emit(
+  const attempt = ++roomJoinAttempt;
+  return new Promise((resolve, reject) => {
+    client.timeout(5000).emit(
       ROOM_SOCKET_EVENTS.JOIN_ROOM,
       { roomId: id },
-      (response?: {
+      (error: Error | null, response?: {
         success?: boolean;
         message?: string;
         recentMessages?: ChatMessagePayload[];
         onlineUsers?: LobbyPresenceUser[];
       }) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (response?.success && attempt === roomJoinAttempt && /^\d+$/.test(id)) setActiveRoomId(id);
         resolve({
           success: Boolean(response?.success),
           message: response?.message,

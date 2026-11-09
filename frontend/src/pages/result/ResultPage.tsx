@@ -1344,7 +1344,7 @@ export default function ResultPage() {
     const numericRoomId = activeId ? Number(activeId) : NaN;
     if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
       try {
-        await leaveRoom(numericRoomId);
+        await leaveRoom(numericRoomId, matchId);
       } catch {
         // ignore
       }

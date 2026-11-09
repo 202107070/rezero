@@ -221,6 +221,9 @@ export async function fetchMatchRanking(matchId: string): Promise<MatchRanking> 
 export async function fetchMatchPending(matchId: string, handling: { background?: boolean } = {}): Promise<{
   roomId?: number;
   submitted: boolean;
+  abandoned?: boolean;
+  canReturnToRoom?: boolean;
+  remainingSeconds?: number;
   resultReady: boolean;
   waitingForUserIds: string[];
 }> {

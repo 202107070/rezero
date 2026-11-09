@@ -58,7 +58,7 @@ export function createSessionService({ matches, redis, now = Date.now }) {
         throw new AppError(409, 'MATCH_NOT_IN_PROGRESS', '종료된 경기에는 답안을 저장할 수 없습니다.');
       }
       const count = Number(match.problemCount);
-      const { version, currentIndex, codes, blankAnswers, selectedOptions } = input;
+      const { version, currentIndex, codes, blankAnswers, selectedOptions, selectedItemKeys } = input;
       const validStrings = values => Array.isArray(values) && values.every(v => typeof v === 'string' && v.length <= 32000);
       const validCounters = values => values && typeof values === 'object' && !Array.isArray(values) &&
         Object.entries(values).every(([k, v]) => /^\d+$/.test(k) && Number(k) < count && Number.isFinite(v) && v >= 0 && v <= Number(match.roundSeconds) + 100);
@@ -68,14 +68,16 @@ export function createSessionService({ matches, redis, now = Date.now }) {
           !Array.isArray(blankAnswers) || blankAnswers.length !== count || !blankAnswers.every(validStrings) ||
           !selectedOptions || typeof selectedOptions !== 'object' || Array.isArray(selectedOptions) ||
           !Object.entries(selectedOptions).every(([k, v]) => /^\d+$/.test(k) && Number(k) < count && Number.isInteger(v) && v >= 0 && v < 100) ||
+          (selectedItemKeys !== undefined && (!Array.isArray(selectedItemKeys) || selectedItemKeys.length > 10 ||
+            !selectedItemKeys.every(key => typeof key === 'string' && /^[A-Za-z]{1,20}$/.test(key)))) ||
           !validCounters(input.solveTimes || {}) || !validCounters(input.buildsUsed || {}) ||
           (input.problemStartedAtElapsed !== undefined && (!Number.isFinite(input.problemStartedAtElapsed) || input.problemStartedAtElapsed < 0 || input.problemStartedAtElapsed > Number(match.roundSeconds) + 100))) {
         throw new AppError(400, 'INVALID_DRAFT', '올바른 답안 저장 정보가 필요합니다.');
       }
       const draftRemaining = Number.isFinite(input.remaining) ? Math.max(0, Math.min(remainingSeconds, input.remaining)) : remainingSeconds;
-      const requestHash = createHash('sha256').update(JSON.stringify([version, currentIndex, codes, blankAnswers, selectedOptions, input.solveTimes || {}, input.buildsUsed || {}, Number.isFinite(input.remaining) ? input.remaining : null, input.problemStartedAtElapsed ?? null])).digest('hex');
+      const requestHash = createHash('sha256').update(JSON.stringify([version, currentIndex, codes, blankAnswers, selectedOptions, input.solveTimes || {}, input.buildsUsed || {}, Number.isFinite(input.remaining) ? input.remaining : null, input.problemStartedAtElapsed ?? null, ...(selectedItemKeys === undefined ? [] : [selectedItemKeys])])).digest('hex');
       const problemStartedAtElapsed = Math.min(Number(match.roundSeconds) - remainingSeconds, input.problemStartedAtElapsed ?? Object.values(input.solveTimes || {}).reduce((sum, value) => sum + value, 0));
-      const document = { problemStartedAtElapsed, matchId: match.id, version, currentIndex, codes, blankAnswers, selectedOptions, solveTimes: input.solveTimes || {}, buildsUsed: input.buildsUsed || {}, remaining: draftRemaining, savedAt: now(), requestHash };
+      const document = { problemStartedAtElapsed, matchId: match.id, version, currentIndex, codes, blankAnswers, selectedOptions, solveTimes: input.solveTimes || {}, buildsUsed: input.buildsUsed || {}, selectedItemKeys, remaining: draftRemaining, savedAt: now(), requestHash };
       const serialized = JSON.stringify(document);
       if (Buffer.byteLength(serialized, 'utf8') > 90000) throw new AppError(413, 'DRAFT_TOO_LARGE', '답안 크기 제한을 초과했습니다.');
       const updated = await storage(() => redis.eval(SAVE_DRAFT, {

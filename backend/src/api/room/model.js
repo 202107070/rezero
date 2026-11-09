@@ -276,7 +276,7 @@ export async function findWaitingRoomIdsByUser(userId) {
     });
 }
 
-export async function leaveRoomAndSelectRandomHost(roomId, userId, { waitingOnly = false } = {}) {
+export async function leaveRoomAndSelectRandomHost(roomId, userId, { waitingOnly = false, expectedMatchId } = {}) {
   const connection = await pool.getConnection();
 
   try {
@@ -311,8 +311,37 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId, { waitingOnly
     );
 
     if (participantRows.length === 0) {
+      const [past] = await connection.query(
+        "SELECT id FROM room_participants WHERE room_id = ? AND user_id = ? LIMIT 1",
+        [roomId, userId],
+      );
       await connection.rollback();
-      return { success: false, reason: "ROOM_NOT_JOINED" };
+      return { success: false, reason: past ? "ROOM_ALREADY_LEFT" : "ROOM_NOT_JOINED" };
+    }
+
+    const roomStatus = roomRows[0].status;
+    const [activeMatch] = roomStatus === "STARTED"
+      ? await connection.query(
+        `SELECT m.id FROM matches m WHERE m.room_id = ? AND m.status = 'IN_PROGRESS'
+         ORDER BY EXISTS (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id) DESC,
+           m.started_at DESC, m.id DESC LIMIT 1 FOR UPDATE`,
+        [roomId],
+      )
+      : [];
+    if (expectedMatchId) {
+      const [member] = await connection.query(
+        `SELECT m.id FROM matches m JOIN room_participants rp ON rp.room_id = m.room_id
+         LEFT JOIN match_participants mp ON mp.match_id = m.id AND mp.user_id = rp.user_id
+         WHERE m.id = ? AND m.room_id = ? AND rp.id = ?
+           AND (mp.room_participant_id = rp.id OR
+             (mp.user_id IS NULL AND rp.joined_at <= m.started_at
+               AND NOT EXISTS (SELECT 1 FROM match_participants tracked WHERE tracked.match_id = m.id)))`,
+        [expectedMatchId, roomId, participantRows[0].id],
+      );
+      if (!member || (activeMatch && activeMatch.id !== expectedMatchId)) {
+        await connection.rollback();
+        return { success: false, reason: "ROOM_ALREADY_LEFT" };
+      }
     }
 
     const wasHost = participantRows.some(function (row) {
@@ -388,6 +417,30 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId, { waitingOnly
       currentPlayers = Number(countRows[0].count);
     }
 
+    let abandoned = false;
+    if (activeMatch) {
+      await connection.query(
+        "UPDATE match_participants SET departed_at = CURRENT_TIMESTAMP WHERE match_id = ? AND user_id = ?",
+        [activeMatch.id, userId],
+      );
+      if (currentPlayers <= 1) {
+        abandoned = true;
+        await connection.query(
+          "UPDATE matches SET status = 'ABANDONED', finished_at = CURRENT_TIMESTAMP WHERE id = ?",
+          [activeMatch.id],
+        );
+      }
+    }
+    if (roomStatus === "STARTED" && currentPlayers <= 1 && !roomClosed) {
+      await connection.query("UPDATE rooms SET status = 'WAITING' WHERE id = ?", [roomId]);
+      await connection.query(
+        `UPDATE room_participants
+         SET is_ready = FALSE, status = CASE WHEN is_host = TRUE THEN 'HOST' ELSE 'WAITING' END
+         WHERE room_id = ? AND left_at IS NULL`,
+        [roomId],
+      );
+    }
+
     await connection.commit();
 
     return {
@@ -395,6 +448,8 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId, { waitingOnly
       roomClosed,
       newHostUserId,
       currentPlayers,
+      matchId: activeMatch?.id,
+      abandoned,
     };
   } catch (error) {
     await connection.rollback();
@@ -513,6 +568,11 @@ export async function closeRoom(roomId) {
            status = 'LEFT'
        WHERE room_id = ?
          AND left_at IS NULL`,
+      [roomId],
+    );
+
+    await connection.query(
+      "UPDATE matches SET status = 'ABANDONED', finished_at = CURRENT_TIMESTAMP WHERE room_id = ? AND status = 'IN_PROGRESS'",
       [roomId],
     );
 

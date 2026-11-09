@@ -1,6 +1,8 @@
 import { selectProblems } from "../problem/service.js";
 import { isolatedRunner } from '../../infra/docker/worker/isolatedRunner.js';
 import * as roomModel from "./model.js";
+import { findActiveMatchByRoomId } from "../battle/model.js";
+import { withMatchOperation } from "../battle/matchClock.js";
 import { toRoomResponse } from "./dto/roomResponseDto.js";
 import { redisClient } from "#config/redisConfig.js";
 import { AppError } from "#utils/appError.js";
@@ -193,6 +195,10 @@ export async function closeStaleRooms(options = {}) {
     if (!shouldClose) continue;
 
     try {
+      if (room.status === "STARTED") {
+        const match = await findActiveMatchByRoomId(room.id);
+        if (match?.tracked) continue;
+      }
       const ok = await roomModel.closeRoom(room.id);
       if (ok) {
         closed += 1;
@@ -415,118 +421,82 @@ export async function joinRoom(roomId, userId, input) {
 }
 
 export async function leaveRoom(roomId, userId, options) {
-  const roomBefore = await roomModel.findRoomById(roomId);
-  let leftName = "유저";
-  try {
-    const before = await roomModel.findRoomParticipants(roomId);
-    const mine = (before || []).find(function (participant) {
-      return String(participant.userId) === String(userId);
-    });
-    leftName =
-      (mine && (mine.displayName || mine.username)) || leftName;
-  } catch {
-    // ignore
+  const active = !options?.waitingOnly && await findActiveMatchByRoomId(roomId);
+  if (active) {
+    return withMatchOperation(active.id, () => performRoomLeave(roomId, userId, options));
   }
+  return performRoomLeave(roomId, userId, options);
+}
+
+async function performRoomLeave(roomId, userId, options) {
+  const before = await roomModel.findRoomParticipants(roomId);
+  const mine = before.find(participant => String(participant.userId) === String(userId));
+  const leftName = mine?.displayName || mine?.username || "유저";
   const result = await roomModel.leaveRoomAndSelectRandomHost(roomId, userId, options);
 
   if (!result.success) {
     if (result.reason === "ROOM_NOT_WAITING") return null;
-    if (result.reason === "ROOM_NOT_FOUND") {
-      throw roomNotFound();
-    }
-
+    if (result.reason === "ROOM_ALREADY_LEFT") return { roomId, alreadyLeft: true };
+    if (result.reason === "ROOM_NOT_FOUND") throw roomNotFound();
     throw new AppError(409, "ROOM_NOT_JOINED", "현재 참가 중인 방이 아닙니다.");
   }
 
   await saveLeftRoomState(roomId, userId, result);
-
-  const wasStarted = roomBefore && roomBefore.status === "STARTED";
-  if (wasStarted && !result.roomClosed) {
-    try {
-      await redisClient.sAdd(roomDepartedKey(roomId), String(userId));
-      await redisClient.expire(roomDepartedKey(roomId), 6 * 60 * 60);
-    } catch {
-      // ignore
+  if (result.matchId && !result.roomClosed) {
+    const update = redisClient.multi()
+      .sAdd(roomDepartedKey(roomId), String(userId))
+      .expire(roomDepartedKey(roomId), 6 * 60 * 60);
+    if (result.abandoned) {
+      update.hDel(roomStateKey(roomId), "matchId").del(roomReadyKey(roomId));
     }
+    await update.exec();
   }
 
   const io = getSocket();
-  const remainingPlayers = Number(result.currentPlayers || 0);
-  const abandonNoPlayers =
-    wasStarted && !result.roomClosed && remainingPlayers <= 1;
-
+  const remainingPlayers = result.currentPlayers;
+  const [room, participants] = result.roomClosed ? [null, []] : await Promise.all([
+    roomModel.findRoomById(roomId),
+    roomModel.findRoomParticipants(roomId),
+  ]);
   if (io) {
-    io.to(String(roomId)).emit(SOCKET_EVENTS.USER_LEFT, {
-      roomId: String(roomId),
+    const roomIdText = String(roomId);
+    io.to(roomIdText).emit(SOCKET_EVENTS.USER_LEFT, {
+      roomId: roomIdText,
       userId: String(userId),
       displayName: leftName,
-      roomClosed: Boolean(result.roomClosed),
+      roomClosed: result.roomClosed,
       newHostUserId: result.newHostUserId ? String(result.newHostUserId) : null,
       remainingPlayers,
     });
-    const rosterRoom = result.roomClosed ? null : await roomModel.findRoomById(roomId);
-    const rosterParticipants = result.roomClosed
-      ? []
-      : await roomModel.findRoomParticipants(roomId);
     io.emit(SOCKET_EVENTS.ROOM_ROSTER, {
-      roomId: String(roomId),
-      currentPlayers: result.roomClosed ? 0 : remainingPlayers,
-      participantIds: (rosterParticipants || []).map(function (participant) {
-        return String(participant.userId);
-      }),
-      status: abandonNoPlayers
-        ? "WAITING"
-        : rosterRoom?.status || (result.roomClosed ? "CLOSED" : "WAITING"),
+      roomId: roomIdText,
+      currentPlayers: remainingPlayers,
+      participantIds: participants.map(participant => String(participant.userId)),
+      status: room?.status || "CLOSED",
       leftUserId: String(userId),
       leftUserName: leftName,
     });
-
-    if (abandonNoPlayers) {
-      const abandonMessage = "유저가 남아있지 않아 대기실로 이동합니다.";
-      io.to(String(roomId)).emit(SOCKET_EVENTS.GAME_ENDED, {
-        roomId: String(roomId),
+    if (result.abandoned) {
+      io.to(roomIdText).emit(SOCKET_EVENTS.GAME_ENDED, {
+        roomId: roomIdText,
+        matchId: result.matchId,
         reason: "no_players",
-        message: abandonMessage,
+        message: "남은 참가자가 부족해 대기실로 이동합니다.",
       });
-      try {
-        await roomModel.markRoomWaiting(roomId);
-        await redisClient.hSet(roomStateKey(roomId), {
-          status: "WAITING",
-          updatedAt: new Date().toISOString(),
-        });
-        await redisClient.del(roomReadyKey(roomId));
-        const participants = await roomModel.findRoomParticipants(roomId);
-        const roomReadyStates = (participants || []).map(function (p) {
-          return { userId: String(p.userId), isReady: false };
-        });
-        io.to(String(roomId)).emit(SOCKET_EVENTS.READY_CHANGED, {
-          userId: null,
-          isReady: false,
-          roomReadyStates,
-        });
-      } catch {
-        // ignore
-      }
+      io.to(roomIdText).emit(SOCKET_EVENTS.READY_CHANGED, {
+        userId: null,
+        isReady: false,
+        roomReadyStates: participants.map(player => ({ userId: String(player.userId), isReady: false })),
+      });
     }
   }
 
-  if (result.roomClosed) {
-    return {
-      roomId,
-      roomClosed: true,
-      newHostUserId: null,
-      remainingPlayers: 0,
-    };
-  }
-
-  const room = await roomModel.findRoomById(roomId);
-  const participants = await roomModel.findRoomParticipants(roomId);
-
   return {
-    roomClosed: false,
+    roomId,
+    roomClosed: result.roomClosed,
     newHostUserId: result.newHostUserId,
     remainingPlayers,
-    room: toRoomResponse(room, participants),
+    ...(room ? { room: toRoomResponse(room, participants) } : {}),
   };
 }
 

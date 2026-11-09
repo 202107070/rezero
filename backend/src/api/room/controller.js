@@ -56,7 +56,11 @@ export async function join(req, res, next) {
 export async function leave(req, res, next) {
   try {
     const roomId = parseRoomId(req.params.id);
-    const result = await leaveRoom(roomId, req.user.id);
+    const expectedMatchId = req.body?.matchId;
+    if (expectedMatchId !== undefined && (typeof expectedMatchId !== "string" || !/^[\w-]{1,64}$/.test(expectedMatchId))) {
+      throw new AppError(400, "INVALID_MATCH_ID", "올바른 경기 ID가 필요합니다.");
+    }
+    const result = await leaveRoom(roomId, req.user.id, { expectedMatchId });
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);

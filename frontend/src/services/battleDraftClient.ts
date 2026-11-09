@@ -13,6 +13,7 @@ export interface BattleDraft {
   solveTimes?: Record<number, number>;
   problemStartedAtElapsed?: number;
   buildsUsed?: Record<number, number>;
+  selectedItemKeys?: string[];
 }
 
 export interface DraftResponse {
@@ -54,7 +55,7 @@ export function readLocalDraft(userId: string, matchId: string): BattleDraft | n
 
 export function preserveDraft(userId: string, input: Omit<BattleDraft, 'version' | 'localSavedAt'>): BattleDraft {
   const previous = readLocalDraft(userId, input.matchId);
-  const signature = (draft: typeof input) => JSON.stringify([draft.currentIndex, draft.codes, draft.blankAnswers, draft.selectedOptions, draft.solveTimes, draft.buildsUsed, draft.problemStartedAtElapsed]);
+  const signature = (draft: typeof input) => JSON.stringify([draft.currentIndex, draft.codes, draft.blankAnswers, draft.selectedOptions, draft.solveTimes, draft.buildsUsed, draft.problemStartedAtElapsed, draft.selectedItemKeys]);
   const timeReduced = previous && input.remaining < previous.remaining - Math.floor((Date.now() - previous.localSavedAt) / 1000) - 1;
   if (previous && signature(previous) === signature(input) && !timeReduced) return previous;
   const draft = { ...input, version: Math.max(Date.now(), (previous?.version || 0) + 1), localSavedAt: Date.now() };
@@ -106,6 +107,17 @@ export async function saveDraft(userId: string, draft: BattleDraft): Promise<boo
   const result = state.tail.then(send, send);
   state.tail = result;
   return result;
+}
+
+export function saveDraftOnPageHide(userId: string, draft: BattleDraft): void {
+  const writer = writers.get(keyFor(userId, draft.matchId));
+  const token = getAccessToken();
+  if (!token || writer?.closed || writer?.blockedToken === token || (writer?.acknowledged || 0) >= draft.version) return;
+  const body = JSON.stringify(draft);
+  // The browser limits queued keepalive requests to 64 KiB.
+  if (new TextEncoder().encode(body).byteLength > 60 * 1024) return;
+  void apiRequest('/build/session/save', { method: 'POST', body, keepalive: true }, { background: true })
+    .catch(() => undefined);
 }
 
 export function loadServerDraft(matchId: string): Promise<DraftResponse> {

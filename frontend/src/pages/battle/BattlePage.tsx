@@ -1,7 +1,8 @@
 import { useServerDownChat } from '../../hooks/useServerDownChat';
 import { watchMatchCompletion } from '../../services/matchCompletionWatcher';
 import { getCurrentUserId, getCurrentUserName } from '../../services/authService';
-import { acknowledgeServerDraft, closeDraftWriter, loadServerDraft, preserveDraft, readLocalDraft, rememberDraft } from '../../services/battleDraftClient';
+import { ApiError } from '../../services/apiClient';
+import { acknowledgeServerDraft, closeDraftWriter, loadServerDraft, preserveDraft, readLocalDraft, rememberDraft, saveDraftOnPageHide } from '../../services/battleDraftClient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BattleChatPanel, { type ChatMessage } from '../../components/battle/BattleChatPanel';
@@ -46,6 +47,7 @@ import {
 import {
   emitBattleItemUsed,
   joinRoomSocket,
+  setActiveRoomId,
   onRoomEvent,
   createChatMessageId,
   sendRoomMessage,
@@ -55,10 +57,9 @@ import {
   type MatchResultPendingPayload,
   type ChatMessagePayload,
   type GameStateUpdatePayload,
-  type RoomRosterPayload,
   type UserReconnectedPayload,
 } from '../../services/roomSocket';
-import { blockAutoRejoin, clearAutoRejoinBlock, fetchRoom, isAutoRejoinBlocked, leaveRoom, getRoomErrorMessage } from '../../services/roomService';
+import { blockAutoRejoin, clearAutoRejoinBlock, isAutoRejoinBlocked, leaveRoom, getRoomErrorMessage } from '../../services/roomService';
 import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { getItemInventory, getRatingScore, setItemInventory as persistItemInventory } from '../../services/userService';
 import { emitUpdateLocation } from '../../services/roomSocket';
@@ -521,6 +522,7 @@ export default function BattlePage() {
         selectedOptions: selectedOptionByProblem,
         solveTimes,
         buildsUsed: buildsUsedByProblem,
+        selectedItemKeys: Array.from(selectedItemKeys),
         problemStartedAtElapsed: problemStartedAtElapsedRef.current,
         problems,
         sessionSavedSnapshot,
@@ -532,7 +534,7 @@ export default function BattlePage() {
         },
       });
     },
-    [sessionId, matchId, roomId, langKey, currentIndex, problems, sessionSavedSnapshot, blankAnswers, selectedOptionByProblem, solveTimes, buildsUsedByProblem, battleFinished, demoSpectating, spectatorLocked],
+    [sessionId, matchId, roomId, langKey, currentIndex, problems, sessionSavedSnapshot, blankAnswers, selectedOptionByProblem, solveTimes, buildsUsedByProblem, selectedItemKeys, battleFinished, demoSpectating, spectatorLocked],
   );
 
   const doPersistSubmission = useCallback(
@@ -589,6 +591,18 @@ export default function BattlePage() {
     ],
   );
 
+  const returnFromAbandonedMatch = useCallback((canReturnToRoom: boolean) => {
+    if (leavingToLobbyRef.current || resultLeavingNavRef.current || isAutoRejoinBlocked(roomId)) return;
+    resultLeavingNavRef.current = true;
+    clearBattleAndLeave(sessionId, roomId);
+    if (canReturnToRoom && roomId) {
+      navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
+    } else {
+      setActiveRoomId(null);
+      navigate(ROUTES.LOBBY, { replace: true });
+    }
+  }, [navigate, roomId, sessionId]);
+
   useEffect(() => {
     if (isLiveMatch) {
       let cancelled = false;
@@ -641,20 +655,36 @@ export default function BattlePage() {
           liveDeadlineRef.current = Date.now() + restoredRemaining * 1000;
           setRemaining(restoredRemaining);
           setElapsedSec(Math.max(0, result.match.roundSeconds - result.remainingSeconds));
-          const metadata = { ...getBattleSettings(), ...result.match, roundSeconds: result.match.roundSeconds, diff: result.match.difficulty, count: String(result.match.problemCount), roomRoster: result.roomRoster, opponentProgress: result.opponentProgress };
+          const previousSettings = getBattleSettings();
+          const metadata = {
+            ...previousSettings,
+            ...result.match,
+            diff: result.match.difficulty,
+            count: String(result.match.problemCount),
+            selectedItems: draft?.selectedItemKeys ?? (previousSettings.matchId === matchId ? previousSettings.selectedItems : []),
+            roomRoster: result.roomRoster,
+            opponentProgress: result.opponentProgress,
+          };
           setBattleSettings(metadata);
           setBattleMeta(metadata);
           setSessionSavedSnapshot((draft?.codes || []).join('||'));
           initialSessionLoadedRef.current = true;
           initialSessionSaveQueuedRef.current = false;
           setSessionReady(true);
-        } catch {
-          if (!cancelled) {
-            if (attempt < 2) {
-              retryTimer = setTimeout(() => { void restoreLive(attempt + 1); }, 1500);
+        } catch (error) {
+          if (cancelled) return;
+          if (error instanceof ApiError && [403, 404].includes(error.status)) {
+            const pending = await fetchMatchPending(matchId, { background: true }).catch(() => null);
+            if (cancelled) return;
+            if (pending?.resultReady) {
+              navigate(`${ROUTES.RESULT}?roomId=${roomId}&matchId=${encodeURIComponent(matchId)}`, { replace: true });
             } else {
-              setLeaveAlertMessage('경기 정보를 복구하는 중입니다. 연결 상태를 확인한 뒤 새로고침해 주세요. 작성한 답안은 임시 보관됩니다.');
+              returnFromAbandonedMatch(pending?.canReturnToRoom === true);
             }
+          } else if (attempt < 2) {
+            retryTimer = setTimeout(() => { void restoreLive(attempt + 1); }, 1500);
+          } else {
+            setLeaveAlertMessage('경기 정보를 복구하는 중입니다. 연결 상태를 확인한 뒤 새로고침해 주세요. 작성한 답안은 임시 보관됩니다.');
           }
         }
       }
@@ -725,7 +755,7 @@ export default function BattlePage() {
       lastTimedPersistRemainingRef.current = fallbackTotalSeconds;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isLiveMatch, matchId, roomId, returnFromAbandonedMatch]);
 
   function setIsEditedFalse() {
     setSaveStatus('saved');
@@ -1263,7 +1293,8 @@ export default function BattlePage() {
         unsubs.push(
           onRoomEvent(
             ROOM_SOCKET_EVENTS.USER_LEFT,
-            (payload?: { userId?: string; roomClosed?: boolean; remainingPlayers?: number }) => {
+            (payload?: { roomId?: string; userId?: string }) => {
+              if (String(payload?.roomId) !== String(roomId)) return;
               const leftId = String(payload?.userId || '').replace(/^player-/, '');
               if (!leftId) return;
               const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
@@ -1293,45 +1324,8 @@ export default function BattlePage() {
                 const raw = String(prev).replace(/^player-/, '');
                 return raw === leftId || prev === leftId ? null : prev;
               });
-              const remainingAfter =
-                typeof payload?.remainingPlayers === 'number'
-                  ? payload.remainingPlayers
-                  : undefined;
-              // 남은 인원이 1명 이하면 대기실로 (본인만 남은 경우)
-              if (isAutoRejoinBlocked(roomId)) return;
-              if (payload?.roomClosed || (remainingAfter !== undefined && remainingAfter <= 1)) {
-                setChatMessages((prev) => [
-                  ...prev,
-                  {
-                    sender: 'SYSTEM',
-                    text: '유저가 남아있지 않아 대기실로 이동합니다.',
-                    time: '',
-                  },
-                ]);
-                // 세션만 정리하고 소켓/방 참가는 유지한 채 대기실로 이동
-                clearBattleAndLeave(sessionId, roomId);
-                navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
-              }
             },
           ),
-        );
-
-        unsubs.push(
-          onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload?: RoomRosterPayload) => {
-            if (String(payload?.roomId || '') !== String(roomId)) return;
-            // 불완전한 participantIds로 상대 패널을 지우지 않음 — 퇴장 제거는 USER_LEFT만
-            const active = new Set(
-              (payload?.participantIds || []).map((id) => String(id).replace(/^player-/, '')),
-            );
-            const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
-            const remaining = Number(payload?.currentPlayers ?? active.size);
-            if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId)) return;
-            if (myId && active.size > 0 && !active.has(myId)) return;
-            if (remaining <= 1 && active.size > 0 && (!myId || active.has(myId))) {
-              clearBattleAndLeave(sessionId, roomId);
-              navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
-            }
-          }),
         );
 
         unsubs.push(
@@ -1345,11 +1339,10 @@ export default function BattlePage() {
               ]);
             }
             if (payload.reason === 'no_players' || payload.message?.includes('대기실로 이동')) {
-              if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId)) return;
-              clearBattleAndLeave(sessionId, roomId);
-              navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
+              returnFromAbandonedMatch(true);
               return;
             }
+            if (leavingToLobbyRef.current || resultLeavingNavRef.current) return;
             if (payload.matchId) {
               const myId = getCurrentUserId();
               const rewards = Array.isArray(payload.rewards) ? payload.rewards : [];
@@ -1511,37 +1504,18 @@ export default function BattlePage() {
         }
       });
     };
-  }, [isLiveMatch, roomId, battleMeta.roomRoster, matchId, navigate, problems.length]);
-
-  useEffect(() => {
-    if (!isLiveMatch || !roomId) return;
-    // 폴링은 전원 이탈(혼자 남음) 감지용. 상대 패널 제거는 USER_LEFT만 담당
-    const myId = String(getCurrentUserId() || '').replace(/^player-/, '');
-    const timer = window.setInterval(() => {
-      void fetchRoom(roomId)
-        .then((room) => {
-          const active = new Set(
-            (room.participants || []).map((participant) =>
-              String(participant.userId || '').replace(/^player-/, ''),
-            ),
-          );
-          if (active.size === 0) return;
-          if (leavingToLobbyRef.current || isAutoRejoinBlocked(roomId)) return;
-          if (myId && !active.has(myId)) return;
-          if (active.size <= 1) {
-            clearBattleAndLeave(sessionId, roomId);
-            navigate(`${ROUTES.ROOM}?id=${roomId}`, { replace: true });
-          }
-        })
-        .catch(() => undefined);
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [isLiveMatch, roomId, sessionId, navigate]);
+  }, [isLiveMatch, roomId, battleMeta.roomRoster, matchId, navigate, problems.length, returnFromAbandonedMatch]);
 
   const timeExpired = remaining <= 0;
   useEffect(() => {
-    if (!isLiveMatch || !matchId || !sessionReady || !(demoSpectating || spectatorLocked || battleFinished || timeExpired)) return;
+    if (!isLiveMatch || !matchId || !sessionReady) return;
     return watchMatchCompletion({
+      intervalMs: demoSpectating || spectatorLocked || battleFinished || timeExpired ? 1500 : 3000,
+      onAbandoned: returnFromAbandonedMatch,
+      onTime: (seconds) => {
+        const nextDeadline = Date.now() + seconds * 1000;
+        if (nextDeadline < liveDeadlineRef.current) liveDeadlineRef.current = nextDeadline;
+      },
       fetchPending: () => fetchMatchPending(matchId, { background: true }),
       onSubmitted: () => {
         if (matchResultSubmittedRef.current || leavingToLobbyRef.current) return;
@@ -1557,7 +1531,7 @@ export default function BattlePage() {
         navigate(`${ROUTES.RESULT}?roomId=${encodeURIComponent(roomId)}&matchId=${encodeURIComponent(matchId)}`, { replace: true });
       },
     });
-  }, [isLiveMatch, matchId, roomId, sessionReady, demoSpectating, spectatorLocked, battleFinished, timeExpired, navigate]);
+  }, [isLiveMatch, matchId, roomId, sessionReady, demoSpectating, spectatorLocked, battleFinished, timeExpired, navigate, returnFromAbandonedMatch]);
 
   // 라이브: 마지막 문제까지 제출(관전)하면 결과 제출만 하고, 상대 대기 (바로 결과창 X)
   useEffect(() => {
@@ -1638,14 +1612,27 @@ export default function BattlePage() {
     navigate,
   ]);
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (isLiveMatch && initialSessionLoadedRef.current) preserveDraft(getCurrentUserId(), {
-        matchId, currentIndex, codes: answers, blankAnswers, selectedOptions: selectedOptionByProblem, remaining: remainingRef.current, solveTimes, buildsUsed: buildsUsedByProblem, problemStartedAtElapsed: problemStartedAtElapsedRef.current,
+    const onPageHide = () => {
+      if (!isLiveMatch || !initialSessionLoadedRef.current || matchResultSubmittedRef.current ||
+        leavingToLobbyRef.current || remainingRef.current <= 0) return;
+      const userId = getCurrentUserId();
+      const draft = preserveDraft(userId, {
+        matchId,
+        currentIndex,
+        codes: problems.map((problem, index) => assembleCode(problem.question || '', blankAnswers[index] || [])),
+        blankAnswers,
+        selectedOptions: selectedOptionByProblem,
+        remaining: remainingRef.current,
+        solveTimes,
+        buildsUsed: buildsUsedByProblem,
+        selectedItemKeys: Array.from(selectedItemKeys),
+        problemStartedAtElapsed: problemStartedAtElapsedRef.current,
       });
+      saveDraftOnPageHide(userId, draft);
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [answers, isLiveMatch, matchId, currentIndex, blankAnswers, selectedOptionByProblem, solveTimes, buildsUsedByProblem]);
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, [isLiveMatch, matchId, problems, currentIndex, blankAnswers, selectedOptionByProblem, solveTimes, buildsUsedByProblem, selectedItemKeys]);
 
   useEffect(() => {
     return () => {
@@ -2471,8 +2458,9 @@ export default function BattlePage() {
     if (roomId) blockAutoRejoin(roomId);
     try {
       if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
-        await leaveRoom(numericRoomId);
+        await leaveRoom(numericRoomId, matchId);
       }
+      setActiveRoomId(null);
       setShowLeaveConfirm(false);
       clearBattleAndLeave(sessionId, roomId);
       markLobbyChatReset();

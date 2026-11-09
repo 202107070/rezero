@@ -45,6 +45,7 @@ export async function persistBattleSession(params: {
   solveTimes?: Record<number, number>;
   problemStartedAtElapsed?: number;
   buildsUsed?: Record<number, number>;
+  selectedItemKeys?: string[];
   problems: BattleProblem[];
   sessionSavedSnapshot: string;
   shouldCommit: boolean;
@@ -80,7 +81,7 @@ export async function persistBattleSession(params: {
       const draft = preserveDraft(userId, {
         matchId: params.matchId, currentIndex: params.currentIndex, codes: params.answers,
         blankAnswers: params.problems.map((_, i) => params.blankAnswers?.[i] || []),
-        selectedOptions: params.selectedOptions || {}, remaining: params.remaining, solveTimes: params.solveTimes, buildsUsed: params.buildsUsed, problemStartedAtElapsed: params.problemStartedAtElapsed,
+        selectedOptions: params.selectedOptions || {}, remaining: params.remaining, solveTimes: params.solveTimes, buildsUsed: params.buildsUsed, problemStartedAtElapsed: params.problemStartedAtElapsed, selectedItemKeys: params.selectedItemKeys,
       });
       const saved = shouldSyncBackend() && await saveDraft(userId, draft);
       if (!isCurrentDraft(userId, draft)) return;
