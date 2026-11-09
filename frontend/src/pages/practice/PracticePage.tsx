@@ -21,6 +21,7 @@ import {
 import {
   createExercisePool,
   isExerciseCorrect,
+  normalizePracticeDifficulty,
   type PracticeExercise,
 } from '../../utils/practiceUtils';
 import './practice.css';
@@ -44,7 +45,7 @@ export default function PracticePage() {
   const [showSetup, setShowSetup] = useState(!hasUrlParams);
   const [setupMode, setSetupMode] = useState<'start' | 'edit'>(hasUrlParams ? 'edit' : 'start');
   const [lang, setLang] = useState(normalizeUrlLang(urlLang));
-  const [diff, setDiff] = useState(urlDiff || 'mixed');
+  const [diff, setDiff] = useState(normalizePracticeDifficulty(urlDiff || 'mixed'));
   const [type, setType] = useState(urlType || 'mixed');
   const [count, setCount] = useState(urlCount || 10);
 
