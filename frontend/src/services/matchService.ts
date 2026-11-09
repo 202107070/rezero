@@ -22,6 +22,28 @@ export interface MatchStartResponse {
   problems: MatchStartProblem[];
 }
 
+export interface ReconnectMatch {
+  matchId: string;
+  roomId: number | null;
+  status: 'IN_PROGRESS' | 'FINISHED';
+  language: string;
+  roomMode: string;
+  gameMode: string;
+  problemCount: number;
+  maxPlayers: number;
+}
+
+export function fetchReconnectMatch(signal: AbortSignal): Promise<{ match: ReconnectMatch | null }> {
+  return apiRequest('/matches/reconnect', { signal }, { background: true });
+}
+
+export function acknowledgeMatchResult(matchId: string): Promise<void> {
+  return apiRequest(`/matches/${encodeURIComponent(matchId)}/result-seen`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(5000),
+  }, { background: true });
+}
+
 export interface MatchAnswerResult {
   matchId: string;
   problemIndex: number;
@@ -62,6 +84,7 @@ export interface MatchRankingPlayer {
   codes?: string[];
   blankAnswers?: string[][];
   selectedOptions?: Record<string, number> | Array<number | null>;
+  solveTimes?: Record<number, number>;
 }
 
 export interface MatchRanking {
@@ -71,6 +94,7 @@ export interface MatchRanking {
   roundSeconds: number;
   totalProblems: number;
   players: MatchRankingPlayer[];
+  match?: { language: string; roomMode: string; problems: BattleProblem[] };
   rewards?: Array<{
     userId?: string;
     id?: string;
@@ -189,7 +213,9 @@ export async function submitMatchResult(
 }
 
 export async function fetchMatchRanking(matchId: string): Promise<MatchRanking> {
-  return apiRequest<MatchRanking>(`/matches/${encodeURIComponent(matchId)}/ranking`);
+  return apiRequest<MatchRanking>(`/matches/${encodeURIComponent(matchId)}/ranking`, {
+    signal: AbortSignal.timeout(5000),
+  }, { background: true });
 }
 
 export async function fetchMatchPending(matchId: string, handling: { background?: boolean } = {}): Promise<{

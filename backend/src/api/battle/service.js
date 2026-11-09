@@ -87,6 +87,7 @@ export async function createBattle(roomId, userId, options = {}) {
   await battleModel.createMatchWithProblems({
     matchId,
     roomId: Number(room.id),
+    hostUserId: userId,
     language: problems[0].language || room.language,
     difficulty: room.difficulty,
     maxPlayers: Number(room.maxPlayers),
@@ -137,29 +138,12 @@ export async function getActiveMatchForRoom(roomId, userId) {
     throw new AppError(404, "ROOM_NOT_FOUND", "방을 찾을 수 없습니다.");
   }
 
-  const participants = await roomModel.findRoomParticipants(roomId);
-  const isMember = participants.some(
-    (participant) => String(participant.userId) === String(userId),
-  );
-  if (!isMember) {
-    throw new AppError(
-      403,
-      "MATCH_PARTICIPANT_REQUIRED",
-      "해당 방의 참가자만 경기 정보를 조회할 수 있습니다.",
-    );
-  }
-
-  const state = await redisClient.hGetAll(`room:${roomId}:state`);
-  let matchId = state?.matchId || null;
-  let match = matchId ? await battleModel.findMatchById(matchId) : null;
-
-  if (!match || match.status !== "IN_PROGRESS") {
-    match = await battleModel.findActiveMatchByRoomId(roomId);
-    matchId = match?.id || null;
-  }
-
+  const match = room.status === "STARTED" && await battleModel.findActiveMatchByRoomId(roomId);
   if (!match) {
     throw new AppError(404, "MATCH_NOT_FOUND", "진행 중인 경기가 없습니다.");
+  }
+  if (!await battleModel.isMatchParticipant(match.id, userId)) {
+    throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
   }
 
   const problems = await battleModel.findMatchProblems(match.id);
@@ -394,6 +378,7 @@ function attachSubmissionAnswers(players, submissions) {
       codes: parseJson(submission.codes, []),
       blankAnswers: parseJson(submission.blankAnswers, []),
       selectedOptions: parseJson(submission.selectedOptions, {}),
+      solveTimes: parseJson(submission.solveTimes, {}),
     };
   });
 }
@@ -862,7 +847,7 @@ export async function submitMatchResult(input) {
   }
 
   if (match.status === "FINISHED") {
-    const ranking = await getStoredRanking(input.matchId);
+    const ranking = await getAuthorizedRanking(input.matchId, input.userId);
     return {
       roomId: match.roomId,
       submitted: true,
@@ -975,21 +960,41 @@ export async function getMatchPendingUsers(matchId, userId) {
   };
 }
 
-export async function getMatchResult(matchId) {
-  const match = await battleModel.findMatchById(matchId);
+export async function getReconnectMatch(userId) {
+  return battleModel.findReconnectMatch(userId);
+}
 
-  if (!match) {
-    throw new AppError(404, "MATCH_NOT_FOUND", "경기를 찾을 수 없습니다.");
-  }
+export async function markMatchResultSeen(matchId, userId) {
+  await battleModel.markMatchResultSeen(matchId, userId);
+}
 
-  if (match.status !== "FINISHED") {
-    throw new AppError(409, "MATCH_RESULT_NOT_READY", "경기가 아직 종료되지 않았습니다.");
-  }
-
+async function getAuthorizedRanking(matchId, userId) {
   const ranking = await getStoredRanking(matchId);
   if (!ranking) {
     throw new AppError(404, "MATCH_RANKING_NOT_FOUND", "경기 순위를 찾을 수 없습니다.");
   }
-
+  if (!ranking.players.some(player => String(player.id) === String(userId))) {
+    throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 결과를 볼 수 있습니다.");
+  }
   return ranking;
+}
+
+export async function getMatchResult(matchId, userId) {
+  const match = await battleModel.findMatchById(matchId);
+  if (!match) {
+    throw new AppError(404, "MATCH_NOT_FOUND", "경기를 찾을 수 없습니다.");
+  }
+  if (match.status !== "FINISHED") {
+    throw new AppError(409, "MATCH_RESULT_NOT_READY", "경기가 아직 종료되지 않았습니다.");
+  }
+
+  const ranking = await getAuthorizedRanking(matchId, userId);
+  return {
+    ...ranking,
+    match: {
+      language: match.language,
+      roomMode: match.roomMode,
+      problems: await battleModel.findMatchProblems(matchId),
+    },
+  };
 }

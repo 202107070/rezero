@@ -35,7 +35,7 @@ interface AuthContextValue {
   authReady: boolean;
   login: (username: string, password: string) => Promise<AuthResult>;
   signup: (username: string, password: string, displayName?: string) => Promise<AuthResult>;
-  logout: () => Promise<void>;
+  logout: (leaveActiveRoom?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result;
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (leaveActiveRoom = true) => {
     const me = getCurrentDisplayName() || getCurrentUserName();
     const username = getCurrentUserName();
     if (me) setUserPresence(me, { status: 'offline' });
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const roomId = getActiveRoomId();
     const numericRoomId = roomId ? Number(roomId) : NaN;
-    if (Number.isInteger(numericRoomId) && numericRoomId > 0) {
+    if (leaveActiveRoom && Number.isInteger(numericRoomId) && numericRoomId > 0) {
       void leaveRoom(numericRoomId).catch(() => undefined);
     }
     authLogout();
@@ -137,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       <ConnectionLostModal
         open={connectionLost}
         onConfirm={() => {
-          void logout().then(() => quitApp());
+          void logout(false).then(() => quitApp());
         }}
       />
     </AuthContext.Provider>

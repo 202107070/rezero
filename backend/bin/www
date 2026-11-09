@@ -8,6 +8,8 @@ import { pool, testDbConnection } from "#config/dbConfig.js";
 import { redisClient, connectRedis } from "#config/redisConfig.js";
 import { getSocket, initSocket } from "#config/socketConfig.js";
 
+import { ensureMatchParticipantsTable } from "../src/api/battle/model.js";
+
 const server = http.createServer(app);
 
 initSocket(server);
@@ -21,6 +23,7 @@ function logShutdown(step, detail) {
 
 async function startServer() {
   await testDbConnection();
+  await ensureMatchParticipantsTable();
   await connectRedis();
 
   server.listen(env.port, env.host, function () {

@@ -29,7 +29,6 @@ import {
   fetchRooms,
   getRoomErrorMessage,
   joinRoom,
-  leaveRoom,
   setPendingInviteMeta,
   setPendingJoinPassword,
 } from '../../services/roomService';
@@ -44,7 +43,6 @@ import {
   emitRoomInviteResponse,
   emitUpdateLocation,
   emitUpdateTitle,
-  getActiveRoomId,
   joinRoomSocket,
   LOBBY_ROOM_ID,
   onRoomEvent,
@@ -339,17 +337,7 @@ export default function LobbyPage() {
 
     void (async () => {
       try {
-        // 로비 복귀 시 남아 있는 게임방 참가 상태 정리 (비공개방 유령 참가 방지)
-        const activeRoom = getActiveRoomId();
-        if (activeRoom && /^\d+$/.test(activeRoom)) {
-          try {
-            await leaveRoom(activeRoom);
-          } catch {
-            // ignore
-          }
-          setActiveRoomId(null);
-        }
-
+        setActiveRoomId(null);
         const joinResult = await joinRoomSocket(LOBBY_ROOM_ID);
         if (cancelled) return;
         if (joinResult.onlineUsers?.length) {

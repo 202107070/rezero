@@ -124,6 +124,19 @@ CREATE TABLE IF NOT EXISTS matches (
     FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 경기 시작 당시 참가자와 결과 확인 여부
+CREATE TABLE IF NOT EXISTS match_participants (
+    match_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NOT NULL,
+    room_participant_id BIGINT NOT NULL,
+    departed_at TIMESTAMP NULL,
+    result_seen_at TIMESTAMP NULL,
+    PRIMARY KEY (match_id, user_id),
+    KEY ix_match_participants_resume (user_id, result_seen_at),
+    FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 9. match_problems (매치에 배정된 문제)
 CREATE TABLE IF NOT EXISTS match_problems (
     match_id VARCHAR(64) NOT NULL,

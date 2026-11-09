@@ -8,6 +8,8 @@ import {
   getActiveMatchForRoom,
   getMatchPendingUsers,
   getMatchResult,
+  getReconnectMatch,
+  markMatchResultSeen,
   activateReviseItems,
   submitBattleAnswer,
   submitMatchResult,
@@ -137,8 +139,26 @@ export async function getPending(req, res, next) {
 
 export async function getResult(req, res, next) {
   try {
-    const result = await getMatchResult(req.params.matchId);
+    const result = await getMatchResult(req.params.matchId, req.user.id);
     return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+
+export async function getReconnect(req, res, next) {
+  try {
+    return sendSuccess(res, { match: await getReconnectMatch(req.user.id) });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function acknowledgeResult(req, res, next) {
+  try {
+    await markMatchResultSeen(req.params.matchId, req.user.id);
+    return res.sendStatus(204);
   } catch (error) {
     return next(error);
   }

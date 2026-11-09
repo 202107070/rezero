@@ -1,7 +1,5 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ROUTES } from '../../constants/routes';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   validateDisplayName,
@@ -14,7 +12,6 @@ import './login.css';
 type AuthMode = 'login' | 'signup';
 
 export default function LoginPage() {
-  const navigate = useNavigate();
   const { login, signup } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
@@ -95,9 +92,8 @@ export default function LoginPage() {
           ? await login(username, password)
           : await signup(username, password, displayName.trim());
 
-      if (result.ok) {
-        navigate(ROUTES.LOBBY, { replace: true });
-      } else if (result.code === 'ALREADY_ONLINE') {
+      if (result.ok) return; // GuestRoute resolves the destination before the lobby can mount.
+      if (result.code === 'ALREADY_ONLINE') {
         setAlreadyOnlineOpen(true);
       } else if (result.code === 'DISPLAY_NAME_ALREADY_EXISTS') {
         setFieldErrors({ displayName: result.error || '이미 사용 중인 닉네임입니다.' });

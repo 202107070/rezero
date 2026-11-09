@@ -1,10 +1,58 @@
 import { pool } from "#config/dbConfig.js";
+import { AppError } from "#utils/appError.js";
+
+export async function ensureMatchParticipantsTable() {
+  try {
+    await pool.query("SELECT 1 FROM match_participants LIMIT 0");
+  } catch (error) {
+    if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    await pool.query(`CREATE TABLE IF NOT EXISTS match_participants (
+      match_id VARCHAR(64) NOT NULL,
+      user_id VARCHAR(64) NOT NULL,
+      room_participant_id BIGINT NOT NULL,
+      departed_at TIMESTAMP NULL,
+      result_seen_at TIMESTAMP NULL,
+      PRIMARY KEY (match_id, user_id),
+      KEY ix_match_participants_resume (user_id, result_seen_at),
+      FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+  }
+  // Restore identity for a live match created before this table existed.
+  await pool.query(`INSERT IGNORE INTO match_participants (match_id, user_id, room_participant_id)
+    SELECT m.id, rp.user_id, rp.id
+    FROM matches m
+    JOIN rooms r ON r.id = m.room_id AND r.status = 'STARTED'
+    JOIN room_participants rp ON rp.room_id = r.id AND rp.left_at IS NULL AND rp.joined_at <= m.started_at
+    WHERE m.status = 'IN_PROGRESS'
+      AND TIMESTAMPADD(SECOND, m.round_seconds, m.started_at) > CURRENT_TIMESTAMP
+      AND NOT EXISTS (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id)
+      AND NOT EXISTS (SELECT 1 FROM matches newer WHERE newer.room_id = r.id
+        AND newer.id <> m.id AND newer.started_at >= m.started_at)`);
+}
 
 export async function createMatchWithProblems(input) {
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
+
+    const [room] = await connection.query(
+      "SELECT status, host_user_id AS hostUserId FROM rooms WHERE id = ? FOR UPDATE",
+      [input.roomId],
+    );
+    if (room?.status !== "STARTED" || String(room.hostUserId) !== String(input.hostUserId)) {
+      throw new AppError(409, "ROOM_NOT_STARTED", "경기를 시작할 수 없는 방입니다.");
+    }
+    const [existing] = await connection.query(
+      `SELECT m.id FROM matches m
+       WHERE m.room_id = ? AND m.status = 'IN_PROGRESS'
+         AND (EXISTS (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id)
+           OR TIMESTAMPADD(SECOND, m.round_seconds, m.started_at) > CURRENT_TIMESTAMP)
+       LIMIT 1`,
+      [input.roomId],
+    );
+    if (existing) throw new AppError(409, "MATCH_ALREADY_STARTED", "이미 시작한 경기가 있습니다.");
 
     await connection.query(
       `INSERT INTO matches (
@@ -31,6 +79,12 @@ export async function createMatchWithProblems(input) {
         input.gameMode,
         input.roundSeconds,
       ],
+    );
+
+    await connection.query(
+      `INSERT INTO match_participants (match_id, user_id, room_participant_id)
+       SELECT ?, user_id, id FROM room_participants WHERE room_id = ? AND left_at IS NULL`,
+      [input.matchId, input.roomId],
     );
 
     for (let index = 0; index < input.problems.length; index += 1) {
@@ -164,19 +218,54 @@ export async function findMatchProblem(matchId, problemIndex) {
   return rows[0];
 }
 
+export async function findReconnectMatch(userId) {
+  const [match] = await pool.query(
+    `SELECT m.id AS matchId, m.room_id AS roomId, m.status, m.lang AS language,
+       m.room_mode AS roomMode, m.game_mode AS gameMode, m.problem_count AS problemCount,
+       m.max_players AS maxPlayers
+     FROM match_participants mp
+     JOIN matches m ON m.id = mp.match_id
+     LEFT JOIN rooms r ON r.id = m.room_id
+     LEFT JOIN room_participants rp ON rp.id = mp.room_participant_id
+     WHERE mp.user_id = ? AND mp.departed_at IS NULL
+       AND ((m.status = 'IN_PROGRESS' AND r.status = 'STARTED' AND rp.id IS NOT NULL AND rp.left_at IS NULL)
+         OR (m.status = 'FINISHED' AND mp.result_seen_at IS NULL))
+     ORDER BY (m.status = 'IN_PROGRESS') DESC, m.started_at DESC, m.finished_at DESC
+     LIMIT 1`,
+    [userId],
+  );
+  return match || null;
+}
+
+export async function markMatchResultSeen(matchId, userId) {
+  await pool.query(
+    `UPDATE match_participants mp JOIN matches m ON m.id = mp.match_id
+     SET mp.result_seen_at = CURRENT_TIMESTAMP
+     WHERE m.id = ? AND mp.user_id = ? AND m.status = 'FINISHED' AND mp.result_seen_at IS NULL`,
+    [matchId, userId],
+  );
+}
+
+const currentParticipant = `
+  rp.left_at IS NULL AND (
+    EXISTS (SELECT 1 FROM match_participants mp
+      WHERE mp.match_id = m.id AND mp.room_participant_id = rp.id AND mp.departed_at IS NULL)
+    OR (rp.joined_at <= m.started_at AND NOT EXISTS
+      (SELECT 1 FROM match_participants mp WHERE mp.match_id = m.id))
+  )`;
+
 export async function isMatchParticipant(matchId, userId) {
-  const rows = await pool.query(
+  const [row] = await pool.query(
     `SELECT rp.user_id AS userId
      FROM matches m
+     JOIN rooms r ON r.id = m.room_id
      JOIN room_participants rp ON rp.room_id = m.room_id
-     WHERE m.id = ?
-       AND rp.user_id = ?
-       AND rp.left_at IS NULL
+     WHERE m.id = ? AND rp.user_id = ? AND ${currentParticipant}
+       AND (m.status = 'FINISHED' OR (m.status = 'IN_PROGRESS' AND r.status = 'STARTED'))
      LIMIT 1`,
     [matchId, userId],
   );
-
-  return rows.length > 0;
+  return Boolean(row);
 }
 
 export async function consumeUserItem(userId, itemKey) {
@@ -220,8 +309,7 @@ export async function findMatchParticipantsForResult(matchId) {
      FROM matches m
      JOIN room_participants rp ON rp.room_id = m.room_id
      JOIN users u ON u.id = rp.user_id
-     WHERE m.id = ?
-       AND rp.left_at IS NULL
+     WHERE m.id = ? AND ${currentParticipant}
      ORDER BY rp.slot_index ASC`,
     [matchId],
   );

@@ -136,7 +136,9 @@ export function buildResultPlayers(params: {
 }): ResultPlayer[] {
   if (params.rankingSnapshot?.players?.length) {
     const players = rankingSnapshotToResultPlayers(params.rankingSnapshot);
-    applyRatingDeltas(players);
+    if (params.rankingSnapshot.players.some(player => player.delta === undefined)) {
+      applyRatingDeltas(players);
+    }
     return players;
   }
   return rebuildResultPlayers(params);

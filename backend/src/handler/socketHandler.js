@@ -79,13 +79,13 @@ export function registerSocketHandlers(io, socket) {
       const roomId = validatedRoom.roomId;
 
       if (roomId === LOBBY_ROOM_ID) {
-        // 로비로 돌아오면 DB 참가도 정리한다. 소켓만 빠지면 로비 인원이 그대로 남는다.
+        // 로비 입장은 대기방만 정리한다. 진행 중인 경기의 참가 자격은 보존한다.
         try {
           const { leaveRoom } = await import("../api/room/service.js");
-          const activeRooms = await roomModel.findActiveRoomIdsByUser(socket.user.id);
+          const activeRooms = await roomModel.findWaitingRoomIdsByUser(socket.user.id);
           for (let i = 0; i < activeRooms.length; i++) {
             try {
-              await leaveRoom(activeRooms[i], socket.user.id);
+              await leaveRoom(activeRooms[i], socket.user.id, { waitingOnly: true });
             } catch {
               // 이미 나간 방은 무시
             }
@@ -820,39 +820,17 @@ export function registerSocketHandlers(io, socket) {
   });
 
   socket.on("disconnect", async function () {
-    console.log(
-      "[Socket 연결 종료] " +
-        userLabel(socket.user) +
-        " - 참가 중인 방에서 퇴장 처리합니다.",
-    );
+    console.log("[Socket 연결 종료] " + userLabel(socket.user));
 
     try {
       const userId = socket.user?.id;
-      const stillThere = userId
-        ? io.sockets.adapter.rooms.get("user:" + String(userId))
-        : null;
-      if (!stillThere || stillThere.size === 0) {
+      const remainingSockets = io.sockets.adapter.rooms.get("user:" + String(userId));
+      if (!remainingSockets?.size) {
         await markUserOffline(userId);
         await broadcastLobbyPresence(io);
       }
-
-      const { leaveRoom } = await import("../api/room/service.js");
-      const joinedRooms = [...socket.rooms].filter(function (room) {
-        return room !== socket.id && room !== LOBBY_ROOM_ID;
-      });
-
-      for (let i = 0; i < joinedRooms.length; i++) {
-        const roomId = Number(joinedRooms[i]);
-        if (!Number.isInteger(roomId) || roomId < 1) continue;
-        try {
-          // WAITING/STARTED 모두 퇴장 처리 → 유령 인원/방 잔존 방지
-          await leaveRoom(roomId, socket.user.id);
-        } catch (leaveError) {
-          // 이미 나간 방이면 무시
-        }
-      }
     } catch (error) {
-      console.error("[disconnect leaveRoom] " + error.message);
+      console.error("[disconnect presence] " + error.message);
     }
   });
 }

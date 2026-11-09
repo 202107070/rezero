@@ -414,7 +414,7 @@ export async function joinRoom(roomId, userId, input) {
   return toRoomResponse(updatedRoom, participants);
 }
 
-export async function leaveRoom(roomId, userId) {
+export async function leaveRoom(roomId, userId, options) {
   const roomBefore = await roomModel.findRoomById(roomId);
   let leftName = "유저";
   try {
@@ -427,9 +427,10 @@ export async function leaveRoom(roomId, userId) {
   } catch {
     // ignore
   }
-  const result = await roomModel.leaveRoomAndSelectRandomHost(roomId, userId);
+  const result = await roomModel.leaveRoomAndSelectRandomHost(roomId, userId, options);
 
   if (!result.success) {
+    if (result.reason === "ROOM_NOT_WAITING") return null;
     if (result.reason === "ROOM_NOT_FOUND") {
       throw roomNotFound();
     }

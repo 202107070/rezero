@@ -92,6 +92,7 @@ export interface RankingPlayerSnapshot {
   solvedProblems: number[];
   problemResults: boolean[];
   rank: number;
+  delta?: number;
 }
 
 export interface FinalRankingSnapshot {
@@ -173,7 +174,7 @@ export function rankingSnapshotToResultPlayers(
       totalSolveTime: p.totalSolveTime,
       completionTime: p.completionTime,
       problemResults: p.problemResults,
-      delta: 0,
+      delta: p.delta ?? 0,
       rank: p.rank,
     };
   });

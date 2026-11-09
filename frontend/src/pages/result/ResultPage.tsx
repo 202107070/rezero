@@ -51,7 +51,8 @@ import {
   getRoomUsers,
   updateRoomUsers,
 } from '../../services/sessionStore';
-import { fetchMatchRanking, isMatchResultNotReady } from '../../services/matchService';
+import { acknowledgeMatchResult, fetchMatchRanking, isMatchResultNotReady } from '../../services/matchService';
+import { ApiError } from '../../services/apiClient';
 import {
   addGold,
   getGold,
@@ -99,13 +100,7 @@ interface BattleSubmission {
   lang?: string;
   codes?: string[];
   answers?: string[];
-  problems?: Array<{
-    title?: string;
-    question?: string;
-    explanation?: string;
-    answer?: Record<string, string[]>;
-    options?: string[];
-  }>;
+  problems?: BattleProblem[];
   submittedAt?: string;
   roomId?: string;
   historyId?: string;
@@ -164,12 +159,16 @@ export default function ResultPage() {
   const matchId = searchParams.get('matchId') || String(getBattleSettings().matchId || '');
   const sessionId = getSessionId(roomId, matchId);
 
-  const submission = useMemo((): BattleSubmission => getBattleSubmission<BattleSubmission>(), []);
+  const localSubmission = useMemo(() => getBattleSubmission<BattleSubmission>(), []);
+  const [serverSubmission, setServerSubmission] = useState<BattleSubmission | null>(null);
+  const submission = serverSubmission ?? localSubmission;
 
   const demoState = useMemo((): DemoState | null => getBattleDemoState<DemoState>(sessionId), [sessionId]);
 
   const [rankingSnapshot, setRankingSnapshot] = useState(() => readFinalRankingSnapshot(sessionId));
   const [apiRankingReady, setApiRankingReady] = useState(false);
+  const [resultUnavailable, setResultUnavailable] = useState(false);
+  const [resultExitError, setResultExitError] = useState('');
   const [showLobbyConfirm, setShowLobbyConfirm] = useState(false);
   const [opponentAnswers, setOpponentAnswers] = useState<
     Record<
@@ -622,6 +621,7 @@ export default function ResultPage() {
             solvedProblems: Array.isArray(player.solvedProblems) ? player.solvedProblems : [],
             problemResults: Array.isArray(player.problemResults) ? player.problemResults : [],
             rank: Number(player.rank) || 0,
+            delta: ranking.rewards?.find(reward => String(reward.userId || reward.id) === String(player.id))?.ratingDelta,
           })),
         };
         setRankingSnapshot(snapshot);
@@ -648,6 +648,23 @@ export default function ResultPage() {
           };
         }
         setOpponentAnswers(packs);
+        if (ranking.match) {
+          const player = ranking.players.find(entry => String(entry.id) === String(myUserId));
+          const answers = packs[myUserId];
+          setServerSubmission({
+            historyId: matchId,
+            roomId,
+            submittedAt: ranking.finalizedAt,
+            mode: ranking.match.roomMode,
+            lang: ranking.match.language,
+            problems: ranking.match.problems,
+            codes: answers?.codes,
+            blankAnswers: answers?.blankAnswers,
+            selectedOptions: Object.fromEntries(Object.entries(answers?.selectedOptions || {}).filter(([, value]) => value !== null)) as Record<number, number>,
+            solveTimes: player?.solveTimes,
+            problemResults: player?.problemResults,
+          });
+        }
         setApiRankingReady(true);
 
         const mine = ranking.rewards?.find(reward => String(reward.userId || reward.id) === String(myUserId));
@@ -663,23 +680,22 @@ export default function ResultPage() {
           void emitUpdateLocation({ location: 'result', roomId: String(roomId || ''), ratingScore: getRatingScore() }).catch(() => undefined);
         }
 
-        if (timer) window.clearInterval(timer);
       } catch (error) {
-        if (!isMatchResultNotReady(error)) {
-          console.error('랭킹 조회 실패:', error);
+        if (cancelled) return;
+        if (isMatchResultNotReady(error) || (error instanceof ApiError && (error.status === 0 || error.status >= 500))) {
+          timer = window.setTimeout(() => void loadRanking(), 2000);
+        } else {
+          setResultUnavailable(true);
         }
       }
     };
 
     void loadRanking();
-    timer = window.setInterval(() => {
-      void loadRanking();
-    }, 2000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
-  }, [matchId, sessionId, roomId, myUserId, storedSubmit.earnedGold, storedSubmit.ratingDelta, storedSubmit.newTitleIds]);
+  }, [matchId, sessionId, roomId, myUserId]);
 
   const mySubmissionCodes = Array.isArray(submission.codes)
     ? submission.codes
@@ -800,7 +816,7 @@ export default function ResultPage() {
 
   useEffect(() => {
     try {
-      if (!submission?.submittedAt) return;
+      if (!submission.submittedAt || (isLiveMatch && !apiRankingReady)) return;
       const problems = Array.isArray(submission.problems) ? submission.problems : [];
       const answerCodes = problems.map((problem, index) =>
         formatSubmittedAnswer({
@@ -862,7 +878,7 @@ export default function ResultPage() {
     } catch (e) {
       console.error('코드 히스토리 저장 실패:', e);
     }
-  }, [roomId, submission, mySubmissionCodes, myBlankAnswers, mySelectedOptions, langKey, myPlayer?.problemResults]);
+  }, [roomId, submission, mySubmissionCodes, myBlankAnswers, mySelectedOptions, langKey, myPlayer?.problemResults, isLiveMatch, apiRankingReady]);
 
   useEffect(() => {
     void emitUpdateLocation({
@@ -1275,7 +1291,20 @@ export default function ResultPage() {
     }
   };
 
+  const acknowledgeResult = async () => {
+    if (!matchId) return true;
+    setResultExitError('');
+    try {
+      await acknowledgeMatchResult(matchId);
+      return true;
+    } catch {
+      setResultExitError('결과 확인을 저장할 수 없습니다. 다시 시도해 주세요.');
+      return false;
+    }
+  };
+
   const replayToRoom = async () => {
+    if (!await acknowledgeResult()) return;
     removeMyPresence(myUserId);
     if (!roomId) {
       markLobbyChatReset();
@@ -1299,6 +1328,7 @@ export default function ResultPage() {
   };
 
   const clearSessionAndNavigateLobby = async () => {
+    if (!await acknowledgeResult()) return;
     clearBattleAndLeave(sessionId, roomId);
     removeMyPresence(myUserId);
     try {
@@ -1324,12 +1354,22 @@ export default function ResultPage() {
     navigate(ROUTES.LOBBY);
   };
 
+  if (resultUnavailable) {
+    return (
+      <div className="page-container result-page">
+        <p role="alert">경기 결과를 열 수 없습니다.</p>
+        <button type="button" onClick={() => navigate(ROUTES.LOBBY, { replace: true })}>로비로 이동</button>
+      </div>
+    );
+  }
+
   if (isLiveMatch && !apiRankingReady) {
     return <div className="page-container result-page" role="status">경기 결과를 확인하고 있습니다...</div>;
   }
 
   return (
     <div className="page-container result-page">
+      {resultExitError && <p role="alert">{resultExitError}</p>}
       <div className="result-gold-bar">
         💰 GOLD +{earnedGold.toLocaleString()} (총 보유: {totalGold.toLocaleString()} G)
         {' · '}

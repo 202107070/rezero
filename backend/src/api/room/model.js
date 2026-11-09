@@ -260,12 +260,11 @@ export async function updateParticipantCharacter(roomId, userId, character) {
   return Number(result.affectedRows) > 0;
 }
 
-export async function findActiveRoomIdsByUser(userId) {
+export async function findWaitingRoomIdsByUser(userId) {
   const rows = await pool.query(
-    `SELECT DISTINCT room_id AS roomId
-     FROM room_participants
-     WHERE user_id = ?
-       AND left_at IS NULL`,
+    `SELECT DISTINCT rp.room_id AS roomId
+     FROM room_participants rp JOIN rooms r ON r.id = rp.room_id
+     WHERE rp.user_id = ? AND rp.left_at IS NULL AND r.status = 'WAITING'`,
     [userId],
   );
   return rows
@@ -277,14 +276,14 @@ export async function findActiveRoomIdsByUser(userId) {
     });
 }
 
-export async function leaveRoomAndSelectRandomHost(roomId, userId) {
+export async function leaveRoomAndSelectRandomHost(roomId, userId, { waitingOnly = false } = {}) {
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
 
     const roomRows = await connection.query(
-      `SELECT id, host_user_id AS hostUserId
+      `SELECT id, status, host_user_id AS hostUserId
        FROM rooms
        WHERE id = ?
        FOR UPDATE`,
@@ -294,6 +293,11 @@ export async function leaveRoomAndSelectRandomHost(roomId, userId) {
     if (roomRows.length === 0) {
       await connection.rollback();
       return { success: false, reason: "ROOM_NOT_FOUND" };
+    }
+
+    if (waitingOnly && roomRows[0].status !== "WAITING") {
+      await connection.rollback();
+      return { success: false, reason: "ROOM_NOT_WAITING" };
     }
 
     const participantRows = await connection.query(
