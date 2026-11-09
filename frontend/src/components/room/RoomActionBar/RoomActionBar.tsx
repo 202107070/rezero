@@ -1,6 +1,8 @@
 interface RoomActionBarProps {
   isHost: boolean;
   myIsReady: boolean;
+  canToggleReady: boolean;
+  busy: boolean;
   onReadyToggle: () => void;
   onStart: () => void;
   onLeave: () => void;
@@ -9,6 +11,8 @@ interface RoomActionBarProps {
 export function RoomActionBar({
   isHost,
   myIsReady,
+  canToggleReady,
+  busy,
   onReadyToggle,
   onStart,
   onLeave,
@@ -18,7 +22,7 @@ export function RoomActionBar({
       <div className={`room-bottom-bar${isHost ? ' host-bar' : ''}`}>
         {isHost ? (
           <>
-            <button type="button" className="btn-ready btn-compact start" onClick={onStart}>
+            <button type="button" className="btn-ready btn-compact start" disabled={busy} onClick={onStart}>
               START
             </button>
             <button type="button" className="btn-ready btn-compact room-lobby-btn" onClick={onLeave}>
@@ -27,7 +31,12 @@ export function RoomActionBar({
           </>
         ) : (
           <>
-            <button type="button" className={`btn-ready btn-compact ${myIsReady ? 'is-ready' : ''}`} onClick={onReadyToggle}>
+            <button
+              type="button"
+              className={`btn-ready btn-compact ${myIsReady ? 'is-ready' : ''}`}
+              disabled={!canToggleReady || busy}
+              onClick={onReadyToggle}
+            >
               {myIsReady ? 'READY ✓' : 'READY'}
             </button>
             <button type="button" className="btn-ready btn-compact room-lobby-btn" onClick={onLeave}>

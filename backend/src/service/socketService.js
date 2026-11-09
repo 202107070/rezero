@@ -392,6 +392,11 @@ export async function saveReadyState(params) {
   const roomId = params.roomId;
   const userId = String(params.userId);
   const isReady = params.isReady;
+  const participantsKey = "room:" + roomId + ":participants";
+
+  if (!await redisClient.sIsMember(participantsKey, userId)) {
+    throw new Error("방 입장이 완료된 뒤 준비할 수 있습니다.");
+  }
 
   try {
     const key = "room:" + roomId + ":ready";
@@ -424,9 +429,7 @@ export async function saveReadyState(params) {
     const readyUserIds = await redisClient.sMembers(key);
     const readySet = new Set(readyUserIds.map(String));
 
-    const participants = await redisClient.sMembers(
-      "room:" + roomId + ":participants",
-    );
+    const participants = await redisClient.sMembers(participantsKey);
     const allUsers = participants.length > 0 ? participants : [userId];
 
     const readyStates = allUsers.map(function (uId) {

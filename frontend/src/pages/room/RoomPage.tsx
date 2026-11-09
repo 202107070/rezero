@@ -187,6 +187,7 @@ export default function RoomPage() {
 
   const [players, setPlayers] = useState<(RoomPlayer | null)[]>(() => emptyPlayerSlots());
   const battleNavLockRef = useRef(false);
+  const startingGameRef = useRef(false);
   const onlineUsersRef = useRef<LobbyPresencePayload['users']>([]);
   const leavingToGameRef = useRef(false);
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
@@ -325,6 +326,33 @@ export default function RoomPage() {
       ]);
     }
   }, [parsedMaxPlayers, urlTimeRaw]);
+
+  const refreshRoom = useCallback(() => {
+    const gen = ++roomFetchGenRef.current;
+    void fetchRoom(numericRoomId)
+      .then((room) => {
+        if (gen === roomFetchGenRef.current) applyRoom(room, { resetChat: false });
+      })
+      .catch(() => undefined);
+  }, [applyRoom, numericRoomId]);
+
+  const applyReadyState = useCallback((payload: RoomReadyStatePayload) => {
+    if (!roomRosterReadyRef.current || Number(roomMetaRef.current.roomId) !== numericRoomId) return;
+
+    const states = payload.roomReadyStates || [{ userId: payload.userId, isReady: payload.isReady }];
+    const readyMap = new Map(states.map((item) => [String(item.userId), Boolean(item.isReady)]));
+    setPlayers((prev) => prev.map((player) => {
+      if (!player?.userId || player.isHost) return player;
+      const nextReady = readyMap.get(String(player.userId));
+      if (nextReady === undefined) return player;
+      return { ...player, isReady: nextReady, status: nextReady ? 'READY' : 'WAITING' };
+    }));
+    const myReady = readyMap.get(String(getCurrentUserId()));
+    if (myReady !== undefined) setIsReady(myReady);
+
+    // Discard room snapshots requested before this READY update and fill any missing slots.
+    refreshRoom();
+  }, [numericRoomId, refreshRoom]);
 
   useEffect(() => {
     const ids = loadFriends()
@@ -573,26 +601,7 @@ export default function RoomPage() {
 
             unsubs.push(
               onRoomEvent(ROOM_SOCKET_EVENTS.READY_CHANGED, (payload: RoomReadyStatePayload) => {
-                const states = payload.roomReadyStates || [
-                  { userId: String(payload.userId), isReady: Boolean(payload.isReady) },
-                ];
-                const readyMap = new Map(states.map((item) => [String(item.userId), Boolean(item.isReady)]));
-                setPlayers((prev) =>
-                  prev.map((player) => {
-                    if (!player?.userId) return player;
-                    if (!readyMap.has(String(player.userId))) return player;
-                    const nextReady = readyMap.get(String(player.userId)) === true;
-                    return {
-                      ...player,
-                      isReady: player.isHost ? false : nextReady,
-                      status: player.isHost ? 'HOST' : nextReady ? 'READY' : 'WAITING',
-                    };
-                  }),
-                );
-                const myReadyId = getCurrentUserId();
-                if (readyMap.has(String(myReadyId))) {
-                  setIsReady(readyMap.get(String(myReadyId)) === true);
-                }
+                if (!cancelled) applyReadyState(payload);
               }),
             );
 
@@ -604,12 +613,7 @@ export default function RoomPage() {
                   user?: { id?: string; displayName?: string; username?: string };
                 }) => {
                   if (cancelled || !payload?.user || String(payload.roomId) !== String(numericRoomId)) return;
-                  const gen = ++roomFetchGenRef.current;
-                  void fetchRoom(numericRoomId)
-                    .then((nextRoom) => {
-                      if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
-                    })
-                    .catch(() => undefined);
+                  refreshRoom();
                 },
               ),
             );
@@ -653,18 +657,13 @@ export default function RoomPage() {
                     ),
                   );
                 }
-                const gen = ++roomFetchGenRef.current;
-                void fetchRoom(numericRoomId)
-                  .then((nextRoom) => {
-                    if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
-                  })
-                  .catch(() => undefined);
+                refreshRoom();
               }),
             );
 
             unsubs.push(
               onRoomEvent(ROOM_SOCKET_EVENTS.ROOM_ROSTER, (payload: RoomRosterPayload) => {
-                if (String(payload?.roomId || '') !== String(numericRoomId)) return;
+                if (cancelled || String(payload?.roomId || '') !== String(numericRoomId)) return;
                 if (Array.isArray(payload.participantIds)) {
                   const ids = payload.participantIds.map((id) => String(id).replace(/^player-/, ''));
                   const allowed = new Set(ids);
@@ -676,12 +675,7 @@ export default function RoomPage() {
                     }),
                   );
                 }
-                const gen = ++roomFetchGenRef.current;
-                void fetchRoom(numericRoomId)
-                  .then((nextRoom) => {
-                    if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
-                  })
-                  .catch(() => undefined);
+                refreshRoom();
               }),
             );
 
@@ -882,6 +876,8 @@ export default function RoomPage() {
     void enterRoom();
     return () => {
       cancelled = true;
+      roomRosterReadyRef.current = false;
+      roomFetchGenRef.current += 1;
       unsubs.forEach((unsub) => {
         try {
           unsub();
@@ -891,25 +887,15 @@ export default function RoomPage() {
       });
       // Room→Battle 이동 시 소켓 유지 (로비 퇴장 시에만 force disconnect)
     };
-  }, [applyRoom, navigate, numericRoomId, roomId, roomMode, gameMode, parsedMaxPlayers]);
+  }, [applyRoom, applyReadyState, navigate, numericRoomId, refreshRoom, roomId, roomMode, gameMode, parsedMaxPlayers]);
 
   useEffect(() => {
     if (!Number.isInteger(numericRoomId) || numericRoomId <= 0) return;
-    let cancelled = false;
     const timer = window.setInterval(() => {
-      if (!roomRosterReadyRef.current) return;
-      const gen = ++roomFetchGenRef.current;
-      void fetchRoom(numericRoomId)
-        .then((nextRoom) => {
-          if (!cancelled && gen === roomFetchGenRef.current) applyRoom(nextRoom, { resetChat: false });
-        })
-        .catch(() => undefined);
+      if (roomRosterReadyRef.current) refreshRoom();
     }, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [applyRoom, numericRoomId]);
+    return () => window.clearInterval(timer);
+  }, [numericRoomId, refreshRoom]);
 
   const handleSelectCharacter = (characterId: string) => {
     setMyCharacter(characterId);
@@ -1091,6 +1077,7 @@ export default function RoomPage() {
         : player.name === getCurrentDisplayName() || player.name === getCurrentUserName()),
   );
   const isMeHost = Boolean(myPlayer?.isHost);
+  const canToggleReady = Boolean(myPlayer?.userId) && Number(roomDetail?.id) === numericRoomId;
   const myIsReady = isReady || Boolean(myPlayer?.isReady);
   const occupiedCount = players.filter((p) => p !== null).length;
   const displayMaxPlayers = roomMode === '1/1' ? 2 : settings.maxPlayers || parsedMaxPlayers;
@@ -1147,7 +1134,7 @@ export default function RoomPage() {
   };
 
   const handleMyReadyToggle = async () => {
-    if (isMeHost || roomBusy) return;
+    if (!canToggleReady || isMeHost || roomBusy) return;
 
     const nextReady = !myIsReady;
     setRoomBusy(true);
@@ -1158,21 +1145,7 @@ export default function RoomPage() {
         return;
       }
 
-      setIsReady(nextReady);
-      setPlayers((prev) =>
-        prev.map((player) => {
-          if (!player || player.isHost) return player;
-          const isMe = player.userId
-            ? String(player.userId) === String(myUserId)
-            : player.name === getCurrentDisplayName() || player.name === getCurrentUserName();
-          if (!isMe) return player;
-          return {
-            ...player,
-            isReady: nextReady,
-            status: nextReady ? 'READY' : 'WAITING',
-          };
-        }),
-      );
+      applyReadyState(result.readyState || { userId: String(myUserId), isReady: nextReady });
     } catch (error) {
       showStartAlert(getRoomErrorMessage(error));
     } finally {
@@ -1186,39 +1159,35 @@ export default function RoomPage() {
   };
 
   const handleStartGame = async () => {
-    if (!isMeHost || roomBusy) return;
+    if (!isMeHost || roomBusy || startingGameRef.current || battleNavLockRef.current) return;
 
-    const blockReason = getStartBlockReason(players, roomMode);
+    const localBotStart = hasLocalBots(players);
+    const blockReason = localBotStart ? getStartBlockReason(players, roomMode) : null;
     if (blockReason) {
       showStartAlert(blockReason);
       return;
     }
 
+    startingGameRef.current = true;
     setRoomBusy(true);
     try {
-      const roomRoster = players.filter((player): player is RoomPlayer => player !== null);
-      const localBotStart = hasLocalBots(players);
       let matchId = '';
 
       if (!localBotStart) {
         await startRoomApi(numericRoomId);
-        try {
-          const match = await startMatch({
-            roomId: numericRoomId,
-            roundSeconds: getTotalBattleSeconds(settings.diff, Number(settings.count) || 5),
-          });
-          matchId = match.matchId;
-          applyMatchStart({
-            match,
-            settingsDiff: settings.diff,
-            myLanguage,
-            selectedItems: isItemMode ? Array.from(selectedItems) : [],
-            roomRoster,
-          });
-        } catch (matchError) {
-          // 방 상태는 서버에서 WAITING으로 롤백됨. 호스트에게 원인 표시
-          throw matchError;
-        }
+        const match = await startMatch({
+          roomId: numericRoomId,
+          roundSeconds: getTotalBattleSeconds(settings.diff, Number(settings.count) || 5),
+        });
+        if (battleNavLockRef.current) return;
+        matchId = match.matchId;
+        applyMatchStart({
+          match,
+          settingsDiff: settings.diff,
+          myLanguage,
+          selectedItems: isItemMode ? Array.from(selectedItems) : [],
+          roomRoster: playersRef.current.filter((player): player is RoomPlayer => player !== null),
+        });
       } else {
         prepareBattleStart({
           roomId,
@@ -1229,7 +1198,7 @@ export default function RoomPage() {
           roomMode,
           gameMode,
           selectedItems: isItemMode ? Array.from(selectedItems) : [],
-          roomRoster,
+          roomRoster: players.filter((player): player is RoomPlayer => player !== null),
         });
       }
 
@@ -1252,6 +1221,7 @@ export default function RoomPage() {
       leavingToGameRef.current = false;
       showStartAlert(getMatchErrorMessage(error) || getRoomErrorMessage(error));
     } finally {
+      startingGameRef.current = false;
       setRoomBusy(false);
     }
   };
@@ -1412,6 +1382,8 @@ export default function RoomPage() {
                 <RoomActionBar
                   isHost={isMeHost}
                   myIsReady={myIsReady}
+                  canToggleReady={canToggleReady}
+                  busy={roomBusy}
                   onReadyToggle={() => void handleMyReadyToggle()}
                   onStart={() => void handleStartGame()}
                   onLeave={() => setShowLobbyConfirm(true)}

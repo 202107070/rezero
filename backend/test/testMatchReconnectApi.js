@@ -53,10 +53,16 @@ async function start(host, guest, roundSeconds = 60, gameMode = 'normal') {
     roomTitle: '재접속 회귀 검증', playerMode: '1/1', gameMode,
     difficulty: '쉬움', language: 'PYTHON', roomPwd: '', problemCount: 3,
   });
-  await expect(200, `/rooms/${roomId}/join`, guest.token, { language: 'PYTHON', character: 'char2' });
   const [hostSocket, guestSocket] = await Promise.all([connect(host.token), connect(guest.token)]);
+  const setGuestReady = () => guestSocket.timeout(5000).emitWithAck('toggle_ready', { roomId, isReady: true });
+  assert.equal((await setGuestReady()).success, false, 'READY must wait for room admission');
+  await expect(200, `/rooms/${roomId}/join`, guest.token, { language: 'PYTHON', character: 'char2' });
   await Promise.all([enterSocketRoom(hostSocket, roomId), enterSocketRoom(guestSocket, roomId)]);
-  assert.equal((await guestSocket.timeout(5000).emitWithAck('toggle_ready', { roomId, isReady: true })).success, true);
+  const notReady = await expect(409, `/rooms/${roomId}/start`, host.token, {});
+  assert.equal(notReady.error.code, 'ROOM_PARTICIPANTS_NOT_READY');
+  assert.equal((await setGuestReady()).success, true);
+  const { participants } = await expect(200, `/rooms/${roomId}`, host.token);
+  assert.equal(participants.find(player => player.userId === guest.user.id)?.isReady, true);
   await expect(200, `/rooms/${roomId}/start`, host.token, {});
   const { matchId } = await expect(201, '/matches/start', host.token, { roomId, roundSeconds });
   return { matchId, roomId, hostSocket, guestSocket };

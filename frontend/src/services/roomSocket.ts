@@ -511,17 +511,17 @@ export function toggleReadySocket(
 ): Promise<{ success: boolean; message?: string; readyState?: RoomReadyStatePayload }> {
   const client = getRoomSocket();
   return new Promise((resolve) => {
-    client.emit(
+    client.timeout(5000).emit(
       ROOM_SOCKET_EVENTS.TOGGLE_READY,
       { roomId: String(roomId), isReady },
-      (response?: {
+      (error: Error | null, response?: {
         success?: boolean;
         message?: string;
         readyState?: RoomReadyStatePayload;
       }) => {
         resolve({
-          success: Boolean(response?.success),
-          message: response?.message,
+          success: !error && Boolean(response?.success),
+          message: error ? 'READY 상태를 확인하지 못했습니다.' : response?.message,
           readyState: response?.readyState,
         });
       },
