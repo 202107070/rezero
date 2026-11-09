@@ -11,8 +11,7 @@ function SignedInDestination() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]);
-    void fetchReconnectMatch(signal).then(({ match }) => {
+    void fetchReconnectMatch(controller.signal).then(({ match }) => {
       if (controller.signal.aborted) return;
       if (!match) {
         setDestination(ROUTES.LOBBY);

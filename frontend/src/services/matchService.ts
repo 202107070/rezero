@@ -33,8 +33,30 @@ export interface ReconnectMatch {
   maxPlayers: number;
 }
 
-export function fetchReconnectMatch(signal: AbortSignal): Promise<{ match: ReconnectMatch | null }> {
-  return apiRequest('/matches/reconnect', { signal }, { background: true });
+const RECONNECT_RETRY_DELAYS_MS = [250, 500];
+
+export async function fetchReconnectMatch(signal: AbortSignal): Promise<{ match: ReconnectMatch | null }> {
+  for (let attempt = 0; ; attempt++) {
+    signal.throwIfAborted();
+    const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+    try {
+      const result = await apiRequest<{ match: ReconnectMatch | null } | null>(
+        '/matches/reconnect', { signal: requestSignal }, { background: true },
+      );
+      const match = result?.match;
+      if (!result || (match !== null && (!match?.matchId ||
+          (match.status !== 'IN_PROGRESS' && match.status !== 'FINISHED')))) {
+        throw new TypeError('이어할 경기 조회 응답을 읽을 수 없습니다.');
+      }
+      return result;
+    } catch (error) {
+      const retryable = requestSignal.aborted || error instanceof TypeError ||
+        (error instanceof ApiError && (error.status === 0 || error.status === 408 || error.status >= 500));
+      const delay = RECONNECT_RETRY_DELAYS_MS[attempt];
+      if (signal.aborted || !retryable || delay === undefined) throw error;
+      await new Promise<void>(resolve => setTimeout(resolve, delay));
+    }
+  }
 }
 
 export function acknowledgeMatchResult(matchId: string): Promise<void> {
