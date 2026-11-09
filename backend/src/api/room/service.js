@@ -270,7 +270,9 @@ export async function joinRoom(roomId, userId, input) {
         const parsed = JSON.parse(raw);
         if (
           String(parsed.roomId) === String(roomId) &&
-          String(parsed.toUserId) === String(userId)
+          String(parsed.toUserId) === String(userId) &&
+          parsed.fromUserId &&
+          await roomModel.findParticipantRoomStatus(roomId, parsed.fromUserId) === "WAITING"
         ) {
           inviteBypass = true;
         } else {
@@ -441,6 +443,7 @@ async function performRoomLeave(roomId, userId, options) {
     throw new AppError(409, "ROOM_NOT_JOINED", "현재 참가 중인 방이 아닙니다.");
   }
 
+  getSocket()?.in("user:" + String(userId)).socketsLeave(String(roomId));
   await saveLeftRoomState(roomId, userId, result);
   if (result.matchId && !result.roomClosed) {
     const update = redisClient.multi()
@@ -517,6 +520,7 @@ export async function kickParticipant(roomId, hostUserId, targetUserId) {
     throw new AppError(409, "ROOM_NOT_JOINED", "강퇴 대상이 방에 없습니다.");
   }
 
+  getSocket()?.in("user:" + String(targetUserId)).socketsLeave(String(roomId));
   await saveLeftRoomState(roomId, targetUserId, {
     roomClosed: false,
     currentPlayers: result.currentPlayers,

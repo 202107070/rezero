@@ -79,6 +79,7 @@ export interface ReviewInviteSocketPayload {
 export interface ReviewInviteResponsePayload {
   inviteId?: string;
   roomId: string;
+  matchId?: string;
   fromUserId?: string;
   toUserId: string;
   toUserName?: string;
@@ -541,8 +542,8 @@ export function emitReviewInvite(
   },
 ): Promise<{ success: boolean; message?: string }> {
   const client = getRoomSocket();
-  return new Promise((resolve) => {
-    client.emit(
+  return new Promise((resolve, reject) => {
+    client.timeout(5000).emit(
       ROOM_SOCKET_EVENTS.REVIEW_INVITE,
       {
         roomId: String(roomId),
@@ -553,7 +554,8 @@ export function emitReviewInvite(
         problemIndices: params.problemIndices,
         problems: params.problems || [],
       },
-      (response?: { success?: boolean; message?: string }) => {
+      (error: Error | null, response?: { success?: boolean; message?: string }) => {
+        if (error) return reject(error);
         resolve({
           success: Boolean(response?.success),
           message: response?.message,
@@ -714,21 +716,20 @@ export function emitReviewInviteResponse(
     inviteId: string;
     fromUserId?: string;
     accepted: boolean;
-    problemIndices?: number[];
   },
 ): Promise<{ success: boolean; message?: string }> {
   const client = getRoomSocket();
-  return new Promise((resolve) => {
-    client.emit(
+  return new Promise((resolve, reject) => {
+    client.timeout(5000).emit(
       ROOM_SOCKET_EVENTS.REVIEW_INVITE_RESPONSE,
       {
         roomId: String(roomId),
         inviteId: params.inviteId,
         fromUserId: params.fromUserId,
         accepted: params.accepted,
-        problemIndices: params.problemIndices,
       },
-      (response?: { success?: boolean; message?: string }) => {
+      (error: Error | null, response?: { success?: boolean; message?: string }) => {
+        if (error) return reject(error);
         resolve({
           success: Boolean(response?.success),
           message: response?.message,

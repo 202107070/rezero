@@ -159,6 +159,18 @@ export async function findRoomParticipants(roomId) {
   );
 }
 
+export async function findParticipantRoomStatus(roomId, userId) {
+  const [room] = await pool.query(
+    `SELECT r.status FROM rooms r
+     JOIN room_participants rp ON rp.room_id = r.id
+     WHERE r.id = ? AND rp.user_id = ? AND rp.left_at IS NULL
+       AND r.status IN ('WAITING', 'STARTED')
+     LIMIT 1`,
+    [roomId, userId],
+  );
+  return room?.status ?? null;
+}
+
 export async function addRoomParticipant(input) {
   const connection = await pool.getConnection();
 
