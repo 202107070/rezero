@@ -1674,7 +1674,7 @@ export default function BattlePage() {
     if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
     saveDebounceRef.current = setTimeout(() => {
       doPersistSession(answers).catch(() => {});
-    }, 800);
+    }, 500);
 
     return () => {
       if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
