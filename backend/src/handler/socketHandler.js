@@ -607,40 +607,6 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
-  socket.on(SOCKET_EVENTS.REVIEW_INVITE_CANCEL, async function (data, callback) {
-    try {
-      const fromUserId = String(socket.user.id);
-      const inviteId = String(data?.inviteId || "");
-      const roomId = String(data?.roomId || "");
-      const key = reviewInviteKey(fromUserId, inviteId);
-      const raw = await redisClient.get(key);
-      const invite = raw && JSON.parse(raw);
-      if (!invite || invite.roomId !== roomId) {
-        throw new Error("취소할 리뷰 초대가 없습니다.");
-      }
-      await redisClient.del(key);
-      const payload = {
-        inviteId,
-        roomId: invite.roomId,
-        matchId: invite.matchId,
-        fromUserId,
-        fromUserName: userLabel(socket.user),
-        toUserIds: invite.toUserIds,
-      };
-      io.to(invite.toUserIds.map((userId) => "user:" + userId)).emit(
-        SOCKET_EVENTS.REVIEW_INVITE_CANCEL,
-        payload,
-      );
-      if (typeof callback === "function") {
-        callback({ success: true });
-      }
-    } catch (error) {
-      if (typeof callback === "function") {
-        callback({ success: false, message: error.message });
-      }
-    }
-  });
-
   socket.on(SOCKET_EVENTS.UPDATE_CHARACTER, async function (data, callback) {
     try {
       const roomId = data?.roomId ? String(data.roomId) : "";

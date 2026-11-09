@@ -14,7 +14,6 @@ interface ReviewInviteModalProps {
   inviteTargetLabel?: string;
   onToggleTarget: (playerId: string) => void;
   onInvite: () => void;
-  onCancelWaiting: () => void;
   onClose: () => void;
 }
 
@@ -31,7 +30,6 @@ export function ReviewInviteModal({
   inviteTargetLabel,
   onToggleTarget,
   onInvite,
-  onCancelWaiting,
   onClose,
 }: ReviewInviteModalProps) {
   if (!show) return null;
@@ -74,33 +72,22 @@ export function ReviewInviteModal({
                 : `총 ${players.length}명 참가`}
           </span>
           <div className="ranking-footer-actions">
-            {waiting ? (
-              <button
-                type="button"
-                className="pixel-btn pixel-btn-secondary review-footer-btn"
-                onClick={onCancelWaiting}
-              >
-                취소하기
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="pixel-btn pixel-btn-primary review-footer-btn"
-                  onClick={onInvite}
-                  disabled={selectedCount === 0}
-                >
-                  {allowMultiple && selectedCount > 1 ? `${selectedCount}명 초대` : '초대하기'}
-                </button>
-                <button
-                  type="button"
-                  className="pixel-btn pixel-btn-secondary review-footer-btn"
-                  onClick={onClose}
-                >
-                  나가기
-                </button>
-              </>
-            )}
+            <button
+              type="button"
+              className="pixel-btn pixel-btn-primary review-footer-btn"
+              onClick={onInvite}
+              disabled={waiting || selectedCount === 0}
+            >
+              {allowMultiple && selectedCount > 1 ? `${selectedCount}명 초대` : '초대하기'}
+            </button>
+            <button
+              type="button"
+              className="pixel-btn pixel-btn-secondary review-footer-btn"
+              onClick={onClose}
+              disabled={waiting}
+            >
+              나가기
+            </button>
           </div>
         </div>
       </div>
