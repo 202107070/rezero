@@ -24,6 +24,10 @@ const DIFF_MAP: Record<string, string> = {
   hard: 'hard',
 };
 
+export function normalizePracticeDifficulty(diff: string): string {
+  return Object.hasOwn(DIFF_MAP, diff) ? DIFF_MAP[diff] : diff;
+}
+
 export function shuffleArray<T>(items: T[]): T[] {
   return [...items].sort(() => Math.random() - 0.5);
 }
@@ -66,7 +70,7 @@ export function normalizePracticeExercise(exercise: PracticeExercise): PracticeE
 export function createExercisePool(count: number, diff: string, type: string, langKey?: string): PracticeExercise[] {
   const bank = (problems as PracticeExercise[]) || [];
   let filtered = bank;
-  const mappedDiff = DIFF_MAP[diff] || diff;
+  const mappedDiff = normalizePracticeDifficulty(diff);
   if (mappedDiff && mappedDiff !== 'mixed') {
     filtered = filtered.filter((p) => p.difficulty === mappedDiff);
   }
