@@ -26,6 +26,7 @@ import { allowExplicitRejoin, allowExplicitRejoinFromPath, fetchRoom, leaveRoom 
 import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import {
   emitReviewInvite,
+  emitReviewInviteCancel,
   emitReviewInviteResponse,
   emitFriendRemove,
   emitFriendRequest,
@@ -41,6 +42,7 @@ import {
   setActiveRoomId,
   type ChatMessagePayload,
   type LobbyPresencePayload,
+  type ReviewInviteCancelPayload,
   type ReviewInviteResponsePayload,
   type ReviewInviteSocketPayload,
 } from '../../services/roomSocket';
@@ -580,6 +582,31 @@ export default function ResultPage() {
             }
           }),
         );
+
+        unsubs.push(
+          onRoomEvent(ROOM_SOCKET_EVENTS.REVIEW_INVITE_CANCEL, (payload: ReviewInviteCancelPayload) => {
+            if (payload.roomId !== roomId) return;
+            const myId = String(myUserId).replace(/^player-/, '');
+            const targets = (payload.toUserIds || []).map((id) => String(id).replace(/^player-/, ''));
+            if (!targets.includes(myId)) return;
+            let closed = false;
+            setIncomingReviewInvite((current) => {
+              if (!current || String(current.id) !== String(payload.inviteId)) return current;
+              closed = true;
+              return null;
+            });
+            if (closed) {
+              setChatMessages((prev) => [
+                ...prev,
+                {
+                  sender: 'SYSTEM',
+                  text: `${payload.fromUserName || '상대'}님이 리뷰 초대를 취소했습니다.`,
+                  type: 'sys',
+                },
+              ]);
+            }
+          }),
+        );
         unsubs.push(onRoomEvent('connect', () => { void syncResultRoom().catch(() => undefined); }));
         if (getRoomSocket().connected) await syncResultRoom();
       } catch {
@@ -975,6 +1002,32 @@ export default function ResultPage() {
     if (inviteWaiting) return;
     setShowInviteModal(false);
     setInviteTargetIds(new Set());
+  };
+
+  const handleCancelInviteWaiting = async () => {
+    const pending = pendingReviewRef.current;
+    if (!pending) {
+      setInviteWaiting(false);
+      setShowInviteModal(false);
+      setInviteTargetIds(new Set());
+      return;
+    }
+    window.clearTimeout(pending.timer);
+    pendingReviewRef.current = null;
+    botAcceptTimerRef.current?.();
+    botAcceptTimerRef.current = null;
+    setInviteWaiting(false);
+    setShowInviteModal(false);
+    setInviteTargetIds(new Set());
+    clearReviewInvite(sessionId);
+    if (roomId) {
+      try {
+        await emitReviewInviteCancel(roomId, { inviteId: pending.id });
+      } catch {
+        // 로컬 취소는 이미 반영. 상대 알림 실패는 무시.
+      }
+    }
+    appendSystemChat('리뷰 초대를 취소했습니다.');
   };
 
   const toggleInviteTarget = (playerId: string) => {
@@ -1515,7 +1568,8 @@ export default function ResultPage() {
         allowMultiple={isVersusMany}
         waiting={inviteWaiting}
         inviteTargetLabel={inviteTargetLabel}
-        onInvite={handleInvite}
+        onInvite={() => { void handleInvite(); }}
+        onCancelWaiting={() => { void handleCancelInviteWaiting(); }}
         onToggleTarget={toggleInviteTarget}
         onClose={handleCloseInviteModal}
       />

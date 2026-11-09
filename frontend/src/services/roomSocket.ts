@@ -27,6 +27,7 @@ export const ROOM_SOCKET_EVENTS = {
   ROOM_ROSTER: 'room_roster',
   REVIEW_INVITE: 'review_invite',
   REVIEW_INVITE_RESPONSE: 'review_invite_response',
+  REVIEW_INVITE_CANCEL: 'review_invite_cancel',
   ROOM_INVITE: 'room_invite',
   ROOM_INVITE_RESPONSE: 'room_invite_response',
   UPDATE_CHARACTER: 'update_character',
@@ -85,6 +86,15 @@ export interface ReviewInviteResponsePayload {
   toUserName?: string;
   accepted: boolean;
   problemIndices?: number[];
+}
+
+export interface ReviewInviteCancelPayload {
+  inviteId: string;
+  roomId: string;
+  matchId?: string;
+  fromUserId: string;
+  fromUserName?: string;
+  toUserIds: string[];
 }
 
 export interface RoomInvitePayload {
@@ -727,6 +737,29 @@ export function emitReviewInviteResponse(
         inviteId: params.inviteId,
         fromUserId: params.fromUserId,
         accepted: params.accepted,
+      },
+      (error: Error | null, response?: { success?: boolean; message?: string }) => {
+        if (error) return reject(error);
+        resolve({
+          success: Boolean(response?.success),
+          message: response?.message,
+        });
+      },
+    );
+  });
+}
+
+export function emitReviewInviteCancel(
+  roomId: string | number,
+  params: { inviteId: string },
+): Promise<{ success: boolean; message?: string }> {
+  const client = getRoomSocket();
+  return new Promise((resolve, reject) => {
+    client.timeout(5000).emit(
+      ROOM_SOCKET_EVENTS.REVIEW_INVITE_CANCEL,
+      {
+        roomId: String(roomId),
+        inviteId: params.inviteId,
       },
       (error: Error | null, response?: { success?: boolean; message?: string }) => {
         if (error) return reject(error);
