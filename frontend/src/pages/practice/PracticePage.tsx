@@ -42,6 +42,7 @@ export default function PracticePage() {
   const hasUrlParams = Boolean(urlLang && urlCount);
 
   const [showSetup, setShowSetup] = useState(!hasUrlParams);
+  const [setupMode, setSetupMode] = useState<'start' | 'edit'>(hasUrlParams ? 'edit' : 'start');
   const [lang, setLang] = useState(normalizeUrlLang(urlLang));
   const [diff, setDiff] = useState(urlDiff || 'mixed');
   const [type, setType] = useState(urlType || 'mixed');
@@ -58,15 +59,28 @@ export default function PracticePage() {
   const displayLang =
     langKey === 'CPP' ? 'C++' : langKey === 'HTML' ? 'HTML' : langKey === 'CSS' ? 'CSS' : langKey;
 
+  const applyPracticeSettings = useCallback(
+    (next: { lang: string; diff: string; type: string; count: number }) => {
+      const nextLangKey = getLangKey(next.lang);
+      const pool = createExercisePool(next.count, next.diff, next.type, nextLangKey);
+      setLang(next.lang);
+      setDiff(next.diff);
+      setType(next.type);
+      setCount(next.count);
+      setExercises(pool);
+      setCurrentIndex(0);
+      setChecked(new Set());
+      setUserAnswers(Array(pool.length).fill(-1));
+      setBlankAnswers(Array(pool.length).fill(null).map(() => []));
+      setShowSetup(false);
+      setSetupMode('edit');
+    },
+    [],
+  );
+
   const startPractice = useCallback(() => {
-    const pool = createExercisePool(count, diff, type, langKey);
-    setExercises(pool);
-    setCurrentIndex(0);
-    setChecked(new Set());
-    setUserAnswers(Array(pool.length).fill(-1));
-    setBlankAnswers(Array(pool.length).fill(null).map(() => []));
-    setShowSetup(false);
-  }, [count, diff, type, langKey]);
+    applyPracticeSettings({ lang, diff, type, count });
+  }, [applyPracticeSettings, lang, diff, type, count]);
 
   useEffect(() => {
     if (hasUrlParams) startPractice();
@@ -200,6 +214,7 @@ export default function PracticePage() {
     <div className="page-container practice-page">
       {showSetup && (
         <PracticeSetupModal
+          mode={setupMode}
           lang={lang}
           diff={diff}
           type={type}
@@ -209,6 +224,8 @@ export default function PracticePage() {
           onTypeChange={setType}
           onCountChange={setCount}
           onStart={startPractice}
+          onConfirm={(next) => applyPracticeSettings(next)}
+          onCancel={() => setShowSetup(false)}
         />
       )}
 
@@ -216,7 +233,10 @@ export default function PracticePage() {
         displayLang={displayLang}
         solvedCount={solvedCount}
         totalCount={exercises.length}
-        onOpenSetup={() => setShowSetup(true)}
+        onOpenSetup={() => {
+          setSetupMode('edit');
+          setShowSetup(true);
+        }}
       />
 
       <div className="practice-body">

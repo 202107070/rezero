@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react';
 import { useModalShake } from '../../../hooks/useModalShake';
 
+export type PracticeSetupMode = 'start' | 'edit';
+
 interface PracticeSetupModalProps {
+  mode?: PracticeSetupMode;
   lang: string;
   diff: string;
   type: string;
@@ -10,9 +14,12 @@ interface PracticeSetupModalProps {
   onTypeChange: (value: string) => void;
   onCountChange: (value: number) => void;
   onStart: () => void;
+  onConfirm?: (next: { lang: string; diff: string; type: string; count: number }) => void;
+  onCancel?: () => void;
 }
 
 export function PracticeSetupModal({
+  mode = 'start',
   lang,
   diff,
   type,
@@ -22,16 +29,62 @@ export function PracticeSetupModal({
   onTypeChange,
   onCountChange,
   onStart,
+  onConfirm,
+  onCancel,
 }: PracticeSetupModalProps) {
   const { shaking, triggerShake } = useModalShake();
+  const isEdit = mode === 'edit';
+
+  const [draftLang, setDraftLang] = useState(lang);
+  const [draftDiff, setDraftDiff] = useState(diff);
+  const [draftType, setDraftType] = useState(type);
+  const [draftCount, setDraftCount] = useState(count);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    setDraftLang(lang);
+    setDraftDiff(diff);
+    setDraftType(type);
+    setDraftCount(count);
+  }, [isEdit, lang, diff, type, count]);
+
+  const currentLang = isEdit ? draftLang : lang;
+  const currentDiff = isEdit ? draftDiff : diff;
+  const currentType = isEdit ? draftType : type;
+  const currentCount = isEdit ? draftCount : count;
+
+  const handleLangChange = (value: string) => {
+    if (isEdit) setDraftLang(value);
+    else onLangChange(value);
+  };
+  const handleDiffChange = (value: string) => {
+    if (isEdit) setDraftDiff(value);
+    else onDiffChange(value);
+  };
+  const handleTypeChange = (value: string) => {
+    if (isEdit) setDraftType(value);
+    else onTypeChange(value);
+  };
+  const handleCountChange = (value: number) => {
+    if (isEdit) setDraftCount(value);
+    else onCountChange(value);
+  };
+
+  const handleOverlayClick = () => {
+    if (isEdit) {
+      onCancel?.();
+      return;
+    }
+    triggerShake();
+  };
 
   return (
-    <div className="setup-overlay" onClick={triggerShake}>
+    <div className="setup-overlay" onClick={handleOverlayClick}>
       <div className={`setup-box${shaking ? ' modal-shake-error' : ''}`} onClick={(e) => e.stopPropagation()}>
-        <div className="setup-title">PRACTICE SETUP</div>
+        <div className="setup-title">{isEdit ? '설정 변경' : 'PRACTICE SETUP'}</div>
         <div className="setup-row">
           <div className="setup-label">언어</div>
-          <select className="setup-select" value={lang} onChange={(e) => onLangChange(e.target.value)}>
+          <select className="setup-select" value={currentLang} onChange={(e) => handleLangChange(e.target.value)}>
             <option value="JAVA">JAVA</option>
             <option value="PYTHON">PYTHON</option>
             <option value="CPP">C++</option>
@@ -41,7 +94,7 @@ export function PracticeSetupModal({
         </div>
         <div className="setup-row">
           <div className="setup-label">난이도</div>
-          <select className="setup-select" value={diff} onChange={(e) => onDiffChange(e.target.value)}>
+          <select className="setup-select" value={currentDiff} onChange={(e) => handleDiffChange(e.target.value)}>
             <option value="mixed">모든 난이도</option>
             <option value="easy">하 (예약어)</option>
             <option value="medium">중 (함수/배열)</option>
@@ -50,7 +103,7 @@ export function PracticeSetupModal({
         </div>
         <div className="setup-row">
           <div className="setup-label">유형</div>
-          <select className="setup-select" value={type} onChange={(e) => onTypeChange(e.target.value)}>
+          <select className="setup-select" value={currentType} onChange={(e) => handleTypeChange(e.target.value)}>
             <option value="mixed">모든 유형</option>
             <option value="multiple_choice">객관식</option>
             <option value="fill_blank">빈칸채우기</option>
@@ -66,20 +119,45 @@ export function PracticeSetupModal({
               type="number"
               min={3}
               max={90}
-              value={count}
-              onChange={(e) => onCountChange(Math.max(3, Math.min(90, parseInt(e.target.value, 10) || 10)))}
+              value={currentCount}
+              onChange={(e) =>
+                handleCountChange(Math.max(3, Math.min(90, parseInt(e.target.value, 10) || 10)))
+              }
             />
             <span className="setup-count-label">문제</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="pixel-btn pixel-btn-primary"
-          onClick={onStart}
-          style={{ marginTop: '8px', justifyContent: 'center' }}
-        >
-          START PRACTICE
-        </button>
+
+        {isEdit ? (
+          <div className="setup-actions">
+            <button
+              type="button"
+              className="pixel-btn pixel-btn-primary"
+              onClick={() =>
+                onConfirm?.({
+                  lang: draftLang,
+                  diff: draftDiff,
+                  type: draftType,
+                  count: draftCount,
+                })
+              }
+            >
+              확인
+            </button>
+            <button type="button" className="pixel-btn" onClick={() => onCancel?.()}>
+              취소
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="pixel-btn pixel-btn-primary"
+            onClick={onStart}
+            style={{ marginTop: '8px', justifyContent: 'center' }}
+          >
+            START PRACTICE
+          </button>
+        )}
       </div>
     </div>
   );

@@ -173,6 +173,20 @@
 .practice-page .setup-count-input { background: #1a1e21; border: 3px solid var(--px-border); color: #fff; font-family: var(--font-pixel); font-size: 18px; padding: 8px 12px; width: 88px; text-align: center; box-shadow: var(--px-inset-light); }
 .practice-page .setup-count-label { font-size: 18px; color: #ddd; }
 
+.practice-page .setup-actions {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.practice-page .setup-actions .pixel-btn {
+  min-width: 110px;
+  justify-content: center;
+  font-size: 18px;
+  padding: 10px 18px;
+}
+
 .practice-page .pixel-btn:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #000; }
 .practice-page .pixel-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: var(--px-shadow-hard); }
 
