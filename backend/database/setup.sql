@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS match_participants (
     user_id VARCHAR(64) NOT NULL,
     room_participant_id BIGINT NOT NULL,
     departed_at TIMESTAMP NULL,
+    time_penalty_seconds INT NOT NULL DEFAULT 0,
     result_seen_at TIMESTAMP NULL,
     PRIMARY KEY (match_id, user_id),
     KEY ix_match_participants_resume (user_id, result_seen_at),

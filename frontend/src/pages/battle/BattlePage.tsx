@@ -17,7 +17,6 @@ BATTLE_BUILD_ITEM_BONUS,
 BATTLE_BUILD_LIMIT,
 ITEM_PANEL_EFFECT_MS,
 SELF_ITEM_KEYS,
-TIME_REDUCE_SECONDS,
 type ItemKey,
 } from '../../constants/itemTypes';
 import { BATTLE_CORRECT_SCORE } from '../../constants/battleConstants';
@@ -287,6 +286,7 @@ export default function BattlePage() {
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialSessionLoadedRef = useRef(false);
   const [sessionReady, setSessionReady] = useState(!isLiveMatch);
+  const liveDeadlineRef = useRef(0);
   const remainingRef = useRef(remaining);
   remainingRef.current = remaining;
   const initialSessionSaveQueuedRef = useRef(false);
@@ -632,11 +632,14 @@ export default function BattlePage() {
           setBuildsUsedByProblem(Object.fromEntries(Object.entries(result.buildState.used).map(([key, value]) => [key, Number(value)])));
           setBuildBonusByProblem(Object.fromEntries(Object.entries(result.buildState.bonus).map(([key, value]) => [key, Number(value)])));
           if (result.progress.finished) {
+            matchResultSubmittedRef.current = true;
             setDemoSpectating(true);
             setSpectatorLocked(true);
           }
           const localRemaining = local && draft === local ? Math.max(0, local.remaining - Math.floor((Date.now() - local.localSavedAt) / 1000)) : result.remainingSeconds;
-          setRemaining(Math.min(result.remainingSeconds, localRemaining));
+          const restoredRemaining = Math.min(result.remainingSeconds, localRemaining);
+          liveDeadlineRef.current = Date.now() + restoredRemaining * 1000;
+          setRemaining(restoredRemaining);
           setElapsedSec(Math.max(0, result.match.roundSeconds - result.remainingSeconds));
           const metadata = { ...getBattleSettings(), ...result.match, roundSeconds: result.match.roundSeconds, diff: result.match.difficulty, count: String(result.match.problemCount), roomRoster: result.roomRoster, opponentProgress: result.opponentProgress };
           setBattleSettings(metadata);
@@ -815,11 +818,13 @@ export default function BattlePage() {
   useEffect(() => {
     if (battleFinished || !sessionReady) return;
     const timer = setInterval(() => {
-      setRemaining((prev) => (prev > 0 ? prev - 1 : 0));
+      setRemaining((prev) => isLiveMatch
+        ? Math.max(0, Math.ceil((liveDeadlineRef.current - Date.now()) / 1000))
+        : Math.max(0, prev - 1));
       setElapsedSec((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, [battleFinished, sessionReady]);
+  }, [battleFinished, sessionReady, isLiveMatch]);
 
   useEffect(() => {
     LobbyBGM.stop();
@@ -965,7 +970,7 @@ export default function BattlePage() {
     const playerFinalSubmitted = demoSpectating || spectatorLocked;
 
     // 제한시간 종료 → GAME OVER 고착 대신 관전 모드로 전환 (상대 대기)
-    if (timeUp && !playerFinalSubmitted) {
+    if (timeUp && !playerFinalSubmitted && !isLiveMatch) {
       setTimeoutSpectateRequest(true);
       return;
     }
@@ -1164,8 +1169,11 @@ export default function BattlePage() {
             }
 
             if (payload.itemType === 'timeReduce' && isTargetMe) {
+              if (payload.matchId !== matchId || typeof payload.remainingSeconds !== 'number') return;
               SFX.play(payload.itemType);
-              setRemaining((prev) => Math.max(0, prev - TIME_REDUCE_SECONDS));
+              const seconds = Math.min(remainingRef.current, payload.remainingSeconds);
+              liveDeadlineRef.current = Date.now() + seconds * 1000;
+              setRemaining(seconds);
               return;
             }
 
@@ -1328,6 +1336,8 @@ export default function BattlePage() {
 
         unsubs.push(
           onRoomEvent(ROOM_SOCKET_EVENTS.GAME_ENDED, (payload: BattleGameEndedPayload) => {
+            if (payload.matchId && payload.matchId !== matchId) return;
+            if (payload.roomId && String(payload.roomId) !== String(roomId)) return;
             if (payload.message) {
               setChatMessages((prev) => [
                 ...prev,
@@ -1528,10 +1538,18 @@ export default function BattlePage() {
     return () => window.clearInterval(timer);
   }, [isLiveMatch, roomId, sessionId, navigate]);
 
+  const timeExpired = remaining <= 0;
   useEffect(() => {
-    if (!isLiveMatch || !matchId || !(demoSpectating || spectatorLocked || battleFinished)) return;
+    if (!isLiveMatch || !matchId || !sessionReady || !(demoSpectating || spectatorLocked || battleFinished || timeExpired)) return;
     return watchMatchCompletion({
       fetchPending: () => fetchMatchPending(matchId, { background: true }),
+      onSubmitted: () => {
+        if (matchResultSubmittedRef.current || leavingToLobbyRef.current) return;
+        matchResultSubmittedRef.current = true;
+        setShowSaveModal(false);
+        setSpectatorLocked(true);
+        setDemoSpectating(true);
+      },
       onReady: () => {
         if (resultLeavingNavRef.current || leavingToLobbyRef.current) return;
         resultLeavingNavRef.current = true;
@@ -1539,7 +1557,7 @@ export default function BattlePage() {
         navigate(`${ROUTES.RESULT}?roomId=${encodeURIComponent(roomId)}&matchId=${encodeURIComponent(matchId)}`, { replace: true });
       },
     });
-  }, [isLiveMatch, matchId, roomId, demoSpectating, spectatorLocked, battleFinished, navigate]);
+  }, [isLiveMatch, matchId, roomId, sessionReady, demoSpectating, spectatorLocked, battleFinished, timeExpired, navigate]);
 
   // 라이브: 마지막 문제까지 제출(관전)하면 결과 제출만 하고, 상대 대기 (바로 결과창 X)
   useEffect(() => {
@@ -1719,7 +1737,7 @@ export default function BattlePage() {
 
   /** 제한시간 종료: 미제출 문항을 서버에 반영(상대 100% 표시) 후 관전 모드 */
   const enterTimeoutSpectator = useCallback(async () => {
-    if (timeoutSpectateRef.current || demoSpectating || spectatorLocked || battleFinished) return;
+    if (isLiveMatch || timeoutSpectateRef.current || demoSpectating || spectatorLocked || battleFinished) return;
     timeoutSpectateRef.current = true;
     setTimeoutSpectateRequest(false);
 
@@ -1730,23 +1748,6 @@ export default function BattlePage() {
     }
     problemResultsRef.current = nextResults;
     setProblemResults(nextResults);
-
-    if (isLiveMatch && matchId) {
-      for (let i = 0; i < problems.length; i += 1) {
-        try {
-          await submitMatchAnswer(matchId, {
-            problemIndex: i,
-            answers: (blankAnswers[i] || []).map((value) => String(value ?? '')),
-            selectedOption:
-              selectedOptionByProblem[i] == null ? undefined : selectedOptionByProblem[i],
-          });
-        } catch (error) {
-          if (!isAlreadySubmittedError(error)) {
-            // 타임업 플러시는 개별 실패해도 관전 전환 계속
-          }
-        }
-      }
-    }
 
     const elapsed = Math.max(0, totalBattleSeconds - remaining);
     if (finishedAtElapsedSec < 0) {
@@ -2371,10 +2372,12 @@ export default function BattlePage() {
           itemKey: type,
           targetUserId: targetUserId || undefined,
         });
-        await emitBattleItemUsed(roomId, {
-          itemType: type,
-          targetUserId: targetUserId || undefined,
-        });
+        if (type !== 'timeReduce') {
+          await emitBattleItemUsed(roomId, {
+            itemType: type,
+            targetUserId: targetUserId || undefined,
+          });
+        }
       } catch (error) {
         setChatMessages((prev) => [...prev, { sender: 'SYSTEM', text: getMatchErrorMessage(error), time: '' }]);
         return;
@@ -2406,7 +2409,7 @@ export default function BattlePage() {
       applyAttackPanelEffect(botId, 'lightning');
       setItemInventory((prev) => ({ ...prev, lightning: prev.lightning - 1 }));
     } else if (type === 'timeReduce') {
-      // 상대 시간 감소는 상대 클라이언트에서 적용 (로컬 남은 시간은 건드리지 않음)
+      // 서버가 대상의 마감 시간을 기록하고 통지한다.
       setItemInventory((prev) => ({ ...prev, timeReduce: prev.timeReduce - 1 }));
     } else if (type === 'scribble') {
       applyAttackPanelEffect(botId, 'scribble');

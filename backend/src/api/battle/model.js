@@ -11,6 +11,7 @@ export async function ensureMatchParticipantsTable() {
       user_id VARCHAR(64) NOT NULL,
       room_participant_id BIGINT NOT NULL,
       departed_at TIMESTAMP NULL,
+      time_penalty_seconds INT NOT NULL DEFAULT 0,
       result_seen_at TIMESTAMP NULL,
       PRIMARY KEY (match_id, user_id),
       KEY ix_match_participants_resume (user_id, result_seen_at),
@@ -18,6 +19,13 @@ export async function ensureMatchParticipantsTable() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   }
+  try {
+    await pool.query("SELECT time_penalty_seconds FROM match_participants LIMIT 0");
+  } catch (error) {
+    if (error.code !== "ER_BAD_FIELD_ERROR") throw error;
+    await pool.query("ALTER TABLE match_participants ADD COLUMN IF NOT EXISTS time_penalty_seconds INT NOT NULL DEFAULT 0");
+  }
+
   // Restore identity for a live match created before this table existed.
   await pool.query(`INSERT IGNORE INTO match_participants (match_id, user_id, room_participant_id)
     SELECT m.id, rp.user_id, rp.id
@@ -201,6 +209,8 @@ export async function findMatchProblem(matchId, problemIndex) {
        m.status,
        m.lang AS language,
        m.game_mode AS gameMode,
+       m.started_at AS startedAt,
+       m.round_seconds AS roundSeconds,
        mp.problem_index AS problemIndex,
        mp.problem_snapshot AS problemSnapshot
      FROM matches m
@@ -281,6 +291,73 @@ export async function consumeUserItem(userId, itemKey) {
   return Number(result.affectedRows) === 1;
 }
 
+export async function findPlayerTimePenalty(matchId, userId) {
+  const [player] = await pool.query(
+    "SELECT time_penalty_seconds AS seconds FROM match_participants WHERE match_id = ? AND user_id = ?",
+    [matchId, userId],
+  );
+  return Number(player?.seconds || 0);
+}
+
+export async function consumeTimeReduceItem(matchId, userId, targetUserId, seconds) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [match] = await connection.query("SELECT status FROM matches WHERE id = ? FOR UPDATE", [matchId]);
+    if (match?.status !== "IN_PROGRESS") {
+      throw new AppError(409, "MATCH_NOT_IN_PROGRESS", "진행 중인 경기에서만 아이템을 사용할 수 있습니다.");
+    }
+    const target = await connection.query(
+      `UPDATE match_participants mp JOIN room_participants rp ON rp.id = mp.room_participant_id
+       SET mp.time_penalty_seconds = mp.time_penalty_seconds + ?
+       WHERE mp.match_id = ? AND mp.user_id = ? AND mp.departed_at IS NULL AND rp.left_at IS NULL`,
+      [seconds, matchId, targetUserId],
+    );
+    if (Number(target.affectedRows) !== 1) {
+      throw new AppError(409, "ITEM_TARGET_UNAVAILABLE", "아이템을 사용할 상대가 없습니다.");
+    }
+    const consumed = await connection.query(
+      "UPDATE user_items SET quantity = quantity - 1 WHERE user_id = ? AND item_key = 'timeReduce' AND quantity > 0",
+      [userId],
+    );
+    if (Number(consumed.affectedRows) !== 1) {
+      await connection.rollback();
+      return false;
+    }
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function findMatchesToSettle() {
+  const rows = await pool.query(
+    `SELECT DISTINCT m.id
+     FROM matches m
+     JOIN rooms r ON r.id = m.room_id AND r.status = 'STARTED'
+     JOIN match_participants mp ON mp.match_id = m.id AND mp.departed_at IS NULL
+     JOIN room_participants rp ON rp.id = mp.room_participant_id AND rp.left_at IS NULL
+     WHERE m.status = 'IN_PROGRESS'
+       AND ((TIMESTAMPADD(SECOND, m.round_seconds - mp.time_penalty_seconds, m.started_at) <= CURRENT_TIMESTAMP
+         AND NOT EXISTS (SELECT 1 FROM match_submissions submitted
+           WHERE submitted.match_id = m.id AND submitted.user_id = mp.user_id))
+         OR NOT EXISTS (
+           SELECT 1 FROM match_participants active
+           JOIN room_participants member ON member.id = active.room_participant_id AND member.left_at IS NULL
+           WHERE active.match_id = m.id AND active.departed_at IS NULL AND NOT EXISTS (
+             SELECT 1 FROM match_submissions submitted
+             WHERE submitted.match_id = active.match_id AND submitted.user_id = active.user_id
+           )
+         ))
+     ORDER BY m.id`,
+  );
+  return rows.map(row => row.id);
+}
+
 export async function consumeUserItemCount(userId, itemKey, count) {
   const amount = Number(count);
   if (!Number.isInteger(amount) || amount < 1) return false;
@@ -305,10 +382,12 @@ export async function findMatchParticipantsForResult(matchId) {
        u.rating_score AS ratingScore,
        rp.slot_index AS slotIndex,
        rp.is_host AS isHost,
-       rp.\`character\` AS avatar
+       rp.\`character\` AS avatar,
+       COALESCE(mp.time_penalty_seconds, 0) AS timePenalty
      FROM matches m
      JOIN room_participants rp ON rp.room_id = m.room_id
      JOIN users u ON u.id = rp.user_id
+     LEFT JOIN match_participants mp ON mp.match_id = m.id AND mp.room_participant_id = rp.id
      WHERE m.id = ? AND ${currentParticipant}
      ORDER BY rp.slot_index ASC`,
     [matchId],
@@ -337,16 +416,32 @@ export async function findMatchSubmissions(matchId) {
   );
 }
 
+export async function hasMatchSubmission(matchId, userId) {
+  const [row] = await pool.query(
+    "SELECT id FROM match_submissions WHERE match_id = ? AND user_id = ? LIMIT 1",
+    [matchId, userId],
+  );
+  return Boolean(row);
+}
+
 export async function saveMatchSubmission(input) {
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
-    await connection.query(
-      `DELETE FROM match_submissions
-       WHERE match_id = ? AND user_id = ?`,
+    const [match] = await connection.query("SELECT status FROM matches WHERE id = ? FOR UPDATE", [input.matchId]);
+    if (match?.status !== "IN_PROGRESS") {
+      await connection.rollback();
+      return false;
+    }
+    const [existing] = await connection.query(
+      "SELECT id FROM match_submissions WHERE match_id = ? AND user_id = ? LIMIT 1",
       [input.matchId, input.userId],
     );
+    if (existing) {
+      await connection.rollback();
+      return false;
+    }
     await connection.query(
       `INSERT INTO match_submissions (
          match_id, user_id, ingame_score, rating_score_before, rating_delta,
@@ -370,6 +465,7 @@ export async function saveMatchSubmission(input) {
       ],
     );
     await connection.commit();
+    return true;
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -438,9 +534,9 @@ export async function finalizeMatchResult(input) {
       return { finalized: false, reason: "MATCH_NOT_FOUND" };
     }
 
-    if (matchRows[0].status === "FINISHED") {
+    if (matchRows[0].status !== "IN_PROGRESS") {
       await connection.rollback();
-      return { finalized: false, reason: "MATCH_ALREADY_FINISHED" };
+      return { finalized: false, reason: matchRows[0].status };
     }
 
     for (const player of input.players) {

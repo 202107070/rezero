@@ -9,12 +9,14 @@ import { redisClient, connectRedis } from "#config/redisConfig.js";
 import { getSocket, initSocket } from "#config/socketConfig.js";
 
 import { ensureMatchParticipantsTable } from "../src/api/battle/model.js";
+import { startMatchDeadlineWorker } from "../src/api/battle/service.js";
 
 const server = http.createServer(app);
 
 initSocket(server);
 
 let shuttingDown = false;
+let stopMatchDeadlines = () => {};
 
 function logShutdown(step, detail) {
   const suffix = detail ? " — " + detail : "";
@@ -25,6 +27,7 @@ async function startServer() {
   await testDbConnection();
   await ensureMatchParticipantsTable();
   await connectRedis();
+  stopMatchDeadlines = startMatchDeadlineWorker();
 
   server.listen(env.port, env.host, function () {
     console.log("Backend running on http://" + env.host + ":" + env.port);
@@ -45,6 +48,7 @@ async function stopServer(signal) {
     return;
   }
   shuttingDown = true;
+  stopMatchDeadlines();
   logShutdown("start", signal + " received");
 
   // unref 하지 않음 — 열린 핸들이 있어도 강제 종료 타이머가 반드시 동작해야 함

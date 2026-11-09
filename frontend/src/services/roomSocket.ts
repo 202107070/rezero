@@ -106,6 +106,8 @@ export interface RoomInviteResponsePayload {
 }
 
 export interface BattleItemUsedPayload {
+  matchId?: string;
+  remainingSeconds?: number;
   fromUserId: string;
   targetUserId?: string | null;
   itemType: string;

@@ -1,4 +1,5 @@
 import express from 'express';
+import { withMatchOperation } from '../battle/matchClock.js';
 import { toMatchStartResponse } from '../battle/dto/matchStartResponseDto.js';
 
 export function createBuildRouter({ sessions, executions, authenticate }) {
@@ -8,7 +9,7 @@ export function createBuildRouter({ sessions, executions, authenticate }) {
     catch (error) { next(error); }
   });
   router.post('/build/session/save', authenticate, async (req, res, next) => {
-    try { res.json(await sessions.save(req.body, req.user.id)); }
+    try { res.json(await withMatchOperation(req.body?.matchId, () => sessions.save(req.body, req.user.id))); }
     catch (error) { next(error); }
   });
   router.get('/build/session/:matchId', authenticate, async (req, res, next) => {

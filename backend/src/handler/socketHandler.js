@@ -378,6 +378,10 @@ export function registerSocketHandlers(io, socket) {
   socket.on(SOCKET_EVENTS.USE_ITEM, async function (data, callback) {
     try {
       const validated = validateUseItem(data);
+      if (validated.itemType === "timeReduce") {
+        if (typeof callback === "function") callback({ success: true });
+        return;
+      }
 
       let targetUserId = validated.targetUserId;
       let targetDisplayName = "상대방";

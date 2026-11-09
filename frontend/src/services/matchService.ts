@@ -220,6 +220,7 @@ export async function fetchMatchRanking(matchId: string): Promise<MatchRanking> 
 
 export async function fetchMatchPending(matchId: string, handling: { background?: boolean } = {}): Promise<{
   roomId?: number;
+  submitted: boolean;
   resultReady: boolean;
   waitingForUserIds: string[];
 }> {

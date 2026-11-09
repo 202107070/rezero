@@ -1,5 +1,6 @@
 import { AppError } from '../../utils/appError.js';
 import { createHash } from 'node:crypto';
+import { draftKey, matchDeadline } from '../battle/matchClock.js';
 
 const SAVE_DRAFT = `
 local previous = redis.call('GET', KEYS[1])
@@ -23,8 +24,6 @@ function identifier(value) {
 }
 
 export function createSessionService({ matches, redis, now = Date.now }) {
-  const keyFor = (matchId, userId) => `battle:draft:${matchId}:${encodeURIComponent(userId)}`;
-
   async function getMatch(matchId, userId) {
     identifier(matchId);
     const match = await matches.findMatchById(matchId);
@@ -35,10 +34,11 @@ export function createSessionService({ matches, redis, now = Date.now }) {
     return match;
   }
 
-  function remaining(match) {
-    const elapsed = Math.max(0, (now() - new Date(match.startedAt).getTime()) / 1000);
-    if (!Number.isFinite(elapsed)) throw new AppError(503, 'MATCH_TIME_UNAVAILABLE', '경기 시간을 확인할 수 없습니다.');
-    return Math.max(0, Math.floor(Number(match.roundSeconds) - elapsed));
+  async function remaining(match, userId) {
+    const penalty = await matches.findPlayerTimePenalty?.(match.id, userId);
+    const seconds = (matchDeadline(match, penalty) - now()) / 1000;
+    if (!Number.isFinite(seconds)) throw new AppError(503, 'MATCH_TIME_UNAVAILABLE', '경기 시간을 확인할 수 없습니다.');
+    return Math.max(0, Math.ceil(seconds));
   }
 
   async function storage(action) {
@@ -53,7 +53,8 @@ export function createSessionService({ matches, redis, now = Date.now }) {
     async save(input, userId) {
       const match = await getMatch(input?.matchId, userId);
       const finalized = matches.findMatchSubmissions ? await matches.findMatchSubmissions(match.id) : [];
-      if (match.status !== 'IN_PROGRESS' || remaining(match) <= 0 || finalized.some(row => String(row.userId) === String(userId))) {
+      const remainingSeconds = await remaining(match, userId);
+      if (match.status !== 'IN_PROGRESS' || remainingSeconds <= 0 || finalized.some(row => String(row.userId) === String(userId))) {
         throw new AppError(409, 'MATCH_NOT_IN_PROGRESS', '종료된 경기에는 답안을 저장할 수 없습니다.');
       }
       const count = Number(match.problemCount);
@@ -71,7 +72,6 @@ export function createSessionService({ matches, redis, now = Date.now }) {
           (input.problemStartedAtElapsed !== undefined && (!Number.isFinite(input.problemStartedAtElapsed) || input.problemStartedAtElapsed < 0 || input.problemStartedAtElapsed > Number(match.roundSeconds) + 100))) {
         throw new AppError(400, 'INVALID_DRAFT', '올바른 답안 저장 정보가 필요합니다.');
       }
-      const remainingSeconds = remaining(match);
       const draftRemaining = Number.isFinite(input.remaining) ? Math.max(0, Math.min(remainingSeconds, input.remaining)) : remainingSeconds;
       const requestHash = createHash('sha256').update(JSON.stringify([version, currentIndex, codes, blankAnswers, selectedOptions, input.solveTimes || {}, input.buildsUsed || {}, Number.isFinite(input.remaining) ? input.remaining : null, input.problemStartedAtElapsed ?? null])).digest('hex');
       const problemStartedAtElapsed = Math.min(Number(match.roundSeconds) - remainingSeconds, input.problemStartedAtElapsed ?? Object.values(input.solveTimes || {}).reduce((sum, value) => sum + value, 0));
@@ -79,7 +79,7 @@ export function createSessionService({ matches, redis, now = Date.now }) {
       const serialized = JSON.stringify(document);
       if (Buffer.byteLength(serialized, 'utf8') > 90000) throw new AppError(413, 'DRAFT_TOO_LARGE', '답안 크기 제한을 초과했습니다.');
       const updated = await storage(() => redis.eval(SAVE_DRAFT, {
-        keys: [keyFor(match.id, userId)],
+        keys: [draftKey(match.id, userId)],
         arguments: [serialized, String(version), String(Math.max(3600, Number(match.roundSeconds) + 3600)), requestHash, String(document.savedAt)],
       }));
       const status = Number(Array.isArray(updated) ? updated[0] : updated);
@@ -89,7 +89,7 @@ export function createSessionService({ matches, redis, now = Date.now }) {
 
     async load(matchId, userId) {
       const match = await getMatch(matchId, userId);
-      const raw = await storage(() => redis.get(keyFor(match.id, userId)));
+      const raw = await storage(() => redis.get(draftKey(match.id, userId)));
       let draft = null;
       try { draft = raw ? JSON.parse(raw) : null; }
       catch { throw new AppError(503, 'DRAFT_UNREADABLE', '저장된 답안을 확인할 수 없습니다.'); }
@@ -108,9 +108,10 @@ export function createSessionService({ matches, redis, now = Date.now }) {
         return { userId: player.userId, score: Number(score || 0), submittedProblems: Object.keys(written).map(Number).filter(Number.isInteger), finished: finalized.some(row => String(row.userId) === String(player.userId)) };
       }));
       const roomRoster = players.map(player => ({ id: Number(player.slotIndex), userId: player.userId, name: player.displayName || player.username, character: player.avatar, isHost: Number(player.isHost) === 1, ratingScore: Number(player.ratingScore) }));
-      const draftRemaining = draft && Number.isFinite(draft.remaining) ? Math.max(0, draft.remaining - Math.floor((now() - draft.savedAt) / 1000)) : remaining(match);
+      const remainingSeconds = await remaining(match, userId);
+      const draftRemaining = draft && Number.isFinite(draft.remaining) ? Math.max(0, draft.remaining - Math.floor((now() - draft.savedAt) / 1000)) : remainingSeconds;
       return { match: { ...match, problems: await matches.findMatchProblems(matchId) }, draft, progress: { submissions, score, finished: finalized.some(row => String(row.userId) === String(userId)) },
-        roomRoster, opponentProgress, buildState: { used: buildsUsed, bonus: buildBonus }, remainingSeconds: match.status === 'IN_PROGRESS' ? Math.min(remaining(match), draftRemaining) : 0, serverTime: now() };
+        roomRoster, opponentProgress, buildState: { used: buildsUsed, bonus: buildBonus }, remainingSeconds: match.status === 'IN_PROGRESS' ? Math.min(remainingSeconds, draftRemaining) : 0, serverTime: now() };
     },
   };
 }

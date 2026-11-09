@@ -102,14 +102,7 @@ export async function submitResult(req, res, next) {
 
     const io = getSocket();
     if (io && result.roomId) {
-      if (result.resultReady === true && Array.isArray(result.ranking?.rewards)) {
-        await socketGameService.broadcastGameEnded(io, String(result.roomId), {
-          roomId: result.roomId,
-          matchId: input.matchId,
-          ranking: result.ranking.players,
-          rewards: result.ranking.rewards,
-        });
-      } else if (Array.isArray(result.waitingForUserIds)) {
+      if (Array.isArray(result.waitingForUserIds)) {
         socketGameService.broadcastMatchResultPending(io, String(result.roomId), {
           roomId: result.roomId,
           matchId: input.matchId,

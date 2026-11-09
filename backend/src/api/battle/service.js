@@ -9,6 +9,7 @@ import { getSocket } from "#config/socketConfig.js";
 import { SOCKET_EVENTS } from "#constants/socketEvents.js";
 import { toMatchStartResponse } from "./dto/matchStartResponseDto.js";
 import { socketGameService } from "#service/socketService.js";
+import { draftKey, matchDeadline, TIME_REDUCE_SECONDS, withMatchOperation } from "./matchClock.js";
 
 const SECONDS_PER_PROBLEM = 120;
 const CORRECT_ANSWER_SCORE = 100;
@@ -395,12 +396,7 @@ async function getStoredRanking(matchId) {
   }
 
   const players = parseJson(ranking.rankingsJson, []);
-  let submissions = [];
-  try {
-    submissions = await battleModel.findMatchSubmissions(matchId);
-  } catch (error) {
-    submissions = [];
-  }
+  const submissions = await battleModel.findMatchSubmissions(matchId);
 
   return {
     matchId,
@@ -506,26 +502,16 @@ async function finalizeSubmittedMatch(match, participants, submissions) {
     totalProblems: Number(match.problemCount),
   });
 
-  if (!finalized.finalized) {
-    return getStoredRanking(match.id);
+  const ranking = await getStoredRanking(match.id);
+  if (finalized.finalized && match.roomId && getSocket()) {
+    await socketGameService.broadcastGameEnded(getSocket(), String(match.roomId), {
+      roomId: match.roomId,
+      matchId: match.id,
+      ranking: ranking.players,
+      rewards: ranking.rewards,
+    });
   }
-
-  return {
-    matchId: match.id,
-    finalizedAt: new Date().toISOString(),
-    elapsedSec,
-    roundSeconds: Number(match.roundSeconds),
-    totalProblems: Number(match.problemCount),
-    players: rankings,
-    rewards: playersWithRewards.map(function (player) {
-      return {
-        userId: player.id,
-        earnedGold: player.earnedGold,
-        ratingDelta: player.ratingDelta,
-        newTitleIds: player.titleData.newTitleIds,
-      };
-    }),
-  };
+  return ranking;
 }
 
 async function getMatchProblemForUser(matchId, problemIndex, userId) {
@@ -544,10 +530,28 @@ async function getMatchProblemForUser(matchId, problemIndex, userId) {
     throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
   }
 
+  await assertPlayerCanPlay(matchProblem, matchId, userId);
   return matchProblem;
 }
 
-export async function submitBattleAnswer(input) {
+async function assertPlayerCanPlay(match, matchId, userId) {
+  const [timePenalty, submitted] = await Promise.all([
+    battleModel.findPlayerTimePenalty(matchId, userId),
+    battleModel.hasMatchSubmission(matchId, userId),
+  ]);
+  if (Date.now() >= matchDeadline(match, timePenalty)) {
+    throw new AppError(409, "MATCH_TIME_EXPIRED", "경기 시간이 종료되었습니다.");
+  }
+  if (submitted) {
+    throw new AppError(409, "MATCH_ALREADY_SUBMITTED", "이미 최종 제출했습니다.");
+  }
+}
+
+export function submitBattleAnswer(input) {
+  return withMatchOperation(input.matchId, () => recordBattleAnswer(input));
+}
+
+async function recordBattleAnswer(input) {
   const matchProblem = await getMatchProblemForUser(
     input.matchId,
     input.problemIndex,
@@ -739,7 +743,11 @@ function buildSelfItemEffect(itemKey, problem, language, emptyBlankIndexes) {
   };
 }
 
-export async function useBattleItem(input) {
+export function useBattleItem(input) {
+  return withMatchOperation(input.matchId, () => applyBattleItem(input));
+}
+
+async function applyBattleItem(input) {
   if (!ITEM_KEYS.has(input.itemKey)) {
     throw new AppError(400, "INVALID_ITEM_KEY", "지원하지 않는 아이템입니다.");
   }
@@ -766,7 +774,18 @@ export async function useBattleItem(input) {
     throw new AppError(409, "ITEM_HINT_UNAVAILABLE", "이 문제에서는 해당 아이템 정보를 만들 수 없습니다.");
   }
 
-  const consumed = await battleModel.consumeUserItem(input.userId, input.itemKey);
+  let targetTimePenalty;
+  if (input.itemKey === "timeReduce") {
+    if (!input.targetUserId || String(input.targetUserId) === String(input.userId)
+      || !await battleModel.isMatchParticipant(input.matchId, input.targetUserId)) {
+      throw new AppError(409, "ITEM_TARGET_UNAVAILABLE", "아이템을 사용할 상대가 없습니다.");
+    }
+    await assertPlayerCanPlay(matchProblem, input.matchId, input.targetUserId);
+    targetTimePenalty = await battleModel.findPlayerTimePenalty(input.matchId, input.targetUserId) + TIME_REDUCE_SECONDS;
+  }
+  const consumed = targetTimePenalty === undefined
+    ? await battleModel.consumeUserItem(input.userId, input.itemKey)
+    : await battleModel.consumeTimeReduceItem(input.matchId, input.userId, input.targetUserId, TIME_REDUCE_SECONDS);
   if (!consumed) {
     throw new AppError(409, "ITEM_NOT_AVAILABLE", "보유한 아이템이 없습니다.");
   }
@@ -775,6 +794,18 @@ export async function useBattleItem(input) {
     const key = `battle:buildBonus:${input.matchId}:${input.userId}`;
     await redisClient.hIncrBy(key, String(input.problemIndex), 3);
     await redisClient.expire(key, 7200);
+  }
+
+  if (targetTimePenalty !== undefined && getSocket()) {
+    getSocket().to(String(matchProblem.roomId)).emit(SOCKET_EVENTS.ITEM_USED, {
+      roomId: String(matchProblem.roomId),
+      matchId: input.matchId,
+      fromUserId: input.userId,
+      targetUserId: input.targetUserId,
+      itemType: input.itemKey,
+      remainingSeconds: Math.max(0, Math.ceil((matchDeadline(matchProblem, targetTimePenalty) - Date.now()) / 1000)),
+      success: true,
+    });
   }
 
   return {
@@ -787,7 +818,11 @@ export async function useBattleItem(input) {
   };
 }
 
-export async function activateReviseItems(input) {
+export function activateReviseItems(input) {
+  return withMatchOperation(input.matchId, () => activateRevise(input));
+}
+
+async function activateRevise(input) {
   const indexes = [...new Set((input.problemIndexes || []).map(Number))].filter(function (index) {
     return Number.isInteger(index) && index >= 0;
   });
@@ -810,6 +845,8 @@ export async function activateReviseItems(input) {
   if (!isParticipant) {
     throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
   }
+
+  await assertPlayerCanPlay(match, input.matchId, input.userId);
 
   const problemCount = Number(match.problemCount) || 0;
   for (let i = 0; i < indexes.length; i++) {
@@ -839,128 +876,190 @@ export async function activateReviseItems(input) {
   };
 }
 
-export async function submitMatchResult(input) {
-  const match = await battleModel.findMatchById(input.matchId);
+function waitingUsers(participants, submissions) {
+  const submitted = new Set(submissions.map(row => String(row.userId)));
+  return participants.map(player => String(player.userId)).filter(id => !submitted.has(id));
+}
 
+async function timeoutSubmission(match, player, problems) {
+  const userId = String(player.userId);
+  const [rawDraft, written] = await Promise.all([
+    redisClient.get(draftKey(match.id, userId)),
+    redisClient.hGetAll(writtenKey(match.id, userId)),
+  ]);
+  const draft = parseJson(rawDraft, {});
+  const selectedOptions = {};
+  const blankAnswers = [];
+  const solvedProblems = [];
+  const problemResults = problems.map((problem, index) => {
+    const answer = parseJson(written[index], null);
+    const blanks = answer ? answer.answers : draft.blankAnswers?.[index];
+    const selected = answer ? answer.selectedOption : draft.selectedOptions?.[index];
+    blankAnswers[index] = Array.isArray(blanks) ? blanks : [];
+    if (selected != null) selectedOptions[index] = selected;
+    const correct = answer?.isCorrect ?? judgeProblemAnswer({
+      problem,
+      language: match.language,
+      answers: blankAnswers[index],
+      selectedOption: selected,
+    });
+    if (correct) solvedProblems.push(index);
+    return correct;
+  });
+  const solveTimes = draft.solveTimes || {};
+  const elapsed = Math.max(0, Number(match.roundSeconds) - player.timePenalty);
+  return {
+    matchId: match.id,
+    userId,
+    ratingScoreBefore: Number(player.ratingScore),
+    ingameScore: solvedProblems.length * CORRECT_ANSWER_SCORE,
+    codes: problems.map((_, index) => draft.codes?.[index] || ''),
+    blankAnswers,
+    selectedOptions,
+    solveTimes,
+    problemResults,
+    solvedProblems,
+    totalSolveTime: resolveTotalSolveTime({ solveTimes }, solvedProblems),
+    completionTime: elapsed,
+    finishedAtElapsed: elapsed,
+  };
+}
+
+async function settleMatch(match, participants, submissions) {
+  const waiting = new Set(waitingUsers(participants, submissions));
+  const expired = participants.filter(player => waiting.has(String(player.userId)) && Date.now() >= matchDeadline(match, player.timePenalty));
+  if (expired.length) {
+    const problems = await battleModel.findMatchProblems(match.id);
+    for (const player of expired) {
+      const result = await timeoutSubmission(match, player, problems);
+      await battleModel.saveMatchSubmission(result);
+    }
+    submissions = await battleModel.findMatchSubmissions(match.id);
+  }
+  const waitingForUserIds = waitingUsers(participants, submissions);
+  const ranking = participants.length >= 2 && waitingForUserIds.length === 0
+    ? await finalizeSubmittedMatch(match, participants, submissions)
+    : null;
+  return { ranking, waitingForUserIds, submissions };
+}
+
+async function settleMatchById(matchId) {
+  return withMatchOperation(matchId, async () => {
+    const match = await battleModel.findMatchById(matchId);
+    if (match?.status !== "IN_PROGRESS") return;
+    const [participants, submissions] = await Promise.all([
+      battleModel.findMatchParticipantsForResult(matchId),
+      battleModel.findMatchSubmissions(matchId),
+    ]);
+    if (participants.length >= 2) await settleMatch(match, participants, submissions);
+  });
+}
+
+export function startMatchDeadlineWorker() {
+  let stopped = false;
+  let timer;
+  async function check() {
+    try {
+      for (const id of await battleModel.findMatchesToSettle()) {
+        if (stopped) return;
+        try {
+          await settleMatchById(id);
+        } catch (error) {
+          console.error("[match deadline] " + id + ": " + error.message);
+        }
+      }
+    } catch (error) {
+      console.error("[match deadlines] " + error.message);
+    } finally {
+      if (!stopped) timer = setTimeout(check, 1000).unref();
+    }
+  }
+  void check();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+}
+
+export function submitMatchResult(input) {
+  return withMatchOperation(input.matchId, () => submitPlayerResult(input));
+}
+
+async function submitPlayerResult(input) {
+  const match = await battleModel.findMatchById(input.matchId);
   if (!match) {
     throw new AppError(404, "MATCH_NOT_FOUND", "경기를 찾을 수 없습니다.");
   }
-
   if (match.status === "FINISHED") {
     const ranking = await getAuthorizedRanking(input.matchId, input.userId);
-    return {
-      roomId: match.roomId,
-      submitted: true,
-      resultReady: true,
-      ranking,
-    };
+    return { roomId: match.roomId, submitted: true, resultReady: true, ranking };
   }
-
   if (match.status !== "IN_PROGRESS") {
     throw new AppError(409, "MATCH_NOT_IN_PROGRESS", "진행 중인 경기만 종료할 수 있습니다.");
   }
-
-  const isParticipant = await battleModel.isMatchParticipant(input.matchId, input.userId);
-  if (!isParticipant) {
+  if (!await battleModel.isMatchParticipant(input.matchId, input.userId)) {
     throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 결과를 저장할 수 있습니다.");
   }
 
-  const savedScore = await redisClient.hGet(scoreKey(input.matchId), String(input.userId));
-  const ingameScore =
-    savedScore === null ? input.ingameScore : numberOrZero(savedScore);
   const participants = await battleModel.findMatchParticipantsForResult(input.matchId);
-  const participant = participants.find(function (item) {
-    return String(item.userId) === String(input.userId);
-  });
-
-  await battleModel.saveMatchSubmission({
-    ...input,
-    ingameScore,
-    ratingScoreBefore: numberOrZero(participant?.ratingScore) || 1000,
-  });
-
-  const submissions = await battleModel.findMatchSubmissions(input.matchId);
-  const submittedUserIds = new Set(
-    submissions.map(function (submission) {
-      return String(submission.userId);
-    }),
-  );
-  const waitingForUserIds = participants
-    .map(function (item) {
-      return String(item.userId);
-    })
-    .filter(function (userId) {
-      return !submittedUserIds.has(userId);
+  const participant = participants.find(player => String(player.userId) === String(input.userId));
+  if (!participant) {
+    throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 결과를 저장할 수 있습니다.");
+  }
+  if (Date.now() < matchDeadline(match, participant.timePenalty)) {
+    const savedScore = await redisClient.hGet(scoreKey(input.matchId), String(input.userId));
+    await battleModel.saveMatchSubmission({
+      ...input,
+      ingameScore: savedScore === null ? input.ingameScore : numberOrZero(savedScore),
+      ratingScoreBefore: Number(participant.ratingScore),
     });
-
-  if (waitingForUserIds.length > 0) {
-    return {
-      roomId: match.roomId,
-      submitted: true,
-      resultReady: false,
-      waitingForUserIds,
-    };
   }
 
-  const ranking = await finalizeSubmittedMatch(match, participants, submissions);
-  const myReward = ranking.rewards?.find(function (reward) {
-    return String(reward.userId) === String(input.userId);
-  });
-
+  const submissions = await battleModel.findMatchSubmissions(input.matchId);
+  const { ranking, waitingForUserIds } = await settleMatch(match, participants, submissions);
+  if (!ranking) {
+    return { roomId: match.roomId, submitted: true, resultReady: false, waitingForUserIds };
+  }
+  const reward = ranking.rewards.find(row => String(row.userId) === String(input.userId));
   return {
     roomId: match.roomId,
     submitted: true,
     resultReady: true,
     ranking,
-    earnedGold: myReward?.earnedGold || 0,
-    ratingDelta: myReward?.ratingDelta || 0,
-    newTitleIds: myReward?.newTitleIds || [],
+    earnedGold: reward?.earnedGold || 0,
+    ratingDelta: reward?.ratingDelta || 0,
+    newTitleIds: reward?.newTitleIds || [],
   };
 }
 
 export async function getMatchPendingUsers(matchId, userId) {
   const match = await battleModel.findMatchById(matchId);
-
   if (!match) {
     throw new AppError(404, "MATCH_NOT_FOUND", "경기를 찾을 수 없습니다.");
   }
-
-  const isParticipant = await battleModel.isMatchParticipant(matchId, userId);
-  if (!isParticipant) {
+  if (match.status === "FINISHED") {
+    await getAuthorizedRanking(matchId, userId);
+    return { roomId: match.roomId, submitted: true, resultReady: true, waitingForUserIds: [] };
+  }
+  if (!await battleModel.isMatchParticipant(matchId, userId)) {
     throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
   }
-
-  if (match.status === "FINISHED") {
-    return {
-      roomId: match.roomId,
-      resultReady: true,
-      waitingForUserIds: [],
-    };
-  }
-
-  const participants = await battleModel.findMatchParticipantsForResult(matchId);
-  const submissions = await battleModel.findMatchSubmissions(matchId);
-  const submittedUserIds = new Set(
-    submissions.map(function (submission) {
-      return String(submission.userId);
-    }),
-  );
-  const waitingForUserIds = participants
-    .map(function (item) {
-      return String(item.userId);
-    })
-    .filter(function (id) {
-      return !submittedUserIds.has(id);
-    });
-
+  const [participants, submissions] = await Promise.all([
+    battleModel.findMatchParticipantsForResult(matchId),
+    battleModel.findMatchSubmissions(matchId),
+  ]);
   return {
     roomId: match.roomId,
-    resultReady: waitingForUserIds.length === 0,
-    waitingForUserIds,
+    submitted: submissions.some(row => String(row.userId) === String(userId)),
+    resultReady: false,
+    waitingForUserIds: waitingUsers(participants, submissions),
   };
 }
 
 export async function getReconnectMatch(userId) {
+  const match = await battleModel.findReconnectMatch(userId);
+  if (match?.status !== "IN_PROGRESS") return match;
+  await settleMatchById(match.matchId);
   return battleModel.findReconnectMatch(userId);
 }
 

@@ -1,3 +1,4 @@
+import { matchDeadline } from '../battle/matchClock.js';
 import { createHash } from 'node:crypto';
 import { AppError } from '../../utils/appError.js';
 import { wrapExecutionSource } from '../problem/variants.js';
@@ -52,7 +53,8 @@ export function createExecutionService({ matches, redis, runner, now = Date.now 
         match = await matches.findMatchById(input.matchId);
         if (!match) throw new AppError(404, 'MATCH_NOT_FOUND', '경기를 찾을 수 없습니다.');
         if (!await matches.isMatchParticipant(match.id, userId)) throw new AppError(403, 'MATCH_PARTICIPANT_REQUIRED', '경기 참가자만 빌드할 수 있습니다.');
-        if (match.status !== 'IN_PROGRESS' || now() >= new Date(match.startedAt).getTime() + Number(match.roundSeconds) * 1000) throw new AppError(409, 'MATCH_NOT_IN_PROGRESS', '경기 시간이 종료되었습니다.');
+        const timePenalty = await matches.findPlayerTimePenalty?.(match.id, userId);
+        if (match.status !== 'IN_PROGRESS' || now() >= matchDeadline(match, timePenalty)) throw new AppError(409, 'MATCH_NOT_IN_PROGRESS', '경기 시간이 종료되었습니다.');
         const finished = await matches.findMatchSubmissions(match.id);
         if (finished.some(row => String(row.userId) === String(userId))) throw new AppError(409, 'MATCH_ALREADY_SUBMITTED', '최종 제출 후에는 빌드할 수 없습니다.');
         const problems = await matches.findMatchProblems(match.id);
