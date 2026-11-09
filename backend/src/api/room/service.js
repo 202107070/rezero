@@ -614,8 +614,15 @@ export async function startRoom(roomId, userId) {
   }
 
   await selectProblems({ difficulty: room.difficulty, language: room.language, count: Number(room.problemCount) });
-  if (!["HTML", "CSS"].includes(room.language) && !await isolatedRunner.ready()) {
-    throw new AppError(503, 'BUILD_UNAVAILABLE', '코드 실행 환경이 준비되지 않았습니다. 서버 실행기 설정을 확인해 주세요.');
+  // 퀴즈 배틀은 실행기 없이도 시작. 코드 실행(빌드) API에서만 ready()를 강제한다.
+  if (!["HTML", "CSS"].includes(room.language)) {
+    const runnerReady = await isolatedRunner.ready().catch(() => false);
+    if (!runnerReady) {
+      console.warn(
+        "[startRoom] code runner unavailable; match will start without build execution:",
+        isolatedRunner.getReadinessError() || "unknown",
+      );
+    }
   }
 
   const started = await roomModel.markRoomStarted(roomId);
