@@ -347,7 +347,8 @@ export function getRoomSocket(): Socket {
     socket.auth = { token: `Bearer ${token}` };
     intentionalDisconnect = false;
     bindSocialBridge(socket);
-    socket.connect();
+    // An active socket is already connecting or will reconnect on its own.
+    if (!socket.active) socket.connect();
     return socket;
   }
 

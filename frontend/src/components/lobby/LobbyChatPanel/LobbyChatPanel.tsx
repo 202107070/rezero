@@ -6,6 +6,7 @@ interface LobbyChatPanelProps {
   chatMsg: string;
   chatMode: string;
   whisperTarget?: string | null;
+  connectionStatus: 'connecting' | 'ready' | 'failed';
   onChatMsgChange: (value: string) => void;
   onChatModeChange: (value: string) => void;
   onSend: () => void;
@@ -16,11 +17,13 @@ export function LobbyChatPanel({
   chatMsg,
   chatMode,
   whisperTarget,
+  connectionStatus,
   onChatMsgChange,
   onChatModeChange,
   onSend,
 }: LobbyChatPanelProps) {
   const chatRef = useRef<HTMLDivElement>(null);
+  const canSend = connectionStatus === 'ready';
 
   useEffect(() => {
     const el = chatRef.current;
@@ -48,6 +51,11 @@ export function LobbyChatPanel({
           ))
         )}
       </div>
+      {!canSend && (
+        <div role="status" className="chat-connection-status">
+          {connectionStatus === 'failed' ? '로비 채팅에 입장하지 못했습니다.' : '로비 채팅에 연결 중입니다.'}
+        </div>
+      )}
       <div className="chat-input-row">
         <select className="chat-mode-select" value={chatMode} onChange={(e) => onChatModeChange(e.target.value)}>
           <option value="ALL">모두에게</option>
@@ -60,9 +68,9 @@ export function LobbyChatPanel({
           value={chatMsg}
           onChange={(e) => onChatMsgChange(e.target.value)}
           placeholder={whisperTarget && chatMode === 'WHISPER' ? `${whisperTarget}에게 귓속말...` : '메시지 입력...'}
-          onKeyDown={(e) => e.key === 'Enter' && onSend()}
+          onKeyDown={(e) => canSend && e.key === 'Enter' && onSend()}
         />
-        <button type="button" className="chat-send-btn" onClick={onSend}>
+        <button type="button" className="chat-send-btn" onClick={onSend} disabled={!canSend}>
           전송
         </button>
       </div>
