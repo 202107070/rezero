@@ -13,14 +13,11 @@ import { draftKey, matchDeadline, TIME_REDUCE_SECONDS, withMatchOperation } from
 
 const SECONDS_PER_PROBLEM = 120;
 const CORRECT_ANSWER_SCORE = 100;
+const ATTACK_ITEM_KEYS = new Set(["paint", "lightning", "timeReduce", "scribble", "lock"]);
 const ITEM_KEYS = new Set([
-  "paint",
+  ...ATTACK_ITEM_KEYS,
   "revealLength",
   "revealPrev",
-  "lightning",
-  "timeReduce",
-  "scribble",
-  "lock",
   "blankBreak",
   "buildCharge",
   "revise",
@@ -530,11 +527,10 @@ async function getMatchProblemForUser(matchId, problemIndex, userId) {
     throw new AppError(403, "MATCH_PARTICIPANT_REQUIRED", "경기 참가자만 요청할 수 있습니다.");
   }
 
-  await assertPlayerCanPlay(matchProblem, matchId, userId);
   return matchProblem;
 }
 
-async function assertPlayerCanPlay(match, matchId, userId) {
+async function assertPlayerCanPlay(match, matchId, userId, { allowSubmitted = false } = {}) {
   const [timePenalty, submitted] = await Promise.all([
     battleModel.findPlayerTimePenalty(matchId, userId),
     battleModel.hasMatchSubmission(matchId, userId),
@@ -542,7 +538,7 @@ async function assertPlayerCanPlay(match, matchId, userId) {
   if (Date.now() >= matchDeadline(match, timePenalty)) {
     throw new AppError(409, "MATCH_TIME_EXPIRED", "경기 시간이 종료되었습니다.");
   }
-  if (submitted) {
+  if (submitted && !allowSubmitted) {
     throw new AppError(409, "MATCH_ALREADY_SUBMITTED", "이미 최종 제출했습니다.");
   }
 }
@@ -557,6 +553,7 @@ async function recordBattleAnswer(input) {
     input.problemIndex,
     input.userId,
   );
+  await assertPlayerCanPlay(matchProblem, input.matchId, input.userId);
   const key = submittedKey(input.matchId, input.problemIndex);
   const alreadySubmitted = await redisClient.sIsMember(key, String(input.userId));
   const reviseAllowed = alreadySubmitted
@@ -757,9 +754,19 @@ async function applyBattleItem(input) {
     input.problemIndex,
     input.userId,
   );
+  const isAttackItem = ATTACK_ITEM_KEYS.has(input.itemKey);
+  await assertPlayerCanPlay(matchProblem, input.matchId, input.userId, { allowSubmitted: isAttackItem });
 
   if (matchProblem.gameMode !== "item") {
     throw new AppError(409, "ITEM_MODE_REQUIRED", "아이템 모드에서만 사용할 수 있습니다.");
+  }
+
+  if (isAttackItem) {
+    if (!input.targetUserId || String(input.targetUserId) === String(input.userId)
+      || !await battleModel.isMatchParticipant(input.matchId, input.targetUserId)) {
+      throw new AppError(409, "ITEM_TARGET_UNAVAILABLE", "아이템을 사용할 상대가 없습니다.");
+    }
+    await assertPlayerCanPlay(matchProblem, input.matchId, input.targetUserId);
   }
 
   const snapshot = parseProblemSnapshot(matchProblem.problemSnapshot);
@@ -776,11 +783,6 @@ async function applyBattleItem(input) {
 
   let targetTimePenalty;
   if (input.itemKey === "timeReduce") {
-    if (!input.targetUserId || String(input.targetUserId) === String(input.userId)
-      || !await battleModel.isMatchParticipant(input.matchId, input.targetUserId)) {
-      throw new AppError(409, "ITEM_TARGET_UNAVAILABLE", "아이템을 사용할 상대가 없습니다.");
-    }
-    await assertPlayerCanPlay(matchProblem, input.matchId, input.targetUserId);
     targetTimePenalty = await battleModel.findPlayerTimePenalty(input.matchId, input.targetUserId) + TIME_REDUCE_SECONDS;
   }
   const consumed = targetTimePenalty === undefined
