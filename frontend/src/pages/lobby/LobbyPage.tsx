@@ -43,6 +43,7 @@ import {
   emitRoomInviteResponse,
   emitUpdateLocation,
   emitUpdateTitle,
+  getRoomSocket,
   joinRoomSocket,
   LOBBY_ROOM_ID,
   onRoomEvent,
@@ -52,6 +53,7 @@ import {
   setActiveRoomId,
   type ChatMessagePayload,
   type LobbyPresencePayload,
+  type LobbyPresenceUser,
   type RoomRosterPayload,
 } from '../../services/roomSocket';
 import {
@@ -241,6 +243,10 @@ function loadInitialUsers(): LobbyUser[] {
   return cached;
 }
 
+type LobbyChatConnection =
+  | { status: 'connecting' | 'failed' }
+  | { status: 'ready'; socketId: string };
+
 export default function LobbyPage() {
   const navigate = useNavigate();
   const authUser = useAuthUser();
@@ -263,6 +269,7 @@ export default function LobbyPage() {
   const [createValidationMessage, setCreateValidationMessage] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(loadLobbyChat);
   const [chatMsg, setChatMsg] = useState('');
+  const [chatConnection, setChatConnection] = useState<LobbyChatConnection>({ status: 'connecting' });
   const [chatMode, setChatMode] = useState('ALL');
   const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
   const [practiceLang, setPracticeLang] = useState('JAVA');
@@ -333,159 +340,189 @@ export default function LobbyPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let joinAttempt = 0;
     const unsubs: Array<() => void> = [];
 
-    void (async () => {
-      try {
-        setActiveRoomId(null);
-        const joinResult = await joinRoomSocket(LOBBY_ROOM_ID);
-        if (cancelled) return;
-        if (joinResult.onlineUsers?.length) {
-          applyOnlineUsers(joinResult.onlineUsers);
+    const refreshOnlineUsers = () =>
+      apiRequest<{ users?: LobbyPresenceUser[] }>('/users/online')
+        .then((data) => {
+          if (!cancelled) applyOnlineUsers(data.users || []);
+        })
+        .catch(() => undefined);
+
+    try {
+      const client = getRoomSocket();
+      setActiveRoomId(null);
+
+      const joinLobbyChat = async () => {
+        const socketId = client.id;
+        if (!socketId || !client.connected) return;
+
+        const attempt = ++joinAttempt;
+        const isCurrent = () =>
+          !cancelled && attempt === joinAttempt && client.connected && client.id === socketId;
+        setChatConnection({ status: 'connecting' });
+
+        for (let retry = 0; retry <= 1; retry++) {
+          let result;
+          try {
+            result = await joinRoomSocket(LOBBY_ROOM_ID);
+          } catch {
+            // Acknowledgement timeout on this connection. A new connection starts its own join.
+            if (!isCurrent()) return;
+            continue;
+          }
+
+          if (!isCurrent()) return;
+          if (!result.success) break;
+          setChatConnection({ status: 'ready', socketId });
+          if (result.onlineUsers?.length) applyOnlineUsers(result.onlineUsers);
+          return;
         }
 
-        unsubs.push(
-          onRoomEvent(ROOM_SOCKET_EVENTS.LOBBY_PRESENCE, (payload: LobbyPresencePayload) => {
-            applyOnlineUsers(payload.users || []);
-          }),
-        );
-        unsubs.push(
-          onRoomEvent(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
-            const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
-            const text = String(payload.message || '');
-            if (!text) return;
-            if (payload.mode === 'FRIEND') {
-              const myId = String(authUser.id);
-              const senderId = String(payload.sender?.id || '');
-              if (senderId !== myId && !isFriend(name)) return;
-            }
+        setChatConnection({ status: 'failed' });
+        void refreshOnlineUsers();
+      };
+
+      const markChatDisconnected = () => {
+        joinAttempt++;
+        setChatConnection({ status: client.active ? 'connecting' : 'failed' });
+      };
+
+      unsubs.push(
+        onRoomEvent(ROOM_SOCKET_EVENTS.LOBBY_PRESENCE, (payload: LobbyPresencePayload) => {
+          applyOnlineUsers(payload.users || []);
+        }),
+      );
+      unsubs.push(
+        onRoomEvent(ROOM_SOCKET_EVENTS.RECEIVE_MESSAGE, (payload: ChatMessagePayload) => {
+          const name = payload.sender?.displayName || payload.sender?.username || 'UNKNOWN';
+          const text = String(payload.message || '');
+          if (!text) return;
+          if (payload.mode === 'FRIEND') {
+            const myId = String(authUser.id);
+            const senderId = String(payload.sender?.id || '');
+            if (senderId !== myId && !isFriend(name)) return;
+          }
+          const now = new Date();
+          const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          const modeLabel =
+            payload.mode === 'WHISPER'
+              ? `[귓속말${payload.targetUserName ? `:${payload.targetUserName}` : ''}]`
+              : payload.mode === 'FRIEND'
+                ? '[친구]'
+                : '[전체]';
+          const messageId = String(payload.messageId || '');
+          setChatMessages((prev) => {
+            if (messageId && prev.some((item) => item.id === messageId)) return prev;
+            return [...prev, { id: messageId || undefined, sender: name, text, time: timeStr, mode: modeLabel }];
+          });
+        }),
+      );
+      unsubs.push(
+        onRoomEvent(ROOM_SOCKET_EVENTS.USER_DELETED, (payload?: { userId?: string }) => {
+          if (!payload?.userId) return;
+          removeFriendByUserId(String(payload.userId));
+          setFriendNames(getFriendNames());
+        }),
+      );
+      unsubs.push(
+        onRoomEvent(
+          ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
+          (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
+            if (!payload) return;
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-            const modeLabel =
-              payload.mode === 'WHISPER'
-                ? `[귓속말${payload.targetUserName ? `:${payload.targetUserName}` : ''}]`
-                : payload.mode === 'FRIEND'
-                  ? '[친구]'
-                  : '[전체]';
-            const messageId = String(payload.messageId || '');
-            setChatMessages((prev) => {
-              if (messageId && prev.some((item) => item.id === messageId)) return prev;
-              return [...prev, { id: messageId || undefined, sender: name, text, time: timeStr, mode: modeLabel }];
-            });
-          }),
-        );
-        unsubs.push(
-          onRoomEvent(ROOM_SOCKET_EVENTS.USER_DELETED, (payload?: { userId?: string }) => {
-            if (!payload?.userId) return;
-            removeFriendByUserId(String(payload.userId));
-            setFriendNames(getFriendNames());
-          }),
-        );
-        unsubs.push(
-          onRoomEvent(
-            ROOM_SOCKET_EVENTS.FRIEND_REQUEST_RESULT,
-            (payload?: { fromUserName?: string; fromUserId?: string; accepted?: boolean }) => {
-              if (!payload) return;
-              const now = new Date();
-              const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-              if (payload.accepted) {
-                if (payload.fromUserName) {
-                  addFriend(payload.fromUserName, payload.fromUserId);
-                }
-                setFriendNames(getFriendNames());
-                const noticeKey = `accept:${payload.fromUserId || payload.fromUserName || 'unknown'}`;
-                if (claimFriendNotice(noticeKey)) {
-                  setChatMessages((prev) => [
-                    ...prev,
-                    {
-                      sender: 'SYSTEM',
-                      text: `${payload.fromUserName || '상대'}님이 친구 요청을 수락했습니다.`,
-                      time: timeStr,
-                      mode: '[안내]',
-                    },
-                  ]);
-                }
-              } else {
+            if (payload.accepted) {
+              if (payload.fromUserName) {
+                addFriend(payload.fromUserName, payload.fromUserId);
+              }
+              setFriendNames(getFriendNames());
+              const noticeKey = `accept:${payload.fromUserId || payload.fromUserName || 'unknown'}`;
+              if (claimFriendNotice(noticeKey)) {
                 setChatMessages((prev) => [
                   ...prev,
                   {
                     sender: 'SYSTEM',
-                    text: `${payload.fromUserName || '상대'}님이 친구 요청을 거절했습니다.`,
+                    text: `${payload.fromUserName || '상대'}님이 친구 요청을 수락했습니다.`,
                     time: timeStr,
                     mode: '[안내]',
                   },
                 ]);
               }
-            },
-          ),
-        );
-        unsubs.push(
-          onRoomEvent(
-            ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
-            (payload?: { fromUserId?: string; fromUserName?: string }) => {
-              if (String(payload?.fromUserId || '') === String(authUser?.id || '')) return;
-              if (!claimFriendNotice(`friend-remove:${payload?.fromUserId || payload?.fromUserName}`)) return;
-              if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
-              if (payload?.fromUserName) removeFriend(payload.fromUserName);
-              setFriendNames(getFriendNames());
-              const now = new Date();
-              const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            } else {
               setChatMessages((prev) => [
                 ...prev,
                 {
                   sender: 'SYSTEM',
-                  text: `${payload?.fromUserName || '상대'}님이 친구 목록에서 나를 삭제했습니다.`,
+                  text: `${payload.fromUserName || '상대'}님이 친구 요청을 거절했습니다.`,
                   time: timeStr,
                   mode: '[안내]',
                 },
               ]);
-            },
-          ),
-        );
-        unsubs.push(
-          onRoomEvent(
-            ROOM_SOCKET_EVENTS.TITLE_CHANGED,
-            (payload?: { userId?: string; titleId?: string | null }) => {
-              if (!payload?.userId) return;
-              setUsers((prev) =>
-                prev.map((user) =>
-                  String(user.userId) === String(payload.userId)
-                    ? { ...user, title: payload.titleId || null }
-                    : user,
-                ),
-              );
-            },
-          ),
-        );
-      } catch {
-        // REST 폴백
-        try {
-          const data = await apiRequest<{ users?: Array<{ userId?: string; username?: string; displayName?: string }> }>(
-            '/users/online',
-          );
-          if (!cancelled) applyOnlineUsers(data.users || []);
-        } catch {
-          // ignore
-        }
-      }
-    })();
+            }
+          },
+        ),
+      );
+      unsubs.push(
+        onRoomEvent(
+          ROOM_SOCKET_EVENTS.FRIEND_REMOVE,
+          (payload?: { fromUserId?: string; fromUserName?: string }) => {
+            if (String(payload?.fromUserId || '') === String(authUser?.id || '')) return;
+            if (!claimFriendNotice(`friend-remove:${payload?.fromUserId || payload?.fromUserName}`)) return;
+            if (payload?.fromUserId) removeFriendByUserId(String(payload.fromUserId));
+            if (payload?.fromUserName) removeFriend(payload.fromUserName);
+            setFriendNames(getFriendNames());
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                sender: 'SYSTEM',
+                text: `${payload?.fromUserName || '상대'}님이 친구 목록에서 나를 삭제했습니다.`,
+                time: timeStr,
+                mode: '[안내]',
+              },
+            ]);
+          },
+        ),
+      );
+      unsubs.push(
+        onRoomEvent(
+          ROOM_SOCKET_EVENTS.TITLE_CHANGED,
+          (payload?: { userId?: string; titleId?: string | null }) => {
+            if (!payload?.userId) return;
+            setUsers((prev) =>
+              prev.map((user) =>
+                String(user.userId) === String(payload.userId)
+                  ? { ...user, title: payload.titleId || null }
+                  : user,
+              ),
+            );
+          },
+        ),
+      );
 
-    const poll = window.setInterval(() => {
-      void apiRequest<{ users?: Array<{ userId?: string; username?: string; displayName?: string }> }>('/users/online')
-        .then((data) => applyOnlineUsers(data.users || []))
-        .catch(() => undefined);
-    }, 5000);
+      client.on('connect', joinLobbyChat);
+      client.on('disconnect', markChatDisconnected);
+      client.on('connect_error', markChatDisconnected);
+      unsubs.push(() => {
+        client.off('connect', joinLobbyChat);
+        client.off('disconnect', markChatDisconnected);
+        client.off('connect_error', markChatDisconnected);
+      });
+
+      if (client.connected) void joinLobbyChat();
+    } catch {
+      void refreshOnlineUsers();
+    }
+
+    const poll = window.setInterval(() => void refreshOnlineUsers(), 5000);
 
     return () => {
       cancelled = true;
       window.clearInterval(poll);
-      unsubs.forEach((unsub) => {
-        try {
-          unsub();
-        } catch {
-          // ignore
-        }
-      });
+      unsubs.forEach((unsub) => unsub());
     };
   }, [applyOnlineUsers, authUser.id]);
 
@@ -726,7 +763,7 @@ export default function LobbyPage() {
   };
 
   const handleSendChat = async () => {
-    if (!chatMsg.trim()) return;
+    if (chatConnection.status !== 'ready' || !chatMsg.trim()) return;
     const text = chatMsg.trim();
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -742,9 +779,10 @@ export default function LobbyPage() {
     const friendUserIds = getFriendUserIds(
       users.map((user) => ({ name: user.name, userId: user.userId })),
     );
-    setChatMsg('');
-    setChatMessages((prev) => [...prev, { id: messageId, sender: senderName, text, time: timeStr, mode: modeLabel }]);
     try {
+      if (getRoomSocket().id !== chatConnection.socketId) return;
+      setChatMsg('');
+      setChatMessages((prev) => [...prev, { id: messageId, sender: senderName, text, time: timeStr, mode: modeLabel }]);
       const result = await sendRoomMessage(LOBBY_ROOM_ID, text, {
         messageId,
         mode: chatMode === 'WHISPER' ? 'WHISPER' : chatMode === 'FRIEND' ? 'FRIEND' : 'ALL',
@@ -1128,6 +1166,7 @@ export default function LobbyPage() {
                 chatMsg={chatMsg}
                 chatMode={chatMode}
                 whisperTarget={whisperTarget}
+                connectionStatus={chatConnection.status}
                 onChatMsgChange={setChatMsg}
                 onChatModeChange={(mode) => {
                   setChatMode(mode);

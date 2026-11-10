@@ -832,7 +832,19 @@
   white-space: nowrap;
 }
 
-.lobby-page .chat-send-btn:hover {
+.lobby-page .chat-connection-status {
+  flex-shrink: 0;
+  padding: 4px 8px 0;
+  color: var(--px-text);
+  font-size: 14px;
+}
+
+.lobby-page .chat-send-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lobby-page .chat-send-btn:not(:disabled):hover {
   background: var(--px-primary);
   color: #000;
 }
