@@ -118,6 +118,32 @@ try {
   assert.equal((await target(guest.token)).matchId, matchId);
   console.log('PASS reconnect: active draft, roster, spectator, offline result, access, per-player acknowledgement');
 
+  const [attackHost, attackGuest] = await Promise.all([signup('aa'), signup('ab')]);
+  const attack = await start(attackHost, attackGuest, 180, 'item');
+  const attackKeys = ['paint', 'lightning', 'scribble', 'lock', 'timeReduce'];
+  for (const key of attackKeys) {
+    await pool.query(`INSERT INTO user_items (user_id, item_key, quantity) VALUES (?, ?, 1)
+      ON DUPLICATE KEY UPDATE quantity = 1`, [attackHost.user.id, key]);
+  }
+  const attackPath = `/matches/${attack.matchId}/items/use`;
+  const attackBody = { problemIndex: 2, targetUserId: attackGuest.user.id };
+  const earlyResult = await expect(200, `/matches/${attack.matchId}/submit`, attackHost.token, {});
+  assert.equal(earlyResult.resultReady, false);
+  assert.equal((await expect(409, attackPath, attackHost.token, { ...attackBody, itemKey: 'buildCharge' })).error.code, 'MATCH_ALREADY_SUBMITTED');
+  assert.equal((await expect(409, `/matches/${attack.matchId}/answers`, attackHost.token, { problemIndex: 0, answers: ['late'] })).error.code, 'MATCH_ALREADY_SUBMITTED');
+  assert.equal((await expect(409, attackPath, attackGuest.token, { ...attackBody, itemKey: 'paint', targetUserId: attackHost.user.id })).error.code, 'MATCH_ALREADY_SUBMITTED');
+  assert.equal((await expect(409, attackPath, attackHost.token, { ...attackBody, itemKey: 'paint', targetUserId: outsider.user.id })).error.code, 'ITEM_TARGET_UNAVAILABLE');
+  assert.equal((await expect(409, attackPath, attackHost.token, { ...attackBody, itemKey: 'paint', targetUserId: attackHost.user.id })).error.code, 'ITEM_TARGET_UNAVAILABLE');
+  for (const itemKey of attackKeys) {
+    assert.equal((await expect(200, attackPath, attackHost.token, { ...attackBody, itemKey })).success, true);
+    assert.equal((await expect(409, attackPath, attackHost.token, { ...attackBody, itemKey })).error.code, 'ITEM_NOT_AVAILABLE');
+  }
+  const [penalty] = await pool.query('SELECT time_penalty_seconds AS seconds FROM match_participants WHERE match_id=? AND user_id=?', [attack.matchId, attackGuest.user.id]);
+  assert.equal(Number(penalty.seconds), 60);
+  assert.equal((await expect(200, `/matches/${attack.matchId}/submit`, attackGuest.token, {})).resultReady, true);
+  assert.equal((await expect(409, attackPath, attackHost.token, { ...attackBody, itemKey: 'paint' })).error.code, 'MATCH_NOT_IN_PROGRESS');
+  console.log('PASS post-submit items: all five attacks, inventory, live target, self-item and answer guards, final result');
+
   const [timedHost, timedGuest] = await Promise.all([signup('ta'), signup('tb')]);
   const timed = await start(timedHost, timedGuest, 4);
   const [problem] = await findMatchProblems(timed.matchId);
