@@ -43,7 +43,6 @@ function mapProblem(p: ProblemRecord) {
 export function applyMatchStart(params: {
   match: MatchStartResponse;
   settingsDiff: string;
-  myLanguage: string;
   selectedItems?: ItemKey[];
   roomRoster?: RoomPlayer[];
 }): void {
@@ -70,7 +69,7 @@ export function applyMatchStart(params: {
     setBattleSettings({
       matchId: params.match.matchId,
       roomId: String(params.match.roomId),
-      lang: params.myLanguage,
+      language: params.match.language,
       diff: params.settingsDiff,
       count: String(selectedProblems.length || params.match.problemCount),
       maxPlayers: String(params.match.maxPlayers),

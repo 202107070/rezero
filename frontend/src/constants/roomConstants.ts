@@ -10,6 +10,7 @@ export const LANGUAGES: LanguageOption[] = [
   { id: 'cpp', icon: '⚡', label: 'C++' },
   { id: 'html', icon: '🌐', label: 'HTML' },
   { id: 'css', icon: '🎨', label: 'CSS' },
+  { id: 'random', icon: '🎲', label: '랜덤' },
 ];
 
 export const CHARACTERS: CharacterOption[] = [
@@ -38,6 +39,7 @@ export const LANG_MAP: Record<string, string> = {
   'C++': 'cpp',
   HTML: 'html',
   CSS: 'css',
+  RANDOM: 'random',
 };
 export const DIFF_MAP: Record<string, string> = { 쉬움: 'EASY', 보통: 'NORMAL', 어려움: 'HARD' };
 export const DIFF_TO_KOREAN: Record<string, string> = { EASY: '쉬움', NORMAL: '보통', HARD: '어려움', EXTREME: '어려움' };

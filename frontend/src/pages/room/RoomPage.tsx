@@ -59,7 +59,7 @@ import {
 } from '../../services/roomService';
 import { markLobbyChatReset } from '../../services/lobbyChatStore';
 import { getMatchErrorMessage, startMatch, type MatchStartResponse } from '../../services/matchService';
-import { getTotalBattleSeconds } from '../../utils/battle/codeUtils';
+import { getLangKey, getLangLabel, getTotalBattleSeconds } from '../../utils/battle/codeUtils';
 import {
   clearRoomSession,
   prepareBattleStart,
@@ -196,11 +196,9 @@ export default function RoomPage() {
   const playersRef = useRef(players);
   const roomMetaRef = useRef({ roomId: '', roomTitle: '', roomQuery: '' });
   const settingsRef = useRef({ diff: initialDiff, count: initialCount, maxPlayers: parsedMaxPlayers, time: urlTimeRaw });
-  const myLanguageRef = useRef(myLanguage);
   const selectedItemsRef = useRef(selectedItems);
   const isItemModeRef = useRef(true);
   playersRef.current = players;
-  myLanguageRef.current = myLanguage;
   selectedItemsRef.current = selectedItems;
 
   const clearBotReadyTimer = (_playerId: number) => {
@@ -582,14 +580,13 @@ export default function RoomPage() {
               applyMatchStart({
                 match,
                 settingsDiff: settingsRef.current.diff,
-                myLanguage: myLanguageRef.current,
                 selectedItems: isItemModeRef.current ? Array.from(selectedItemsRef.current) : [],
                 roomRoster: roster,
               });
               const battleParams = new URLSearchParams({
                 fresh: '1',
                 roomId: String(match.roomId || roomId),
-                lang: myLanguageRef.current || 'java',
+                lang: getLangLabel(getLangKey(match.language)),
                 mode: String(match.roomMode || roomMode),
                 count: String(match.problemCount || settingsRef.current.count || '5'),
                 maxPlayers: String(match.maxPlayers || settingsRef.current.maxPlayers || parsedMaxPlayers),
@@ -1172,6 +1169,7 @@ export default function RoomPage() {
     setRoomBusy(true);
     try {
       let matchId = '';
+      let battleLanguage = myLanguage;
 
       if (!localBotStart) {
         await startRoomApi(numericRoomId);
@@ -1181,10 +1179,10 @@ export default function RoomPage() {
         });
         if (battleNavLockRef.current) return;
         matchId = match.matchId;
+        battleLanguage = getLangLabel(getLangKey(match.language));
         applyMatchStart({
           match,
           settingsDiff: settings.diff,
-          myLanguage,
           selectedItems: isItemMode ? Array.from(selectedItems) : [],
           roomRoster: playersRef.current.filter((player): player is RoomPlayer => player !== null),
         });
@@ -1205,7 +1203,7 @@ export default function RoomPage() {
       const battleParams = new URLSearchParams({
         fresh: '1',
         roomId: roomId || '',
-        lang: myLanguage || 'java',
+        lang: battleLanguage,
         mode: roomMode || '1/1',
         count: settings.count || '5',
         maxPlayers: String(settings.maxPlayers || parsedMaxPlayers),
@@ -1362,7 +1360,10 @@ export default function RoomPage() {
           <div className="room-side-col">
             <div className={`pixel-card room-side-card ${isItemMode ? 'item-mode' : 'normal-mode'}`}>
               <CharacterSelect myCharacter={myCharacter} onSelect={handleSelectCharacter} />
-              <BattleSettingsPanel myLanguage={myLanguage} settings={settings} />
+              <BattleSettingsPanel
+                myLanguage={Number(roomDetail?.id) === numericRoomId ? myLanguage : null}
+                settings={settings}
+              />
               {isItemMode && (
                 <RoomItemLoadout
                   inventory={itemInventory}
