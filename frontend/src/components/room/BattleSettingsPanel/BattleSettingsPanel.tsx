@@ -2,7 +2,7 @@ import { LANGUAGES } from '../../../constants/roomConstants';
 import type { RoomSettings } from '../../../types/room';
 
 interface BattleSettingsPanelProps {
-  myLanguage: string;
+  myLanguage: string | null;
   settings: RoomSettings;
 }
 
@@ -15,7 +15,7 @@ export function BattleSettingsPanel({ myLanguage, settings }: BattleSettingsPane
       <div className="setting-row">
         <span className="setting-label">언어</span>
         <span className="setting-val">
-          {lang?.icon} {lang?.label}
+          {lang ? `${lang.icon} ${lang.label}` : '불러오는 중…'}
         </span>
       </div>
       <div className="setting-row">
